@@ -28,7 +28,7 @@ Contributing
    (`mjis` is the repository, `MiniJavaInScala` is the organization)
  - Clone your fork: `git clone git@github.com:<your-username>/mjis.git`
  - Add the organization's repository as a remote repo:
-   `git remote add trunk https://github.com/MiniJaInScala/mjis`
+   `git remote add trunk https://github.com/MiniJavaInScala/mjis`
 
 A few notes, as discussed:
 
