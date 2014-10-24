@@ -2,7 +2,7 @@ package mjis
 
 import java.io.{ByteArrayInputStream, InputStream}
 
-class Lexer {
+class Lexer extends Phase {
 
   def process(input: String): Stream[Token] = {
     process(new ByteArrayInputStream(input getBytes "UTF-8"))
