@@ -10,7 +10,6 @@ object TokenData {
   case class Else() extends TokenData
   case class False() extends TokenData
   case class If() extends TokenData
-  case class Import() extends TokenData
   case class IntType() extends TokenData
   case class New() extends TokenData
   case class Null() extends TokenData
@@ -53,8 +52,8 @@ object TokenData {
 
   // List of unused, but recognized miniJava keywords:
   // abstract, assert, break, byte, case, catch, char, const, continue, default, double, do, enum, extends, finally,
-  // final, float, for, goto, implements, instanceof, interface, long, native, package, private, protected, short,
-  // strictfp, super, switch, synchronized, throws, throw, transient, try, volatile
+  // final, float, for, goto, implements, import, instanceof, interface, long, native, package, private, protected,
+  // short, strictfp, super, switch, synchronized, throws, throw, transient, try, volatile
   // We have to recognize these and throw an error if someone uses these as identifier.
   //
   // List of unused, but recognized miniJava operators:
