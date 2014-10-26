@@ -3,7 +3,7 @@ package mjis
 import java.io.{ByteArrayInputStream, InputStream}
 
 class LexerResult(successCallback: () => Boolean) extends AnalysisResult[Stream[Token]](successCallback) {
-  override val result = Stream()
+  override val result = Stream[Token]()
 }
 
 class Lexer extends Phase {
