@@ -23,11 +23,9 @@ object CLIMain extends App {
     arg[Path]("<file>...") unbounded () action { (file, config) =>
       config.copy(files = config.files :+ file)
     } validate { file =>
-      val fileName = file.toString
-      if (!fileName.endsWith(".java") && !fileName.endsWith(".mj")) failure("Files must end with *.java or *.mj!")
-      else if(!Files.exists(file)) failure(s"File $file does not exist!")
+      if(!Files.exists(file)) failure(s"File $file does not exist!")
       else success
-    } text ("Input files (*.java or *.mj)")
+    } text ("Input files")
   }
 
   parser.parse(args, Config()) map { config =>
