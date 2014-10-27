@@ -21,7 +21,7 @@ object TokenData {
   case object VoidType extends TokenData
   case object While extends TokenData
 
-  // Non-alphanumeric TokenDatas
+  // Non-alphanumeric Tokens
   case object Unequal extends TokenData
   case object Not extends TokenData
   case object ParenOpen extends TokenData
