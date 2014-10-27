@@ -1,6 +1,8 @@
 package mjis
 
-abstract class TokenData(val literal: String) {}
+abstract class TokenData(val literal: String) {
+  override def toString = literal
+}
 
 object TokenData {
 
