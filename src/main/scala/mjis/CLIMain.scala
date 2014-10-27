@@ -14,9 +14,9 @@ object CLIMain extends App {
   val parser = new OptionParser[Config]("java -jar mjc.jar") {
     head("\nmjc", "0.1")
 
-    opt[String]("lextest") action { (phase, config) =>
+    opt[Unit]("lextest") action { (phase, config) =>
       config.copy(stopAfter = "lexer")
-    }
+    } text ("Run the lexer and output the result in a standardized format")
     opt[String]("stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")
