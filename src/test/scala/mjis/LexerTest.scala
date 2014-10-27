@@ -136,4 +136,52 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     // TODO: findings should contain an error
   }
 
+  /* Result dumping */
+
+  ignore should "dump the result in the format specified on assignment sheet 2" in {
+    // Example from the assignment sheet
+    val lexer = new Lexer(
+      """/*
+        | * @author Beate Best
+        | */
+        |class classic {
+        |  public int method(int arg) {
+        |    int res = arg+42;
+        |    res >>= 4;
+        |    return res;
+        |  }
+        |}
+        |""".stripMargin)
+    lexer.dumpResult should equal (
+      """class
+        |identifier classic
+        |{
+        |public
+        |int
+        |identifier method
+        |(
+        |int
+        |identifier arg
+        |)
+        |{
+        |int
+        |identifier res
+        |=
+        |identifier arg
+        |+
+        |integer literal 42
+        |;
+        |identifier res
+        |>>=
+        |integer literal 4
+        |;
+        |return
+        |identifier res
+        |;
+        |}
+        |}
+        |EOF
+        |""".stripMargin)
+  }
+
 }
