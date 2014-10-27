@@ -14,15 +14,12 @@ object CLIMain extends App {
   val parser = new OptionParser[Config]("java -jar mjc.jar") {
     head("\nmjc", "0.1")
 
+    opt[String]("lextest") action { (phase, config) =>
+      config.copy(stopAfter = "lexer")
+    }
     opt[String]("stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")
-    opt[Unit]("verbose") action { (_, config) =>
-      config.copy(verbose = true)
-    } text ("Print information about what the compiler is doing")
-    opt[Unit]("debug") action { (_, config) =>
-      config.copy(debug = true)
-    } text ("Print debug information")
     arg[Path]("<file>...") unbounded () action { (file, config) =>
       config.copy(files = config.files :+ file)
     } validate { file =>
@@ -38,4 +35,4 @@ object CLIMain extends App {
   }
 }
 
-case class Config(stopAfter: String = "", verbose: Boolean = false, debug: Boolean = false, files: Seq[Path] = Seq())
+case class Config(stopAfter: String = "", files: Seq[Path] = Seq())
