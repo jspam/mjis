@@ -19,6 +19,22 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     forAll (lexResult.result) { t: Token => t.data shouldBe an [Identifier] }
   }
 
+  ignore should "separate tokens by operator symbols, even without whitespace" in {
+    val lexResult = new Lexer().process("{a(!a.x&&b!=c[d])+5,b;}")
+    val expected = List(
+      new CurlyBraceOpen(), new Identifier("a"), new ParenOpen(), new Not(), new Identifier("a"), new Dot(),
+      new Identifier("x"), new LogicalAnd(), new Identifier("b"), new Unequal(), new Identifier("c"),
+      new SquareBracketOpen(), new Identifier("d"), new SquareBracketClosed(), new ParenClosed(),
+      new Plus(), new IntegerLiteral(5), new Comma(), new Identifier("b"), new Semicolon(),
+      new CurlyBraceClosed()
+    )
+    lexResult.success shouldBe true
+    lexResult.result should have length expected.length
+    for ((token, expectedTokenData) <- lexResult.result zip expected) {
+      token.data should === (expectedTokenData)
+    }
+  }
+
   ignore should "set line/char of tokens correctly" in {
     val input = "a aa      a\t a\ra a\na a\r\na a\n\na a "
     val expected = List( // (line, char)
