@@ -4,48 +4,48 @@ abstract class TokenData {}
 
 object TokenData {
 
-  // Keyword case classes
-  case class BooleanType() extends TokenData
-  case class Class() extends TokenData
-  case class Else() extends TokenData
-  case class False() extends TokenData
-  case class If() extends TokenData
-  case class IntType() extends TokenData
-  case class New() extends TokenData
-  case class Null() extends TokenData
-  case class Public() extends TokenData
-  case class Return() extends TokenData
-  case class Static() extends TokenData
-  case class This() extends TokenData
-  case class True() extends TokenData
-  case class VoidType() extends TokenData
-  case class While() extends TokenData
+  // Keyword case objects
+  case object BooleanType extends TokenData
+  case object Class extends TokenData
+  case object Else extends TokenData
+  case object False extends TokenData
+  case object If extends TokenData
+  case object IntType extends TokenData
+  case object New extends TokenData
+  case object Null extends TokenData
+  case object Public extends TokenData
+  case object Return extends TokenData
+  case object Static extends TokenData
+  case object This extends TokenData
+  case object True extends TokenData
+  case object VoidType extends TokenData
+  case object While extends TokenData
 
   // Non-alphanumeric TokenDatas
-  case class Unequal() extends TokenData
-  case class Not() extends TokenData
-  case class ParenOpen() extends TokenData
-  case class ParenClosed() extends TokenData
-  case class Mult() extends TokenData
-  case class Plus() extends TokenData
-  case class Comma() extends TokenData
-  case class Minus() extends TokenData
-  case class Dot() extends TokenData
-  case class Divide() extends TokenData
-  case class Semicolon() extends TokenData
-  case class SmallerEquals() extends TokenData
-  case class Smaller() extends TokenData
-  case class Equals() extends TokenData
-  case class Assign() extends TokenData
-  case class GreaterEquals() extends TokenData
-  case class Greater() extends TokenData
-  case class Modulo() extends TokenData
-  case class LogicalAnd() extends TokenData
-  case class SquareBracketOpen() extends TokenData
-  case class SquareBracketClosed() extends TokenData
-  case class CurlyBraceOpen() extends TokenData
-  case class CurlyBraceClosed() extends TokenData
-  case class LogicalOr() extends TokenData
+  case object Unequal extends TokenData
+  case object Not extends TokenData
+  case object ParenOpen extends TokenData
+  case object ParenClosed extends TokenData
+  case object Mult extends TokenData
+  case object Plus extends TokenData
+  case object Comma extends TokenData
+  case object Minus extends TokenData
+  case object Dot extends TokenData
+  case object Divide extends TokenData
+  case object Semicolon extends TokenData
+  case object SmallerEquals extends TokenData
+  case object Smaller extends TokenData
+  case object Equals extends TokenData
+  case object Assign extends TokenData
+  case object GreaterEquals extends TokenData
+  case object Greater extends TokenData
+  case object Modulo extends TokenData
+  case object LogicalAnd extends TokenData
+  case object SquareBracketOpen extends TokenData
+  case object SquareBracketClosed extends TokenData
+  case object CurlyBraceOpen extends TokenData
+  case object CurlyBraceClosed extends TokenData
+  case object LogicalOr extends TokenData
 
   case class Identifier(value: String) extends TokenData
   case class IntegerLiteral(value: Int) extends TokenData
@@ -62,5 +62,4 @@ object TokenData {
 
 }
 
-class Token(val data : TokenData, val file : String, val line : Int, val char : Int) {
-}
+class Token(val data: TokenData, val file: String, val line: Int, val char: Int)
