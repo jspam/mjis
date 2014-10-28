@@ -27,6 +27,13 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     checkContainsTokenData(lexer.result, Range(0, 8) map { _ => new Identifier("a") })
   }
 
+  ignore should "separate operators and keywords by comments" in {
+    val lexer = new Lexer("&/*comment*/& whi/*comment*/le")
+    lexer.success shouldBe true
+    checkContainsTokenData(lexer.result, List(new UnusedFeature("&"), new UnusedFeature("&"),
+      new Identifier("whi"), new Identifier("le")))
+  }
+
   ignore should "separate tokens by operator symbols, even without whitespace" in {
     val lexer = new Lexer("{a(!a.x&&b!=c[d])+5,b;}")
     val expected = List(
@@ -116,19 +123,76 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     checkContainsTokenData(lexer.result, expected map { s => Identifier(s) })
   }
 
+  ignore should "parse '/ *' and '* /' as tokens, not comment start/end" in {
+    val lexer = new Lexer("a / * abc * / c")
+    lexer.success shouldBe true
+    checkContainsTokenData(lexer.result, List(new Identifier("a"), Divide, Mult,
+      new Identifier("abc"), Mult, Divide, new Identifier("c")))
+  }
+
+  ignore should "ignore '*/' outside comments" in {
+    val lexer = new Lexer("/* this is a /* comment */ a */ b")
+    lexer.success shouldBe true
+    checkContainsTokenData(lexer.result, List(new Identifier("a"), Mult, Divide, new Identifier("b")))
+  }
+
+  ignore should "ignore multiple '*' in comments" in {
+    val lexer = new Lexer("/*** abc ***/")
+    lexer.success shouldBe true
+    checkContainsTokenData(lexer.result, List[TokenData]())
+  }
+
+  ignore should "ignore tokens and '/*' in comments" in {
+    val lexer = new Lexer("/* while(true) { int i = 42; i++; } /* */")
+    lexer.success shouldBe true
+    checkContainsTokenData(lexer.result, List[TokenData]())
+  }
+
+  ignore should "parse EOF as identifier" in {
+    val lexer = new Lexer("EOF")
+    lexer.success shouldBe true
+    checkContainsTokenData(lexer.result, List(new Identifier("EOF")))
+  }
+
+  ignore should "parse greedily" in {
+    val testCases = List(
+      ("<<<<<",  List(new UnusedFeature("<<"), new UnusedFeature("<<"), Smaller)),
+      ("<<<=",   List(new UnusedFeature("<<"), SmallerEquals)),
+      ("<<<<=", List(new UnusedFeature("<<"), new UnusedFeature("<<="))),
+      ("<<<<<=", List(new UnusedFeature("<<"), SmallerEquals)),
+      (">>>>",   List(new UnusedFeature(">>>"), Greater)),
+      (">>>>>",  List(new UnusedFeature(">>>"), new UnusedFeature(">>"))),
+      (">>>>>>", List(new UnusedFeature(">>>"), new UnusedFeature(">>>"))),
+      (">>>>=",  List(new UnusedFeature(">>>"), GreaterEquals)),
+      ("^^^=",   List(new UnusedFeature("^"), new UnusedFeature("^"), new UnusedFeature("^="))),
+      ("||=",    List(LogicalOr, Assign)),
+      ("|||=",   List(LogicalOr, new UnusedFeature("|="))),
+      ("||||=",  List(LogicalOr, LogicalOr, Assign)),
+      ("+++=",   List(new UnusedFeature("++"), new UnusedFeature("+="))),
+      ("++++=",  List(new UnusedFeature("++"), new UnusedFeature("++"), Assign)),
+      ("---=",   List(new UnusedFeature("--"), new UnusedFeature("-="))),
+      ("----=",  List(new UnusedFeature("--"), new UnusedFeature("--"), Assign)),
+      ("=====",  List(Equals, Equals, Assign)),
+      ("&&&&&",  List(LogicalAnd, LogicalAnd, new UnusedFeature("&"))),
+      ("|||||",  List(LogicalOr, LogicalOr, new UnusedFeature("|"))),
+      ("!!!=",   List(new UnusedFeature("!"), new UnusedFeature("!"), Unequal))
+    )
+
+    for (((input, expected), i) <- testCases.zipWithIndex) {
+      val lexer = new Lexer(input)
+      lexer.success shouldBe true
+      withClue(s"Test case $i") { checkContainsTokenData(lexer.result, expected) }
+    }
+  }
+
+  ignore should "parse 0 at the start of an integer literal as separate token" in {
+    val lexer = new Lexer("a 00815")
+    lexer.success shouldBe true
+    checkContainsTokenData(lexer.result, List(new Identifier("a"), new IntegerLiteral(0),
+      new IntegerLiteral(0), new IntegerLiteral(815)))
+  }
+
   /* Failure cases */
-
-  ignore should "disallow nested comments" in {
-    val lexer = new Lexer("a /* here is a comment /* and this one is nested */ ok */")
-    lexer.success shouldBe false
-    // TODO: findings should contain an error
-  }
-
-  ignore should "disallow integer literals starting with a 0" in {
-    val lexer = new Lexer("a 0815")
-    lexer.success shouldBe false
-    // TODO: findings should contain an error
-  }
 
   ignore should "fail on an unterminated comment" in {
     val lexer = new Lexer("a /* this is an unterminated comment")
