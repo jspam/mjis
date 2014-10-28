@@ -2,18 +2,15 @@ package mjis
 
 import java.io.{ByteArrayInputStream, InputStream}
 
-class LexerResult(successCallback: () => Boolean) extends AnalysisResult[Stream[Token]](successCallback) {
-  override val result = Stream[Token]()
-}
+class Lexer(val input: InputStream) extends Phase[Stream[Token]] with AnalysisPhase {
 
-class Lexer extends Phase {
-
-  def process(input: String): LexerResult = {
-    process(new ByteArrayInputStream(input getBytes "UTF-8"))
+  def this(input: String) = {
+    this(new ByteArrayInputStream(input getBytes "UTF-8"))
   }
 
-  def process(input: InputStream): LexerResult = {
-    new LexerResult(() => true)
+  override def getResult(): Stream[Token] = {
+    Stream[Token]()
   }
 
+  override def successCallback(): Boolean = true
 }
