@@ -5,6 +5,15 @@ import org.scalatest._
 
 class LexerTest extends FlatSpec with Matchers with Inspectors {
 
+  def checkContainsTokenData(tokens: Seq[Token], expected: Seq[TokenData]): Unit = {
+    tokens should have length expected.length
+    for ((token, expectedTokenData) <- tokens zip expected) {
+      token.data should === (expectedTokenData)
+    }
+  }
+
+  /* Tests start here */
+
   "The lexer" should "return an empty token list when parsing the empty string" in {
     val lexer = new Lexer("")
     lexer.success shouldBe true
@@ -15,8 +24,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
   ignore should "separate tokens by whitespace or comments" in {
     val lexer = new Lexer("a a  a\ta\ra\na\r\na/*comment*/a")
     lexer.success shouldBe true
-    lexer.result should have length 8
-    forAll (lexer.result) { t: Token => t.data shouldBe an [Identifier] }
+    checkContainsTokenData(lexer.result, Range(0, 8) map { _ => new Identifier("a") })
   }
 
   ignore should "separate tokens by operator symbols, even without whitespace" in {
@@ -29,10 +37,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
       CurlyBraceClosed
     )
     lexer.success shouldBe true
-    lexer.result should have length expected.length
-    for ((token, expectedTokenData) <- lexer.result zip expected) {
-      token.data should === (expectedTokenData)
-    }
+    checkContainsTokenData(lexer.result, expected)
   }
 
   ignore should "set line/char of tokens correctly" in {
@@ -64,81 +69,43 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
   ignore should "recognize all MiniJava operator symbols" in {
     val lexer = new Lexer("!= ! ( ) * + , - . / ; <= < == = >= > % && [ ] { } ||")
     lexer.success shouldBe true
-    lexer.result should have length 24
-    lexer.result(0).data shouldBe an [Unequal.type]
-    lexer.result(1).data shouldBe a [Not.type]
-    lexer.result(2).data shouldBe a [ParenOpen.type]
-    lexer.result(3).data shouldBe a [ParenClosed.type]
-    lexer.result(4).data shouldBe a [Mult.type]
-    lexer.result(5).data shouldBe a [Plus.type]
-    lexer.result(6).data shouldBe a [Comma.type]
-    lexer.result(7).data shouldBe a [Minus.type]
-    lexer.result(8).data shouldBe a [Dot.type]
-    lexer.result(9).data shouldBe a [Divide.type]
-    lexer.result(10).data shouldBe a [Semicolon.type]
-    lexer.result(11).data shouldBe a [SmallerEquals.type]
-    lexer.result(12).data shouldBe a [Smaller.type]
-    lexer.result(13).data shouldBe a [Equals.type]
-    lexer.result(14).data shouldBe an [Assign.type]
-    lexer.result(15).data shouldBe a [GreaterEquals.type]
-    lexer.result(16).data shouldBe a [Greater.type]
-    lexer.result(17).data shouldBe a [Modulo.type]
-    lexer.result(18).data shouldBe a [LogicalAnd.type]
-    lexer.result(19).data shouldBe a [SquareBracketOpen.type]
-    lexer.result(20).data shouldBe a [SquareBracketClosed.type]
-    lexer.result(21).data shouldBe a [CurlyBraceOpen.type]
-    lexer.result(22).data shouldBe a [CurlyBraceClosed.type]
-    lexer.result(23).data shouldBe a [LogicalOr.type]
+    checkContainsTokenData(lexer.result, List(Unequal, Not, ParenOpen, ParenClosed,
+      Mult, Plus, Comma, Minus, Dot, Divide, Semicolon, SmallerEquals, Smaller, Equals,
+      Assign, GreaterEquals, Greater, Modulo, LogicalAnd, SquareBracketOpen,
+      SquareBracketClosed, CurlyBraceOpen, CurlyBraceClosed, LogicalOr))
   }
 
   ignore should "recognize all other Java operator symbols" in {
-    val lexer = new Lexer("*= ++ += -= -- /= : <<= << >>= >>>= >>> >> ? %= &= & ^= ^ ~ |")
+    val expected = List("*=", "++", "+=", "-=", "--", "/=", ":", "<<=", "<<", ">>=", ">>>=", ">>>",
+      ">>", "?", "%=", "&=", "&", "^=", "^", "~", "|")
+    val lexer = new Lexer(expected.mkString(" "))
     lexer.success shouldBe true
-    lexer.result should have length 21
-    forAll (lexer.result) { t: Token => t.data shouldBe an [UnusedFeature] }
+    checkContainsTokenData(lexer.result, expected map { s => new UnusedFeature(s) })
   }
 
   ignore should "recognize all MiniJava keywords" in {
     val lexer = new Lexer("boolean class else false if int new null public return "
       + "static this true void while")
     lexer.success shouldBe true
-    lexer.result should have length 15
-    lexer.result(0).data shouldBe a [BooleanType.type]
-    lexer.result(1).data shouldBe a [Class.type]
-    lexer.result(2).data shouldBe a [Else.type]
-    lexer.result(3).data shouldBe a [False.type]
-    lexer.result(4).data shouldBe a [If.type]
-    lexer.result(5).data shouldBe a [IntType.type]
-    lexer.result(6).data shouldBe a [New.type]
-    lexer.result(7).data shouldBe a [Null.type]
-    lexer.result(8).data shouldBe a [Public.type]
-    lexer.result(9).data shouldBe a [Return.type]
-    lexer.result(10).data shouldBe a [Static.type]
-    lexer.result(11).data shouldBe a [This.type]
-    lexer.result(12).data shouldBe a [True.type]
-    lexer.result(13).data shouldBe a [VoidType.type]
-    lexer.result(14).data shouldBe a [While.type]
+    checkContainsTokenData(lexer.result, List(BooleanType, Class, Else, False, If, IntType,
+      New, Null, Public, Return, Static, This, True, VoidType, While))
   }
 
   ignore should "recognize all other Java keywords" in {
-    val lexer = new Lexer("abstract assert break byte case catch char const continue "
-      + "default double do enum extends finally final float for goto implements import instanceof "
-      + "interface long native package private protected short strictfp super switch synchronized "
-      + "throws throw transient try volatile ")
-    lexer.success shouldBe true
-    lexer.result should have length 38
-    forAll (lexer.result) { t: Token => t.data shouldBe an [UnusedFeature] }
+    val expected = List("abstract", "assert", "break", "byte", "case", "catch",
+      "char", "const", "continue", "default", "double", "do", "enum", "extends", "finally",
+      "final", "float", "for", "goto", "implements", "import", "instanceof", "interface",
+      "long", "native", "package", "private", "protected", "short", "strictfp", "super", "switch",
+      "synchronized", "throws", "throw", "transient", "try", "volatile")
+    val lexer = new Lexer(expected.mkString(" "))
+    checkContainsTokenData(lexer.result, expected map { s => new UnusedFeature(s) })
   }
 
   ignore should "recognize Integer literals" in {
     val expected = List(0, 1234567890, 12, 23, 34, 45, 56, 67, 78, 89, 90)
     val lexer = new Lexer(expected.mkString(" "))
     lexer.success shouldBe true
-    lexer.result should have length expected.length
-    for ((token, expectedValue) <- lexer.result zip expected ) {
-      token.data shouldBe an [IntegerLiteral]
-      token.data.asInstanceOf[IntegerLiteral].value should equal(expectedValue)
-    }
+    checkContainsTokenData(lexer.result, expected map { i => IntegerLiteral(i) })
   }
 
   ignore should "recognize identifiers" in {
@@ -146,11 +113,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
       "superman", "if0", "_if", "if_true", "iftrue")
     val lexer = new Lexer(expected.mkString(" "))
     lexer.success shouldBe true
-    lexer.result should have length expected.length
-    for ((token, expectedName) <- lexer.result zip expected) {
-      token.data shouldBe an [Identifier]
-      token.data.asInstanceOf[Identifier].value shouldBe expectedName
-    }
+    checkContainsTokenData(lexer.result, expected map { s => Identifier(s) })
   }
 
   /* Failure cases */
