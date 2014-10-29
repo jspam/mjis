@@ -4,7 +4,7 @@ import java.io.{ByteArrayInputStream, InputStream}
 
 import mjis.TokenData.{IntegerLiteral, Identifier}
 
-class Lexer(val input: InputStream) extends Phase[Stream[Token]] with AnalysisPhase {
+class Lexer(val input: InputStream) extends AnalysisPhase[Stream[Token]] {
 
   def this(input: String) = {
     this(new ByteArrayInputStream(input getBytes "UTF-8"))
