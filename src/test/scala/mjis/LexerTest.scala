@@ -159,7 +159,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
       ("<<<<<",  List(new UnusedFeature("<<"), new UnusedFeature("<<"), Smaller)),
       ("<<<=",   List(new UnusedFeature("<<"), SmallerEquals)),
       ("<<<<=", List(new UnusedFeature("<<"), new UnusedFeature("<<="))),
-      ("<<<<<=", List(new UnusedFeature("<<"), SmallerEquals)),
+      ("<<<<<=", List(new UnusedFeature("<<"), new UnusedFeature("<<"), SmallerEquals)),
       (">>>>",   List(new UnusedFeature(">>>"), Greater)),
       (">>>>>",  List(new UnusedFeature(">>>"), new UnusedFeature(">>"))),
       (">>>>>>", List(new UnusedFeature(">>>"), new UnusedFeature(">>>"))),
@@ -175,7 +175,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
       ("=====",  List(Equals, Equals, Assign)),
       ("&&&&&",  List(LogicalAnd, LogicalAnd, new UnusedFeature("&"))),
       ("|||||",  List(LogicalOr, LogicalOr, new UnusedFeature("|"))),
-      ("!!!=",   List(new UnusedFeature("!"), new UnusedFeature("!"), Unequal))
+      ("!!!=",   List(Not, Not, Unequal))
     )
 
     for (((input, expected), i) <- testCases.zipWithIndex) {
