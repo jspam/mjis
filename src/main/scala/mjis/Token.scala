@@ -64,4 +64,6 @@ object TokenData {
 
 }
 
-class Token(val data: TokenData, val file: String, val line: Int, val char: Int)
+class Token(val data: TokenData, val line: Int, val char: Int) {
+  override def toString = s"($line,$char): $data"
+}
