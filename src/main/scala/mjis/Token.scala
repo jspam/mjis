@@ -50,7 +50,7 @@ object TokenData {
   case object LogicalOr extends TokenData("||")
 
   case class Identifier(override val literal: String) extends TokenData(literal)
-  case class IntegerLiteral(value: Int) extends TokenData(value.toString)
+  case class IntegerLiteral(value: String) extends TokenData(value)
 
   // List of unused, but recognized miniJava keywords:
   // abstract, assert, break, byte, case, catch, char, const, continue, default, double, do, enum, extends, finally,

@@ -40,7 +40,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
       CurlyBraceOpen, new Identifier("a"), ParenOpen, Not, new Identifier("a"), Dot,
       new Identifier("x"), LogicalAnd, new Identifier("b"), Unequal, new Identifier("c"),
       SquareBracketOpen, new Identifier("d"), SquareBracketClosed, ParenClosed,
-      Plus, new IntegerLiteral(5), Comma, new Identifier("b"), Semicolon,
+      Plus, new IntegerLiteral("5"), Comma, new Identifier("b"), Semicolon,
       CurlyBraceClosed
     )
     lexer.success shouldBe true
@@ -112,7 +112,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     val expected = List(0, 1234567890, 12, 23, 34, 45, 56, 67, 78, 89, 90)
     val lexer = new Lexer(expected.mkString(" "))
     lexer.success shouldBe true
-    checkContainsTokenData(lexer.result, expected map { i => IntegerLiteral(i) })
+    checkContainsTokenData(lexer.result, expected map { i => IntegerLiteral(i.toString) })
   }
 
   ignore should "recognize identifiers" in {
@@ -188,8 +188,8 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
   ignore should "parse 0 at the start of an integer literal as separate token" in {
     val lexer = new Lexer("a 00815")
     lexer.success shouldBe true
-    checkContainsTokenData(lexer.result, List(new Identifier("a"), new IntegerLiteral(0),
-      new IntegerLiteral(0), new IntegerLiteral(815)))
+    checkContainsTokenData(lexer.result, List(new Identifier("a"), new IntegerLiteral("0"),
+      new IntegerLiteral("0"), new IntegerLiteral("815")))
   }
 
   /* Failure cases */
