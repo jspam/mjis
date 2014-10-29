@@ -84,7 +84,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
 
   ignore should "recognize all other Java operator symbols" in {
     val expected = List("*=", "++", "+=", "-=", "--", "/=", ":", "<<=", "<<", ">>=", ">>>=", ">>>",
-      ">>", "?", "%=", "&=", "&", "^=", "^", "~", "|")
+      ">>", "?", "%=", "&=", "&", "^=", "^", "~", "|", "|=")
     val lexer = new Lexer(expected.mkString(" "))
     lexer.success shouldBe true
     checkContainsTokenData(lexer.result, expected map { s => new UnusedFeature(s) })

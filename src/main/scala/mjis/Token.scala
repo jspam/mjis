@@ -59,7 +59,7 @@ object TokenData {
   // We have to recognize these and throw an error if someone uses these as identifier.
   //
   // List of unused, but recognized miniJava operators:
-  // *= ++ += -= -- /= : <<= << >>= >>>= >>> >> ? %= &= & ^= ^ ~ |
+  // *= ++ += -= -- /= : <<= << >>= >>>= >>> >> ? %= &= & ^= ^ ~ | |=
   case class UnusedFeature(override val literal: String) extends TokenData(literal)
 
 }
