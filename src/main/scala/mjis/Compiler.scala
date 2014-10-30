@@ -1,6 +1,24 @@
 package mjis
 
-class Compiler(config: Config) {
-  val phases: List[Phase[_]] = List() // Lexer, Parser, Namer, Typer, etc.
+import java.io._
+import java.nio.file.{Path}
+import scala.collection.JavaConversions._
 
+object Compiler {
+  def compile(config: Config): Unit = {
+    // Concatenate input files
+    val concatenatedInputStream = new SequenceInputStream((config.files map {
+      path: Path => new BufferedInputStream(new FileInputStream(path.toFile))
+    }).iterator)
+
+    val lexer = new Lexer(new InputStreamReader(concatenatedInputStream))
+
+    if (config.stopAfter == "lexer") {
+      System.out.println(lexer.dumpResult)
+      return
+    }
+
+    // val parser = new Parser(lexer.result)
+    // ...
+  }
 }
