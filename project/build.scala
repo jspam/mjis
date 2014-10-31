@@ -11,7 +11,9 @@ object MJIS extends Build {
       .settings(
         name := "mjis",
         jarName in assembly := "mjc.jar",
-        scalaVersion := "2.11.2",
-        libraryDependencies += "com.github.scopt" % "scopt_2.11" % "3.2.0"
+        scalaVersion := "2.11.4",
+        scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-Xlint", "-Xfuture"),
+        libraryDependencies += "com.github.scopt" % "scopt_2.11" % "3.2.0",
+        libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.1" % "test"
       )
 }
