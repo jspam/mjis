@@ -27,6 +27,18 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     checkContainsTokenData(lexer.result, Range(0, 8) map { _ => new Identifier("a") })
   }
 
+  it should "recognize other whitespace" in {
+    val lexer = new Lexer("\r\n\t")
+    lexer.success shouldBe true
+    lexer.result shouldBe empty
+  }
+
+  it should "not recognize unspecified whitespace" in {
+    val lexer = new Lexer("\f")
+    lexer.success shouldBe false
+    lexer.findings.head shouldBe Lexer.UnknownTokenError(1, 1, "\f")
+  }
+
   it should "separate operators and keywords by comments" in {
     val lexer = new Lexer("&/*comment*/& whi/*comment*/le")
     lexer.success shouldBe true
