@@ -11,7 +11,9 @@ object Compiler {
       path: Path => new BufferedInputStream(new FileInputStream(path.toFile))
     }).iterator)
 
-    val lexer = new Lexer(new InputStreamReader(concatenatedInputStream))
+    val lexer = new Lexer(new InputStreamReader(concatenatedInputStream, "ASCII"))
+
+    lexer.findings.map { f => System.err.println(f) }
 
     if (config.stopAfter == "lexer") {
       System.out.println(lexer.dumpResult)
