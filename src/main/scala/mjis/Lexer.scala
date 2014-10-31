@@ -2,7 +2,7 @@ package mjis
 
 import java.io.{StringReader, Reader}
 import scala.collection.mutable.MutableList
-import scala.collection.mutable.Map
+import scala.collection.mutable
 import scala.collection.immutable.Stream.Empty
 
 import mjis.TokenData._
@@ -11,7 +11,7 @@ import mjis.TokenData._
 class Trie[A](keyValues: Iterable[(String, A)]) {
   private class Node {
     var item: Option[A] = None
-    val children = Map[Char, Node]() // could be optimized to a linear array
+    val children = mutable.Map[Char, Node]() // could be optimized to a linear array
 
     def add(key: String, value: A): Unit = key.headOption match {
       case None => item = Some(value)
@@ -71,6 +71,13 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
     ("/*" -> CommentStart)
   )
   private val commentSymbols = new Trie[Symbol](lineBreaks + ("*/" -> CommentEnd))
+  private val keywords: Map[String, TokenData] = List[TokenData](BooleanType, Class, Else, False, If, IntType, New, Null,
+    Public, Return, Static, This,True, VoidType, While).map(t => (t.literal, t)).toMap
+  private val unusedKeywords = Set[String]("abstract", "assert", "break", "byte", "case", "catch",
+    "char", "const", "continue", "default", "double", "do", "enum", "extends", "finally",
+    "final", "float", "for", "goto", "implements", "import", "instanceof", "interface",
+    "long", "native", "package", "private", "protected", "short", "strictfp", "super", "switch",
+    "synchronized", "throws", "throw", "transient", "try", "volatile")
 
   private var input = Stream continually inputReader.read() takeWhile (_ != -1) map (_.toChar)
   private val _findings = MutableList[Finding]()
@@ -98,9 +105,12 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
   }
 
   private def lexIdentifier(): Token = {
-    val ident = input.takeWhile(c => c.isLetterOrDigit || c == '_')
-    // TODO: recognize keywords
-    mkTokenAndConsume(ident.length, TokenData.Identifier(ident.mkString))
+    val ident = input.takeWhile(c => c.isLetterOrDigit || c == '_').mkString
+    val data =
+      if (keywords.contains(ident)) keywords(ident)
+      else if (unusedKeywords(ident)) UnusedFeature(ident)
+      else Identifier(ident)
+    mkTokenAndConsume(ident.length, data)
   }
 
   /** parse remainder after "/ *"  while memorizing its original position */

@@ -90,7 +90,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     checkContainsTokenData(lexer.result, expected map { s => new UnusedFeature(s) })
   }
 
-  ignore should "recognize all MiniJava keywords" in {
+  it should "recognize all MiniJava keywords" in {
     val lexer = new Lexer("boolean class else false if int new null public return "
       + "static this true void while")
     lexer.success shouldBe true
@@ -98,7 +98,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
       New, Null, Public, Return, Static, This, True, VoidType, While))
   }
 
-  ignore should "recognize all other Java keywords" in {
+  it should "recognize all other Java keywords" in {
     val expected = List("abstract", "assert", "break", "byte", "case", "catch",
       "char", "const", "continue", "default", "double", "do", "enum", "extends", "finally",
       "final", "float", "for", "goto", "implements", "import", "instanceof", "interface",
@@ -202,7 +202,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
 
   /* Result dumping */
 
-  ignore should "dump the result in the format specified on assignment sheet 2" in {
+  it should "dump the result in the format specified on assignment sheet 2" in {
     // Example from the assignment sheet
     val lexer = new Lexer(
       """/*
