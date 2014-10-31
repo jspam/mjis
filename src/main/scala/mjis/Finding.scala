@@ -1,5 +1,10 @@
 package mjis
 
-abstract class Finding(val line: Int, val char: Int) {
-  override def toString = s"Line $line, char $char"
+trait Finding {
+  def line: Int
+  def char: Int
+  def severity: Severity
+  def msg: String
+
+  override def toString = s"Line $line, position $char: $msg"
 }

@@ -1,13 +1,13 @@
 package mjis
 
 trait Phase[ResultType] {
-  def getResult(): ResultType
+  protected def getResult(): ResultType
   def dumpResult(): String
   lazy val result = getResult()
-  var findings : Stream[Finding] = Stream()
+  protected def getFindings(): List[Finding]
+  lazy val findings = getFindings()
 }
 
-trait AnalysisPhase {
-  def successCallback(): Boolean
-  lazy val success = successCallback()
+trait AnalysisPhase[ResultType] extends Phase[ResultType] {
+  lazy val success = findings.forall(_.severity != Severity.ERROR)
 }

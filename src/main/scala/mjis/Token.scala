@@ -50,7 +50,7 @@ object TokenData {
   case object LogicalOr extends TokenData("||")
 
   case class Identifier(override val literal: String) extends TokenData(literal)
-  case class IntegerLiteral(value: Int) extends TokenData(value.toString)
+  case class IntegerLiteral(value: String) extends TokenData(value)
 
   // List of unused, but recognized miniJava keywords:
   // abstract, assert, break, byte, case, catch, char, const, continue, default, double, do, enum, extends, finally,
@@ -59,9 +59,11 @@ object TokenData {
   // We have to recognize these and throw an error if someone uses these as identifier.
   //
   // List of unused, but recognized miniJava operators:
-  // *= ++ += -= -- /= : <<= << >>= >>>= >>> >> ? %= &= & ^= ^ ~ |
+  // *= ++ += -= -- /= : <<= << >>= >>>= >>> >> ? %= &= & ^= ^ ~ | |=
   case class UnusedFeature(override val literal: String) extends TokenData(literal)
 
 }
 
-class Token(val data: TokenData, val file: String, val line: Int, val char: Int)
+class Token(val data: TokenData, val line: Int, val char: Int) {
+  override def toString = s"($line,$char): $data"
+}
