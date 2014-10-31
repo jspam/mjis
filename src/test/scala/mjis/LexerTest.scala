@@ -256,8 +256,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
         |;
         |}
         |}
-        |EOF
-        |""".stripMargin)
+        |EOF""".stripMargin)
   }
 
 }

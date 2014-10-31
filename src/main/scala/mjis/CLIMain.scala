@@ -29,7 +29,7 @@ object CLIMain extends App {
   }
 
   parser.parse(args, Config()) map { config =>
-    new Compiler(config)
+    Compiler.compile(config)
   }
 }
 

@@ -199,6 +199,6 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
       dump :+= "error"
     }
 
-    dump.mkString(System.lineSeparator()) + System.lineSeparator()
+    dump.mkString(System.lineSeparator())
   }
 }
