@@ -1,11 +1,51 @@
 package mjis
 
-import java.io.{StringReader, Reader}
 import scala.collection.mutable.MutableList
 import scala.collection.mutable
-import scala.collection.immutable.Stream.Empty
 
 import mjis.TokenData._
+
+/** Mutable version of scala.util.parsing.input.StreamReader.
+  * The current input line is buffered for direct access.
+  */
+class LineReader(input: java.io.Reader) {
+  final val eof = '\u001a' // The SUB control character. Any char outside the spec will do.
+  private var line = 1
+  var offset = 0
+  var lastLine = false
+  var source = readLine()
+
+  def pos = new Position(line, offset + 1, source)
+  def currentChar = source(offset)
+  def atEnd = lastLine && offset >= source.length - 1 // at EOF or beyond
+
+  private def readLine(): String = {
+    val sb = new StringBuffer()
+    var next: Int = 0
+
+    do {
+      next = input.read()
+      if (next == -1) {
+        lastLine = true
+        sb.append(eof)
+      } else
+        sb.append(next.toChar)
+    } while (next != -1 && next != '\n')
+
+    sb.toString
+  }
+
+  def consume(): Char = {
+    val c = currentChar
+    offset += 1
+    if (offset >= source.length) {
+      line += 1
+      offset = 0
+      source = readLine()
+    }
+    c
+  }
+}
 
 /** String-keyed map that allows lookup by prefix */
 class Trie[A](keyValues: Iterable[(String, A)]) {
@@ -18,46 +58,39 @@ class Trie[A](keyValues: Iterable[(String, A)]) {
       case Some(c) => children.getOrElseUpdate(c, new Node).add(key.tail, value)
     }
 
-    def tryLookupLongestPrefix(s: Stream[Char], prefixLen: Int): (Option[A], Int) = s match {
-      case Empty => (item, prefixLen)
-      case c #:: s => children.get(c) match {
-        case None => (item, prefixLen)
-        case Some(child) => child.tryLookupLongestPrefix(s, prefixLen + 1)
-      }
+    def tryLookupLongestPrefix(reader: LineReader): Option[A] = children.get(reader.currentChar) match {
+      case None => item
+      case Some(child) =>
+        reader.consume()
+        child.tryLookupLongestPrefix(reader)
     }
   }
 
   private val root = new Node
   keyValues.foreach(kv => root.add(kv._1, kv._2))
 
-  def tryLookupLongestPrefix(s: Stream[Char]): (Option[A], Int) = root.tryLookupLongestPrefix(s, 0)
+  def tryLookupLongestPrefix(reader: LineReader): Option[A] = root.tryLookupLongestPrefix(reader)
 }
 
 object Lexer {
-  case class UnclosedCommentError(line: Int, char: Int) extends Finding {
+  case class UnclosedCommentError(pos: Position) extends Finding {
     def msg = "unclosed comment"
     def severity = Severity.ERROR
   }
-  case class UnknownTokenError(line: Int, char: Int, token: String) extends Finding {
-    def msg = s"unknown token: $token"
+  case class UnknownTokenError(pos: Position) extends Finding {
+    def msg = s"unknown token"
     def severity = Severity.ERROR
   }
 }
 
-class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
+class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[Stream[Token]] {
   // abstraction over constant-length (quasi-)tokens
   private abstract class Symbol()
   private case class TokenSymbol(data: TokenData) extends Symbol
   private case object LineBreak extends Symbol
   private case object CommentStart extends Symbol
-  private case object CommentEnd extends Symbol
 
-  private val whitespace = Set[Char](' ', '\t')
-  private val lineBreaks = Map[String, Symbol](
-    "\r" -> LineBreak,
-    "\r\n" -> LineBreak,
-    "\n" -> LineBreak
-  )
+  private val whitespace = Set[Char](' ', '\t', '\r', '\n')
   private val constLenTokens = List[TokenData](Unequal, Not, ParenOpen, ParenClosed,
     Mult, Plus, Comma, Minus, Dot, Divide, Semicolon, SmallerEquals, Smaller, Equals,
     Assign, GreaterEquals, Greater, Modulo, LogicalAnd, SquareBracketOpen,
@@ -65,12 +98,10 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
   private val unusedConstLenTokens = List[String]("*=", "++", "+=", "-=", "--", "/=",
     ":", "<<=", "<<", ">>=", ">>>=", ">>>", ">>", "?", "%=", "&=", "&", "^=", "^", "~", "|", "|=")
   private val symbols = new Trie[Symbol](
-    lineBreaks ++
     constLenTokens.map(t => (t.literal, TokenSymbol(t))) ++
-    unusedConstLenTokens.map(t => (t, TokenSymbol(UnusedFeature(t)))) +
+    unusedConstLenTokens.map(t => (t, TokenSymbol(UnusedFeature(t)))) :+
     ("/*" -> CommentStart)
   )
-  private val commentSymbols = new Trie[Symbol](lineBreaks + ("*/" -> CommentEnd))
   private val keywords: Map[String, TokenData] = List[TokenData](BooleanType, Class, Else, False, If, IntType, New, Null,
     Public, Return, Static, This,True, VoidType, While).map(t => (t.literal, t)).toMap
   private val unusedKeywords = Set[String]("abstract", "assert", "break", "byte", "case", "catch",
@@ -80,104 +111,85 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
     "synchronized", "throws", "throw", "transient", "try", "volatile")
 
   private val identifierCache = mutable.Map[String, Identifier]()
-  private var input = Stream continually inputReader.read() takeWhile (_ != -1) map (_.toChar)
+  private val input = new LineReader(inputReader)
   private val _findings = MutableList[Finding]()
-  private var line = 1
-  private var offset = 1
 
   def this(input: String) = {
-    this(new StringReader(input))
+    this(new java.io.StringReader(input))
   }
 
-  private def consume(charCount: Int): Unit = {
-    offset += charCount
-    input = input.drop(charCount)
-  }
-
-  private def mkTokenAndConsume(charCount: Int, data: TokenData): Token = {
-    val t = new Token(data, line, offset)
-    consume(charCount)
-    t
+  /** Somewhat efficient implementation.
+    * Assumes p does not accept \n.
+    */
+  def takeWhile(p: Char => Boolean): String = {
+    val end = (input.offset until input.source.length())
+      .find(i => !p(input.source(i)))
+      .getOrElse(input.source.length())
+    val result = input.source.substring(input.offset, end)
+    input.offset = end
+    result
   }
 
   private def lexInteger(): Token = {
-    val num = input.takeWhile(_.isDigit)
-    mkTokenAndConsume(num.length, TokenData.IntegerLiteral(num.mkString))
+    val pos = input.pos
+    new Token(IntegerLiteral(takeWhile(_.isDigit)), pos)
   }
 
   private def lexIdentifier(): Token = {
-    val ident = input.takeWhile(c => c.isLetterOrDigit || c == '_').mkString
+    val pos = input.pos
+    val ident = takeWhile(c => c.isLetterOrDigit || c == '_')
     val data =
       if (keywords.contains(ident)) keywords(ident)
       else if (unusedKeywords(ident)) UnusedFeature(ident)
       else identifierCache.getOrElseUpdate(ident, Identifier(ident))
-
-    mkTokenAndConsume(ident.length, data)
+    new Token(data, pos)
   }
 
   /** parse remainder after "/ *"  while memorizing its original position */
   @annotation.tailrec
-  private def lexCommentRemainder(startLine: Int, startOffset: Int): Unit = {
-    if (input.isEmpty) {
-      _findings += new Lexer.UnclosedCommentError(startLine, startOffset)
-    } else {
-      val (symbol, len) = commentSymbols.tryLookupLongestPrefix(input)
-      symbol match {
-        case None => // any other token
-          consume(1)
-          lexCommentRemainder(startLine, startOffset)
-        case Some(symbol) =>
-          consume(len)
-          symbol match {
-            case LineBreak =>
-              line += 1
-              offset = 1
-              lexCommentRemainder(startLine, startOffset)
-            case CommentEnd =>
-          }
-      }
+  private def lexCommentRemainder(startPos: Position): Unit = {
+    if (input.atEnd) {
+      _findings += new Lexer.UnclosedCommentError(startPos)
+    } else if (!(input.consume() == '*' && input.consume() == '/')) {
+      lexCommentRemainder(startPos)
     }
   }
 
   private def lexSymbol() : Option[Token] = {
-    val (symbol, len) = symbols.tryLookupLongestPrefix(input)
-    symbol match {
+    val pos = input.pos
+    symbols.tryLookupLongestPrefix(input) match {
       case None =>
         // TODO: some heuristics for separating and skipping the unknown 'token'
-        _findings += new Lexer.UnknownTokenError(line, offset, input.mkString)
+        _findings += new Lexer.UnknownTokenError(pos)
         None
       case Some(symbol) =>
         symbol match {
-          case TokenSymbol(data) => Some(mkTokenAndConsume(len, data))
-          case LineBreak =>
-            consume(len)
-            line += 1
-            offset = 1
-            lexToken()
+          case TokenSymbol(data) => Some(new Token(data, pos))
+          case LineBreak => lexToken()
           case CommentStart =>
-            val startOffset = offset
-            consume(len)
-            lexCommentRemainder(line, startOffset)
+            lexCommentRemainder(pos)
             lexToken()
         }
     }
   }
 
   @annotation.tailrec
-  private def lexToken(): Option[Token] = input match {
-    case Empty => None
-    case c #:: _ =>
-      if (c == '_' || c.isLetter)
-        Some(lexIdentifier())
-      else if (c == '0') // special case: always a single token
-        Some(mkTokenAndConsume(1, TokenData.IntegerLiteral("0")))
-      else if (c.isDigit)
-        Some(lexInteger())
-      else if (whitespace(c)) {
-        consume(1)
-        lexToken()
-      } else
-        lexSymbol()
+  private def lexToken(): Option[Token] = {
+    if (input.atEnd) None
+    else if (input.currentChar == '_' || input.currentChar.isLetter)
+      Some(lexIdentifier())
+    else if (input.currentChar == '0') {
+      // special case: always a single token
+      val token = new Token(TokenData.IntegerLiteral("0"), input.pos)
+      input.consume()
+      Some(token)
+    } else if (input.currentChar.isDigit)
+      Some(lexInteger())
+    else if (whitespace(input.currentChar)) {
+      input.consume()
+      lexToken()
+    } else
+      lexSymbol()
   }
 
   protected override def getResult(): Stream[Token] = (Stream continually lexToken takeWhile (_.isDefined)).flatten

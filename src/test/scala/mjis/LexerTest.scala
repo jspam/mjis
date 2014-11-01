@@ -36,7 +36,16 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
   it should "not recognize unspecified whitespace" in {
     val lexer = new Lexer("\f")
     lexer.success shouldBe false
-    lexer.findings.head shouldBe Lexer.UnknownTokenError(1, 1, "\f")
+    val finding = lexer.findings.head
+    finding shouldBe a [Lexer.UnknownTokenError]
+    finding.pos.column shouldBe 1
+    finding.pos.line shouldBe 1
+  }
+
+  it should "not recognize the EOF char" in {
+    val lexer = new Lexer("\u001a")
+    lexer.result shouldBe empty
+    lexer.success shouldBe false
   }
 
   it should "separate operators and keywords by comments" in {
@@ -60,13 +69,13 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "set line/char of tokens correctly" in {
-    val input = "a aa      a\t a\ra a\na a\r\na a\n\na a "
+    val input = "a aa      a\t a\na a\na a\r\na a\n\na a "
     val expected = List( // (line, char)
       (1, 1),
       (1, 3),
       (1, 11),
       (1, 14), // Tab is counted as one character
-      (2, 1), // Single \r is counted as newline
+      (2, 1),
       (2, 3),
       (3, 1), // Single \n is counted as newline
       (3, 3),
@@ -81,7 +90,7 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     lexer.result should have length expected.length
     for ((token, lineAndChar) <- lexer.result zip expected) {
       token.data shouldBe an [Identifier]
-      (token.line, token.char) should equal(lineAndChar)
+      (token.pos.line, token.pos.column) should equal(lineAndChar)
     }
   }
 
@@ -209,7 +218,10 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
   it should "fail on an unterminated comment" in {
     val lexer = new Lexer("a /* this is an unterminated comment")
     lexer.success shouldBe false
-    lexer.findings.head shouldBe Lexer.UnclosedCommentError(1, 3)
+    val finding = lexer.findings.head
+    finding shouldBe a [Lexer.UnclosedCommentError]
+    finding.pos.line shouldBe 1
+    finding.pos.column shouldBe 3
   }
 
   /* Result dumping */
