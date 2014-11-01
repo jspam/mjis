@@ -8,6 +8,13 @@ How to get started
  - Install [SBT](http://www.scala-sbt.org/0.13/tutorial/Manual-Installation.html)
  - Done.
 
+Creating a stand-alone compiler jar file
+----------------------------------------
+
+ - Run `sbt assembly` from inside the mjis directory
+ - Location of compiler: target/scala-2.11/mjc.jar
+ - Use the compiler, e. g. `java -jar mjc.jar Hello.java`
+
 Generating IDE project files
 ----------------------------
 
