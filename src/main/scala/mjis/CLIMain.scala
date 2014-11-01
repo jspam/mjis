@@ -1,7 +1,6 @@
 package mjis
 
-import java.io.File
-import java.nio.file.{Path, Paths, Files, FileSystems}
+import java.nio.file.{Path, Paths, Files}
 
 import scala.collection.immutable.Seq
 
@@ -29,7 +28,9 @@ object CLIMain extends App {
   }
 
   parser.parse(args, Config()) map { config =>
-    Compiler.compile(config)
+    System.exit(if (Compiler.compile(config)) 0 else 2)
+  } getOrElse {
+    System.exit(1)
   }
 }
 

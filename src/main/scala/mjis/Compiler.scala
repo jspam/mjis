@@ -5,7 +5,7 @@ import java.nio.file.{Path}
 import scala.collection.JavaConversions._
 
 object Compiler {
-  def compile(config: Config): Unit = {
+  def compile(config: Config): Boolean = {
     // Concatenate input files
     val concatenatedInputStream = new SequenceInputStream((config.files map {
       path: Path => new BufferedInputStream(new FileInputStream(path.toFile))
@@ -17,10 +17,12 @@ object Compiler {
 
     if (config.stopAfter == "lexer") {
       System.out.println(lexer.dumpResult)
-      return
+      return lexer.success
     }
 
     // val parser = new Parser(lexer.result)
     // ...
+
+    true
   }
 }
