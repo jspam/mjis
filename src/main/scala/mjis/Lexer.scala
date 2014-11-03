@@ -79,6 +79,7 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
     "long", "native", "package", "private", "protected", "short", "strictfp", "super", "switch",
     "synchronized", "throws", "throw", "transient", "try", "volatile")
 
+  private val identifierCache = mutable.Map[String, Identifier]();
   private var input = Stream continually inputReader.read() takeWhile (_ != -1) map (_.toChar)
   private val _findings = MutableList[Finding]()
   private var line = 1
@@ -109,7 +110,8 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
     val data =
       if (keywords.contains(ident)) keywords(ident)
       else if (unusedKeywords(ident)) UnusedFeature(ident)
-      else Identifier(ident)
+      else identifierCache.getOrElseUpdate(ident, Identifier(ident))
+
     mkTokenAndConsume(ident.length, data)
   }
 
