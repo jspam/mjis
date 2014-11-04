@@ -155,24 +155,6 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[Stream[Token]
     }
   }
 
-  private def lexSymbol() : Option[Token] = {
-    val pos = input.pos
-    symbols.tryLookupLongestPrefix(input) match {
-      case None =>
-        // TODO: some heuristics for separating and skipping the unknown 'token'
-        _findings += new Lexer.UnknownTokenError(pos)
-        None
-      case Some(symbol) =>
-        symbol match {
-          case TokenSymbol(data) => Some(new Token(data, pos))
-          case LineBreak => lexToken()
-          case CommentStart =>
-            lexCommentRemainder(pos)
-            lexToken()
-        }
-    }
-  }
-
   @annotation.tailrec
   private def lexToken(): Option[Token] = {
     if (input.atEnd) None
@@ -188,8 +170,23 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[Stream[Token]
     else if (whitespace(input.currentChar)) {
       input.consume()
       lexToken()
-    } else
-      lexSymbol()
+    } else {
+      val pos = input.pos
+      symbols.tryLookupLongestPrefix(input) match {
+        case None =>
+          // TODO: some heuristics for separating and skipping the unknown 'token'
+          _findings += new Lexer.UnknownTokenError(pos)
+          None
+        case Some(symbol) =>
+          symbol match {
+            case TokenSymbol(data) => Some(new Token(data, pos))
+            case LineBreak => lexToken()
+            case CommentStart =>
+              lexCommentRemainder(pos)
+              lexToken()
+          }
+      }
+    }
   }
 
   protected override def getResult(): Stream[Token] = (Stream continually lexToken takeWhile (_.isDefined)).flatten

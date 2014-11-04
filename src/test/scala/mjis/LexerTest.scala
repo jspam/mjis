@@ -68,6 +68,17 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     checkContainsTokenData(lexer.result, expected)
   }
 
+  it should "not choke on many consecutive comments" in {
+    val lexer = new Lexer((Range(0, 10000) map { _ => "/**/" }).mkString(""))
+    lexer.success shouldBe true
+    lexer.result shouldBe empty
+  }
+  it should "not choke on many consecutive line breaks" in {
+    val lexer = new Lexer((Range(0, 10000) map { _ => "\n" }).mkString(""))
+    lexer.success shouldBe true
+    lexer.result shouldBe empty
+  }
+
   it should "set line/char of tokens correctly" in {
     val input = "a aa      a\t a\na a\na a\r\na a\n\na a "
     val expected = List( // (line, char)
