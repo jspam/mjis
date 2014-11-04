@@ -22,6 +22,14 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     lexer.success shouldBe true
   }
 
+  it should "implement BufferedIterator correctly" in {
+    val lexer = new Lexer("a")
+    lexer.result.head.data shouldBe Identifier("a")
+    lexer.result.hasNext shouldBe true
+    lexer.result.next().data shouldBe Identifier("a")
+    lexer.result.hasNext shouldBe false
+  }
+
   it should "separate tokens by whitespace or comments" in {
     val lexer = new Lexer("a a  a\ta\ra\na\r\na/*comment*/a")
     checkContainsTokenData(lexer.result, Range(0, 8) map { _ => new Identifier("a") })

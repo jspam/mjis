@@ -190,15 +190,14 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedItera
   }
 
   protected override def getResult(): BufferedIterator[Token] = new BufferedIterator[Token] {
-    private var _head: Option[Token] = None
-    private var _next = lexToken()
+    private var _head: Option[Token] = lexToken()
 
     override def next(): Token = {
-      _head = _next
-      _next = lexToken()
-      head
+      val oldHead = head
+      _head = lexToken()
+      oldHead
     }
-    override def hasNext: Boolean = _next.isDefined
+    override def hasNext: Boolean = _head.isDefined
     override def head: Token = _head.get
   }
 
