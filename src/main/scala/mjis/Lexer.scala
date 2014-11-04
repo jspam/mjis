@@ -1,7 +1,7 @@
 package mjis
 
-import scala.collection.mutable.{MutableList, Queue}
-import scala.collection.{AbstractIterator, mutable}
+import scala.collection.AbstractIterator
+import scala.collection.mutable.{ListBuffer, Queue, Map => MutableMap}
 
 import mjis.TokenData._
 
@@ -51,7 +51,7 @@ class LineReader(input: java.io.Reader) {
 class Trie[A](keyValues: Iterable[(String, A)]) {
   private class Node {
     var item: Option[A] = None
-    val children = mutable.Map[Char, Node]() // could be optimized to a linear array
+    val children = MutableMap[Char, Node]() // could be optimized to a linear array
 
     def add(key: String, value: A): Unit = key.headOption match {
       case None => item = Some(value)
@@ -116,9 +116,9 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
     "long", "native", "package", "private", "protected", "short", "strictfp", "super", "switch",
     "synchronized", "throws", "throw", "transient", "try", "volatile")
 
-  private val identifierCache = mutable.Map[String, Identifier]()
+  private val identifierCache = MutableMap[String, Identifier]()
   private val input = new LineReader(inputReader)
-  private val _findings = MutableList[Finding]()
+  private val _findings = ListBuffer.empty[Finding]
 
   def this(input: String) = {
     this(new java.io.StringReader(input))

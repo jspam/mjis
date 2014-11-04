@@ -1,6 +1,6 @@
 package mjis
 
-import scala.collection.mutable.MutableList
+import scala.collection.mutable.ListBuffer
 import mjis.TokenData._
 
 object Parser {
@@ -22,7 +22,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
 
   private case class UnexpectedTokenException(error: UnexpectedTokenError) extends Exception
 
-  private val _findings = MutableList[Finding]()
+  private val _findings = ListBuffer.empty[Finding]
   private def currentToken: Token = tokens.head
   private def atEOF = currentToken.data == EOF
   override def findings: List[Finding] = _findings.toList
