@@ -12,15 +12,16 @@ object Compiler {
     }).iterator)
 
     val lexer = new Lexer(new InputStreamReader(concatenatedInputStream, "ASCII"))
-    lexer.findings.map { f => System.err.println(f) }
+    val parser = new Parser(lexer.result)
+
     if (config.stopAfter == "lexer") {
-      System.out.println(lexer.dumpResult)
-      return lexer.success
+      lexer.dumpResult().foreach(System.out.println)
+    } else {
+      parser.result // something something
     }
 
-    val parser = new Parser(lexer.result)
-    parser.findings.map { f => System.err.println(f) }
-
-    parser.success
+    lexer.findings.foreach(System.err.println)
+    parser.findings.map(System.err.println)
+    lexer.success && parser.success
   }
 }

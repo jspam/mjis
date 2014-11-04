@@ -1,7 +1,7 @@
 package mjis
 
 import scala.collection.mutable.MutableList
-import scala.collection.mutable
+import scala.collection.{AbstractIterator, mutable}
 
 import mjis.TokenData._
 
@@ -83,7 +83,7 @@ object Lexer {
   }
 }
 
-class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[Stream[Token]] {
+class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedIterator[Token]] {
   // abstraction over constant-length (quasi-)tokens
   private abstract class Symbol()
   private case class TokenSymbol(data: TokenData) extends Symbol
@@ -189,14 +189,22 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[Stream[Token]
     }
   }
 
-  protected override def getResult(): Stream[Token] = (Stream continually lexToken takeWhile (_.isDefined)).flatten
+  protected override def getResult(): BufferedIterator[Token] = new BufferedIterator[Token] {
+    private var _head: Option[Token] = None
+    private var _next = lexToken()
 
-  protected override def getFindings(): List[Finding] = {
-    result.foreach(_ => ()) // lex all the things
-    _findings.toList
+    override def next(): Token = {
+      _head = _next
+      _next = lexToken()
+      head
+    }
+    override def hasNext: Boolean = _next.isDefined
+    override def head: Token = _head.get
   }
 
-  override def dumpResult(): String = {
+  override def findings: List[Finding] = _findings.toList
+
+  override def dumpResult(): Iterator[String] = {
     var dump = result.map(token => token.data match {
       case Identifier(literal) => s"identifier $literal"
       case IntegerLiteral(literal) => s"integer literal $literal"
@@ -204,12 +212,12 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[Stream[Token]
     })
 
     // TODO: Only append EOF if the file was read completely
-    dump :+= "EOF"
+    dump ++= List("EOF")
 
     if (!this.success) {
-      dump :+= "error"
+      dump ++= List("error")
     }
 
-    dump.mkString(System.lineSeparator())
+    dump
   }
 }
