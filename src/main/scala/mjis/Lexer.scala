@@ -79,7 +79,7 @@ class Lexer(val inputReader: Reader) extends AnalysisPhase[Stream[Token]] {
     "long", "native", "package", "private", "protected", "short", "strictfp", "super", "switch",
     "synchronized", "throws", "throw", "transient", "try", "volatile")
 
-  private val identifierCache = mutable.Map[String, Identifier]();
+  private val identifierCache = mutable.Map[String, Identifier]()
   private var input = Stream continually inputReader.read() takeWhile (_ != -1) map (_.toChar)
   private val _findings = MutableList[Finding]()
   private var line = 1
