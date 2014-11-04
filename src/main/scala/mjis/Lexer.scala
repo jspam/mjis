@@ -227,14 +227,14 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
   override def findings: List[Finding] = _findings.toList
 
   override def dumpResult(): Iterator[String] = {
-    var dump = result.map(token => token.data match {
+    var dump: Iterator[String] = result.map(token => token.data match {
       case Identifier(literal) => s"identifier $literal"
       case IntegerLiteral(literal) => s"integer literal $literal"
       case _ => token.data.literal
     })
 
     if (!this.success) {
-      dump ++= List("error")
+      dump ++= Iterator.single("error")
     }
 
     dump
