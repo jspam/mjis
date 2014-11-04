@@ -2,84 +2,10 @@ package mjis
 
 import scala.collection.mutable.{ListBuffer, Queue, Map => MutableMap}
 import java.io.BufferedWriter
-
+import java.nio.file.{Path, Paths}
 import mjis.TokenData._
-
-/** Mutable version of scala.util.parsing.input.StreamReader.
-  * The current input line is buffered for direct access.
-  */
-object LineReader {
-  final val eof = '\u001a' // The SUB control character. Any char outside the spec will do.
-}
-
-class LineReader(input: java.io.Reader) {
-  import LineReader._
-  private var line = 1
-  var offset = 0
-  var lastLine = false
-  var source = readLine()
-
-  def pos = new Position(line, offset + 1, source)
-  def currentChar = source(offset)
-  def atEnd = lastLine && offset >= source.length - 1 // at EOF or beyond
-
-  private def readLine(): String = {
-    val sb = new StringBuffer()
-    var next: Int = 0
-
-    do {
-      next = input.read()
-      if (next == -1) {
-        lastLine = true
-        sb.append(eof)
-      } else
-        sb.append(next.toChar)
-    } while (next != -1 && next != '\n')
-
-    sb.toString
-  }
-
-  def consume(): Char = {
-    val c = currentChar
-    offset += 1
-    if (offset >= source.length) {
-      line += 1
-      offset = 0
-      source = readLine()
-    }
-    c
-  }
-}
-
-/** String-keyed map that allows lookup by prefix */
-class Trie[A](keyValues: Iterable[(String, A)]) {
-  private class Node {
-    var item: Option[A] = None
-    val children = MutableMap[Char, Node]() // could be optimized to a linear array
-
-    def add(key: String, value: A): Unit = key.headOption match {
-      case None => item = Some(value)
-      case Some(c) => children.getOrElseUpdate(c, new Node).add(key.tail, value)
-    }
-
-    def tryLookupLongestPrefix(reader: LineReader): Option[A] = children.get(reader.currentChar) match {
-      case None => item
-      case Some(child) =>
-        reader.consume()
-        child.tryLookupLongestPrefix(reader)
-    }
-  }
-
-  private val root = new Node
-  keyValues.foreach(kv => root.add(kv._1, kv._2))
-
-  def tryLookupLongestPrefix(reader: LineReader): Option[A] = root.tryLookupLongestPrefix(reader)
-}
-
-
-sealed trait LookaheadIterator[T] extends BufferedIterator[T] {
-  def peek(n: Int): T
-}
+import mjis.util.LineReader
+import mjis.util.Trie
 
 object Lexer {
   case class UnclosedCommentError(pos: Position) extends Finding {
@@ -167,7 +93,7 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
   @annotation.tailrec
   private def lexCommentRemainder(startPos: Position): Unit = {
     if (input.atEnd) {
-      _findings += new Lexer.UnclosedCommentError(startPos)
+      _findings += Lexer.UnclosedCommentError(startPos)
     } else if (!(input.consume() == '*' && input.consume() == '/')) {
       lexCommentRemainder(startPos)
     }
@@ -192,7 +118,7 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
       val pos = input.pos
       symbols.tryLookupLongestPrefix(input) match {
         case None =>
-          _findings += new Lexer.UnknownTokenError(pos)
+          _findings += Lexer.UnknownTokenError(pos)
           while (!whitespace(input.currentChar) && !input.atEnd) input.consume()
           lexToken()
         case Some(symbol) =>
@@ -252,4 +178,8 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
 
     writer.flush()
   }
+}
+
+trait LookaheadIterator[T] extends BufferedIterator[T] {
+  def peek(n: Int): T
 }

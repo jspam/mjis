@@ -1,7 +1,7 @@
 package mjis
 
-import java.io._
 import java.lang.reflect.Constructor
+import java.io.Reader
 import java.nio.file.Path
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
@@ -44,16 +44,9 @@ object Compiler {
     exec(input, classTag[P].runtimeClass.asInstanceOf[Class[_ <: Phase[_]]]).asInstanceOf[Either[P, List[Finding]]]
 
   def compile(config: Config): Boolean = {
-    // Concatenate input files
-    val concatenatedInputStream = new SequenceInputStream((config.files map {
-      path: Path =>
-        if (path.toString == "")
-          new BufferedInputStream(System.in)
-        else
-          new BufferedInputStream(new FileInputStream(path.toFile))
-    }).iterator)
-
-    val input = new InputStreamReader(concatenatedInputStream, "ASCII")
+    import java.io._
+    val fileOrStdIn = config.file.map(f => new FileInputStream(f.toFile)).getOrElse(System.in)
+    val input = new InputStreamReader(new BufferedInputStream(fileOrStdIn), "ASCII")
     val target = if (config.stopAfter != "") stopAfterTargets(config.stopAfter) else pipeline.last
 
     exec(input, target) match {

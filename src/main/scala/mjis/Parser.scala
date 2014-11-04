@@ -37,7 +37,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
   private def consume() = tokens.next()
 
   private def unexpectedToken(expected: String) = {
-    throw new UnexpectedTokenException(new UnexpectedTokenError(currentToken, expected))
+    throw UnexpectedTokenException(UnexpectedTokenError(currentToken, expected))
   }
 
   private def expect[A](pred: TokenData => Option[A], expected: String): A = pred(currentToken.data) match {
@@ -99,7 +99,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
       val mainName = expectIdentifier()
       expectSymbol(ParenOpen)
       if (expectIdentifier() != "String") {
-        _findings += new Parser.InvalidMainMethodError(currentToken, "main must have a single parameter of type String[]")
+        _findings += Parser.InvalidMainMethodError(currentToken, "main must have a single parameter of type String[]")
       }
       expectSymbol(SquareBracketOpen)
       expectSymbol(SquareBracketClosed)

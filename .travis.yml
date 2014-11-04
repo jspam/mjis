@@ -3,7 +3,6 @@ scala:
 - 2.11.2
 jdk:
 - oraclejdk8
-- openjdk7
 env:
 # Add LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${project_loc}/lib to the exec environment in eclipse
 - LD_LIBRARY_PATH=$LD_LIBRARY_PATH:lib/
