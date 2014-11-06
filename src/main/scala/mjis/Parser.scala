@@ -11,7 +11,7 @@ object Parser {
   }
 
   case class UnexpectedTokenError(token: Token) extends Finding {
-    def msg = s"unexpected token: $token"
+    def msg = s"unexpected token: ${token.data}"
     def severity = Severity.ERROR
     override def pos: Position = token.pos
   }
