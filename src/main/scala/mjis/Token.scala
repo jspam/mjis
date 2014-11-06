@@ -49,6 +49,8 @@ object TokenData {
   case object CurlyBraceClosed extends TokenData("}")
   case object LogicalOr extends TokenData("||")
 
+  case object EOF extends TokenData("EOF")
+
   case class Identifier(override val literal: String) extends TokenData(literal)
   case class IntegerLiteral(value: String) extends TokenData(value)
 

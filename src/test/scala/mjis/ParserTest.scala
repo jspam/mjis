@@ -29,7 +29,8 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     val parser = new Parser(new Lexer("class").result)
     parser.result
     parser.success shouldBe false
-    parser.findings.head shouldBe an [Parser.UnexpectedEOFError]
+    parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
+    parser.findings.head.asInstanceOf[Parser.UnexpectedTokenError].token.data shouldBe TokenData.EOF
     parser.findings.head.pos.column shouldBe 6  // the char after "class"
   }
 
