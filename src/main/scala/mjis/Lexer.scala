@@ -156,17 +156,17 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedItera
   }
 
   @annotation.tailrec
-  private def lexToken(): Option[Token] = {
-    if (input.atEnd) None
+  private def lexToken(): Token = {
+    if (input.atEnd) new Token(TokenData.EOF, input.pos)
     else if (input.currentChar == '_' || input.currentChar.isLetter)
-      Some(lexIdentifier())
+      lexIdentifier()
     else if (input.currentChar == '0') {
       // special case: always a single token
       val token = new Token(TokenData.IntegerLiteral("0"), input.pos)
       input.consume()
-      Some(token)
+      token
     } else if (input.currentChar.isDigit)
-      Some(lexInteger())
+      lexInteger()
     else if (whitespace(input.currentChar)) {
       input.consume()
       lexToken()
@@ -174,12 +174,12 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedItera
       val pos = input.pos
       symbols.tryLookupLongestPrefix(input) match {
         case None =>
-          // TODO: some heuristics for separating and skipping the unknown 'token'
           _findings += new Lexer.UnknownTokenError(pos)
-          None
+          while (!whitespace(input.currentChar) && !input.atEnd) input.consume()
+          lexToken()
         case Some(symbol) =>
           symbol match {
-            case TokenSymbol(data) => Some(new Token(data, pos))
+            case TokenSymbol(data) => new Token(data, pos)
             case LineBreak => lexToken()
             case CommentStart =>
               lexCommentRemainder(pos)
@@ -190,15 +190,16 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedItera
   }
 
   protected override def getResult(): BufferedIterator[Token] = new BufferedIterator[Token] {
-    private var _head: Option[Token] = lexToken()
-
+    private var _head: Token = lexToken()
     override def next(): Token = {
-      val oldHead = head
-      _head = lexToken()
+      val oldHead = _head
+      _head = if (oldHead.data != EOF) lexToken() else null
       oldHead
     }
-    override def hasNext: Boolean = _head.isDefined
-    override def head: Token = _head.get
+
+    // we can't use `_head.data != EOF` because otherwise people using this as an Iterator[Token] would never see EOF
+    override def hasNext: Boolean = _head != null
+    override def head: Token = _head
   }
 
   override def findings: List[Finding] = _findings.toList
@@ -209,9 +210,6 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedItera
       case IntegerLiteral(literal) => s"integer literal $literal"
       case _ => token.data.literal
     })
-
-    // TODO: Only append EOF if the file was read completely
-    dump ++= List("EOF")
 
     if (!this.success) {
       dump ++= List("error")
