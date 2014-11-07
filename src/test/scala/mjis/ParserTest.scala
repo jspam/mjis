@@ -101,6 +101,14 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     new Parser(new Lexer(progStart + "a+b*c-d!=(e>f*g);'" + progEnd).result) should succeedParsing()
   }
 
+  it should "accept field accesses and method calls" in {
+    new Parser(new Lexer(progStart + "a.b.c;a.b.c();" + progEnd).result) should succeedParsing()
+  }
+
+  it should "accept long chains of field accesses" in {
+    new Parser(new Lexer(progStart + repeat("a.", 10000) + "b;" + progEnd).result) should succeedParsing()
+  }
+
   it should "reject a class declaration without class name" in {
     val parser = new Parser(new Lexer("class { }").result)
     parser shouldNot succeedParsing()

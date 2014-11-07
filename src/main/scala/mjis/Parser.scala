@@ -255,9 +255,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
         case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 4
         case Plus | Minus => curTokenPrecedence = 3
         case Mult | Divide | Modulo => curTokenPrecedence = 2
-        case Dot =>
-          curTokenPrecedence = 1
-          curTokenRightAssoc = true
+        case Dot => curTokenPrecedence = 1
         case _ =>
           while (expressionStack.nonEmpty && expressionStack.head.isInstanceOf[RightAssocBinaryExpression]) expressionStack.pop()
           return
