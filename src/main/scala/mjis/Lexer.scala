@@ -1,6 +1,6 @@
 package mjis
 
-import scala.collection.mutable.MutableList
+import scala.collection.mutable.{MutableList, Queue}
 import scala.collection.{AbstractIterator, mutable}
 
 import mjis.TokenData._
@@ -72,6 +72,11 @@ class Trie[A](keyValues: Iterable[(String, A)]) {
   def tryLookupLongestPrefix(reader: LineReader): Option[A] = root.tryLookupLongestPrefix(reader)
 }
 
+
+sealed trait LookaheadIterator[T] extends BufferedIterator[T] {
+  def peek(n: Int): T
+}
+
 object Lexer {
   case class UnclosedCommentError(pos: Position) extends Finding {
     def msg = "unclosed comment"
@@ -83,7 +88,8 @@ object Lexer {
   }
 }
 
-class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedIterator[Token]] {
+class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIterator[Token]] {
+
   // abstraction over constant-length (quasi-)tokens
   private abstract class Symbol()
   private case class TokenSymbol(data: TokenData) extends Symbol
@@ -189,18 +195,34 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[BufferedItera
     }
   }
 
-  protected override def getResult(): BufferedIterator[Token] = new BufferedIterator[Token] {
-    private var _head: Token = lexToken()
+  class TokenIterator() extends LookaheadIterator[Token] {
+    /// behaves as follows: `next()` is guaranteed to always return a valid
+    /// token, and will generate arbitrary many EOF tokens, but `hasNext()`
+    /// will return false after the first EOF has been returned by `next()`
+    private val _buffer: Queue[Token] = Queue[Token](lexToken())
+    private var _hasNext = true
+    private val _buffer_size = 3
     override def next(): Token = {
-      val oldHead = _head
-      _head = if (oldHead.data != EOF) lexToken() else null
+      val oldHead = _buffer.dequeue
+      if (oldHead.data != EOF)
+        while (_buffer.length < _buffer_size) _buffer.enqueue(lexToken())
+      else
+        _hasNext = false
       oldHead
     }
 
-    // we can't use `_head.data != EOF` because otherwise people using this as an Iterator[Token] would never see EOF
-    override def hasNext: Boolean = _head != null
-    override def head: Token = _head
+    override def hasNext: Boolean = _hasNext
+    def peek(n: Int = 1): Token = {
+      if (n < _buffer_size)
+        _buffer.get(n).getOrElse(peek(n-1))
+      else
+        throw new ArrayIndexOutOfBoundsException("peek() only supports lookahead < " + _buffer_size)
+    }
+    override def head: Token = _buffer.head
   }
+
+
+  protected override def getResult(): LookaheadIterator[Token] = new TokenIterator()
 
   override def findings: List[Finding] = _findings.toList
 

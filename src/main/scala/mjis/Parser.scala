@@ -17,13 +17,14 @@ object Parser {
   }
 }
 
-class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
+class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
   import Parser._
 
   private case class UnexpectedTokenException(error: UnexpectedTokenError) extends Exception
 
   private val _findings = MutableList[Finding]()
   private def currentToken: Token = tokens.head
+  private def atEOF = currentToken.data == EOF
   override def findings: List[Finding] = _findings.toList
 
   protected override def getResult() = {
@@ -42,7 +43,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
   private def expect[A](pred: TokenData => Option[A], expected: String): A = pred(currentToken.data) match {
     case None => unexpectedToken(expected)
     case Some(x) =>
-      if (currentToken.data != EOF) consume()
+      if (!atEOF) consume()
       x
   }
 
@@ -59,7 +60,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
 
   private def parseProgram(): Any = {
     try {
-      while (currentToken.data != EOF) {
+      while (!atEOF) {
         parseClassDeclaration()
       }
     }
@@ -265,42 +266,6 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
     expectSymbol(Semicolon)
   }
 
-  /**
-   * Parses a statement // TODO: and adds it to the given block.
-   */
-  private def parseStatement(): Unit = {
-    currentToken.data match {
-      case CurlyBraceOpen =>
-        parseBlock()
-      case Semicolon =>
-        // EmptyStatement
-        consume()
-        // TODO
-      case If =>
-        // IfStatement
-        consume()
-        // TODO
-      case While =>
-        // WhileStatement
-        consume()
-        // TODO
-      case Return =>
-        // ReturnStatement
-        consume()
-        // TODO
-      case _ =>
-        // ExpressionStatement or error
-        parseExpressionStatement()
-    }
-  }
-
-  private def parseBlock(): Unit = {
-    expectSymbol(CurlyBraceOpen)
-    while (currentToken.data != CurlyBraceClosed)
-        parseStatement()
-    consume()
-  }
-
   private def parseType() = {
     parseBasicType()
     while (currentToken.data == SquareBracketOpen) {
@@ -320,4 +285,87 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
         more = false
     } while(more)
   }
+
+  private def parseBlock(): Any = {
+    expectSymbol(CurlyBraceOpen)
+    while (currentToken.data != CurlyBraceClosed && !atEOF) parseBlockStatement()
+    expectSymbol(CurlyBraceClosed)
+  }
+
+  private def parseBlockStatement() = {
+    // the grammar doesn't allow variable declarations in conditional structures, hence the special production
+    currentToken.data match {
+      case IntType | BooleanType | VoidType =>
+        parseLocalVariableDeclarationStatement()
+      case Identifier(_) =>
+        // tricky case! To my best knowledge the only SLL(3)-production in the grammar
+        // this might be either a local variable declaration or an expression statement.
+        tokens.peek(1).data match {
+          case Identifier(_) =>
+            // found: CustomType myvar   --> local var decl
+            parseLocalVariableDeclarationStatement()
+          case SquareBracketOpen =>
+            if (tokens.peek(2).data == SquareBracketClosed)
+              // found: CustomType[]  --> local var decl
+              parseLocalVariableDeclarationStatement()
+            else
+              // found: myarray[   --> statement
+              parseStatement()
+          case _ =>
+            parseStatement()
+        }
+      case _ => parseStatement()
+    }
+  }
+
+  private def parseLocalVariableDeclarationStatement() = {
+    parseType()
+    expectIdentifier()
+    if (currentToken.data == Assign) {
+      consume()
+      parseExpression()
+    }
+    expectSymbol(Semicolon)
+  }
+
+  private def parseStatement(): Any = {
+    currentToken.data match {
+      case CurlyBraceOpen => parseBlock()
+      case Semicolon => consume()
+      case If => parseIfStatement()
+      case While => parseWhileStatement()
+      case Return => parseReturnStatement()
+      case _ =>
+        parseExpression()
+        expectSymbol(Semicolon)
+    }
+  }
+
+  private def parseIfStatement() = {
+    expectSymbol(If)
+    expectSymbol(ParenOpen)
+    parseExpression()
+    expectSymbol(ParenClosed)
+    parseStatement()
+    // this implicitly solves the dangling else problem by assigning it to the innermost-still-parsable if
+    if (currentToken.data == Else) {
+      consume()
+      parseStatement()
+    }
+  }
+
+  private def parseWhileStatement() = {
+    expectSymbol(While)
+    expectSymbol(ParenOpen)
+    parseExpression()
+    expectSymbol(ParenClosed)
+    parseStatement()
+  }
+
+  private def parseReturnStatement() = {
+    expectSymbol(Return)
+    if (currentToken.data != Semicolon && !atEOF) parseExpression()
+    expectSymbol(Semicolon)
+  }
+
 }
