@@ -1,6 +1,6 @@
 package mjis
 
-import scala.collection.mutable.MutableList
+import scala.collection.mutable.{MutableList, Stack}
 import mjis.TokenData._
 
 object Parser {
@@ -18,12 +18,19 @@ object Parser {
 }
 
 class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
+
+  // Temporary until we have a real AST. When we do, certain AST nodes are put on the parser stack.
+  private abstract class ParserStackItem
+  private case object BlockItem extends ParserStackItem
   
   private case class UnexpectedEOFException() extends Exception
   
   private val _findings = MutableList[Finding]()
   private def currentToken: Token = tokens.head
   override def findings: List[Finding] = _findings.toList
+
+  // AST nodes that are unfinished because a function ended prematurely to avoid recursion.
+  private val parserStack = Stack[ParserStackItem]()
 
   protected override def getResult() = {
     parseProgram()
@@ -111,10 +118,32 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
     }
   }
 
-  // TODO(max): implement
+  /**
+   * Parses a statement // TODO: and adds it to the given block.
+   */
+  private def parseStatement(block: ParserStackItem) = {
+    currentToken.data match {
+      case CurlyBraceOpen =>
+        consume()
+        parserStack.push(BlockItem)
+        // return to parseBlock
+      case _ =>
+        consume()
+        // TODO
+    }
+  }
+
   private def parseBlock() = {
     expectSymbol(CurlyBraceOpen)
-    expectSymbol(CurlyBraceClosed)
+    parserStack.push(BlockItem)
+    while (parserStack.nonEmpty && parserStack.top == BlockItem) {
+      while (currentToken.data != EOF && currentToken.data != CurlyBraceClosed) {
+        parseStatement(parserStack.top)
+      }
+      // currentToken == CurlyBraceClosed
+      consume()
+      parserStack.pop()
+    }
   }
 
   private def parseType() = {
