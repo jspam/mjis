@@ -5,8 +5,8 @@ import mjis.TokenData._
 
 object Parser {
 
-  case class UnexpectedTokenError(token: Token) extends Finding {
-    def msg = s"unexpected token: ${token.data}"
+  case class UnexpectedTokenError(token: Token, expected: String) extends Finding {
+    def msg = s"expected $expected, found '${token.data}'"
     def severity = Severity.ERROR
     override def pos: Position = token.pos
   }
@@ -18,8 +18,9 @@ object Parser {
 }
 
 class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
+  import Parser._
 
-  private case class UnexpectedEOFException() extends Exception
+  private case class UnexpectedTokenException(error: UnexpectedTokenError) extends Exception
 
   private val _findings = MutableList[Finding]()
   private def currentToken: Token = tokens.head
@@ -34,30 +35,26 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
     tokens.next()
   }
 
-  private def unexpectedToken() = {
-    _findings += new Parser.UnexpectedTokenError(currentToken)
-    if (currentToken.data != EOF) consume() // enforce progress
+  private def unexpectedToken(expected: String) = {
+    throw new UnexpectedTokenException(new UnexpectedTokenError(currentToken, expected))
   }
 
-  private def expect[ReturnType](pred: TokenData => Option[ReturnType]): Option[ReturnType] = {
-    if (currentToken.data == EOF)
-      throw new UnexpectedEOFException()
-
-    val retval = pred(currentToken.data)
-    if (!retval.isDefined) unexpectedToken()
-    else if (currentToken.data != EOF) consume()
-    retval
+  private def expect[A](pred: TokenData => Option[A], expected: String): A = pred(currentToken.data) match {
+    case None => unexpectedToken(expected)
+    case Some(x) =>
+      if (currentToken.data != EOF) consume()
+      x
   }
 
-  private def expectIdentifier(): Option[String] = {
-    expect[String] {
+  private def expectIdentifier(): String = {
+    expect[String]({
       case Identifier(s) => Some(s)
       case _ => None
-    }
+    }, "identifier")
   }
 
   private def expectSymbol(symbol: TokenData) = {
-    expect[Unit](t => if (t == symbol) Some(Unit) else None)
+    expect[Unit](t => if (t == symbol) Some(Unit) else None, symbol.literal)
   }
 
   private def parseProgram(): Any = {
@@ -67,7 +64,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
       }
     }
     catch {
-      case UnexpectedEOFException() => unexpectedToken()
+      case UnexpectedTokenException(error) => _findings += error
     }
   }
 
@@ -87,7 +84,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
       expectSymbol(VoidType)
       expectIdentifier()
       expectSymbol(ParenOpen)
-      if (expectIdentifier() != Some("String")) {
+      if (expectIdentifier() != "String") {
         _findings += new Parser.InvalidMainMethodError(currentToken, "main must have a single parameter of type String[]")
       }
       expectSymbol(SquareBracketOpen)
@@ -108,7 +105,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
           if (currentToken.data != ParenClosed) parseParameters()
           expectSymbol(ParenClosed)
           parseBlock()
-        case _ => unexpectedToken()
+        case _ => unexpectedToken("'(' or ';'")
       }
     }
   }
@@ -119,7 +116,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
       case BooleanType => consume()
       case VoidType => consume()
       case Identifier(_) => consume()
-      case _ => unexpectedToken()
+      case _ => unexpectedToken("type name")
     }
   }
 
@@ -177,7 +174,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
           case _ =>
             parseNewArrayExpressionPostfix()
         }
-      case _ => unexpectedToken()
+      case _ => unexpectedToken("primary expression")
     }
   }
 
