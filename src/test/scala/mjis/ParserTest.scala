@@ -76,9 +76,9 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
         |myFunc();
         |this;
         |(null);
-        |a[2][3][4];
+        |a[2][3][b];
         |new myType();
-        |new int[5][][];
+        |new int[5+a][][];
       """.stripMargin) should succeedParsing()
   }
 

@@ -1,6 +1,6 @@
 package mjis
 
-import scala.collection.mutable.{MutableList, Stack}
+import scala.collection.mutable.MutableList
 import mjis.TokenData._
 
 object Parser {
@@ -19,36 +19,11 @@ object Parser {
 
 class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
 
-  // Temporary until we have a real AST. When we do, certain AST nodes are put on the parser stack.
-  private abstract class TempASTNode
-  private class Block() extends TempASTNode
-  private abstract class Expression extends TempASTNode
-  private class RightAssocBinaryExpression() extends Expression
-  private class ParenthesizedExpression() extends Expression
-  private class ArrayAccessExpression() extends Expression
-  private class ArrayCreateExpression() extends Expression
-  private class MethodCall() extends Expression
-  
   private case class UnexpectedEOFException() extends Exception
-
-  private def expressionClosingToken(t: TokenData) = t == ParenClosed || t == SquareBracketClosed || t == Comma
 
   private val _findings = MutableList[Finding]()
   private def currentToken: Token = tokens.head
   override def findings: List[Finding] = _findings.toList
-
-  // We avoid stack overflows by allocating our own stack of "unfinished" expressions on the heap ;)
-  //
-  // Potential stack overflow candidates are those expressions/statements that can be nested. Those are:
-  //
-  // Blocks:           Block -> { | Statements | }
-  // Array accesses:   Expression -> UnaryExpression [ | Expression | ]([Expression])*
-  // Parentheses:      Expression -> ( | Expression | )
-  // Method calls:     Expression -> IDENT ( | Expressions | )
-  // Array creations:  Expression -> new IDENT [ | Expressions | ]([])*
-  // Binary operators: Expression -> UnaryExpression OP | Expression     for a right-associative binary operator OP (= or .)
-  private val blockStack = Stack[Block]()
-  private val expressionStack = Stack[Expression]()
 
   protected override def getResult() = {
     parseProgram()
@@ -61,6 +36,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
 
   private def unexpectedToken() = {
     _findings += new Parser.UnexpectedTokenError(currentToken)
+    if (currentToken.data != EOF) consume() // enforce progress
   }
 
   private def expect[ReturnType](pred: TokenData => Option[ReturnType]): Option[ReturnType] = {
@@ -69,9 +45,8 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
 
     val retval = pred(currentToken.data)
     if (!retval.isDefined) unexpectedToken()
-    if (currentToken.data != EOF) consume()
+    else if (currentToken.data != EOF) consume()
     retval
-    
   }
 
   private def expectIdentifier(): Option[String] = {
@@ -100,11 +75,11 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
     expectSymbol(Class)
     expectIdentifier()
     expectSymbol(CurlyBraceOpen)
-    while (currentToken.data != CurlyBraceClosed) parseClassMemberDeclaration()
+    while (currentToken.data != CurlyBraceClosed) parseClassMember()
     expectSymbol(CurlyBraceClosed)
   }
   
-  private def parseClassMemberDeclaration() = {
+  private def parseClassMember() = {
     expectSymbol(Public)
     if (currentToken.data == Static) {
       // found main method
@@ -148,21 +123,32 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
     }
   }
 
-  private def openNewArrayExpressionPostfix() = expressionStack.push(new ArrayCreateExpression)
-  private def closeNewArrayExpressionPostfix() = {
-    expressionStack.pop()
+  private def parseNewArrayExpressionPostfix(): Unit = {
+    parseBasicType()
+
+    // first dimension
+    expectSymbol(SquareBracketOpen)
+    parseExpression()
+    expectSymbol(SquareBracketClosed)
+
+    // other dimensions
     while (currentToken.data == SquareBracketOpen) {
       consume()
       expectSymbol(SquareBracketClosed)
     }
   }
 
-  private def openMethodCallExpression() = expressionStack.push(new MethodCall)
-  private def continueMethodCallExpression() = {} /* leave the current MethodCall on the stack */
-  private def closeMethodCallExpression() = expressionStack.pop()
-
-  private def openParenthesizedExpression() = expressionStack.push(new ParenthesizedExpression)
-  private def closeParenthesizedExpression() = expressionStack.pop()
+  private def parseParenthesizedArguments(): Unit = {
+    expectSymbol(ParenOpen)
+    if (currentToken.data != ParenClosed) {
+      parseExpression()
+      while (currentToken.data != ParenClosed) {
+        expectSymbol(Comma)
+        parseExpression()
+      }
+    }
+    consume()
+  }
 
   private def parsePrimaryExpression() = {
     currentToken.data match {
@@ -174,60 +160,52 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
       case Identifier(_) =>
         // Identifier or method call
         consume()
-        if (currentToken.data == ParenOpen) {
-          consume()
-          openMethodCallExpression()
-        }
+        if (currentToken.data == ParenOpen)
+          parseParenthesizedArguments()
       case ParenOpen =>
         consume()
-        openParenthesizedExpression()
+        parseExpression()
+        expectSymbol(ParenClosed)
       case New =>
         consume()
         currentToken.data match {
           case Identifier(_) =>
+            // NewObjectExpression
             consume()
-            currentToken.data match {
-              case ParenOpen =>
-                // NewObjectExpression
-                consume()
-                expectSymbol(ParenClosed)
-              case SquareBracketOpen =>
-                // NewArrayExpression
-                consume()
-                openNewArrayExpressionPostfix()
-            }
+            expectSymbol(ParenOpen)
+            expectSymbol(ParenClosed)
           case _ =>
-            // New ArrayExpression
-            parseBasicType()
-            expectSymbol(SquareBracketOpen)
-            openNewArrayExpressionPostfix()
+            parseNewArrayExpressionPostfix()
         }
       case _ => unexpectedToken()
     }
   }
 
-  private def openArrayAccessExpression() = expressionStack.push(new ArrayAccessExpression)
-  private def closeArrayAccessExpression() = {
-    expressionStack.pop()
-    if (currentToken.data == SquareBracketOpen) {
-      consume()
-      expressionStack.push(new ArrayAccessExpression) /* lhs = the current ArrayAccessExpression */
-    }
+  private def parseArrayAccess() = {
+    expectSymbol(SquareBracketOpen)
+    parseExpression()
+    expectSymbol(SquareBracketClosed)
   }
 
-  private def parseArrayAccessExpression() = {
+  private def parsePostfixExpression(): Unit = {
+    parsePrimaryExpression()
+    parsePostfixOp()
+  }
+
+  private def parsePostfixOp(): Unit = {
     currentToken.data match {
       case SquareBracketOpen =>
+        parseArrayAccess()
+        parsePostfixOp()
+      case Dot =>
+        // field access or method invocation
         consume()
-        openArrayAccessExpression()
-      case _ => unexpectedToken()
+        expectIdentifier()
+        if (currentToken.data == ParenOpen)
+          parseParenthesizedArguments()
+        parsePostfixOp()
+      case _ =>
     }
-  }
-
-  private def parsePostfixExpression() = {
-    parsePrimaryExpression()
-    // Note that Dot is handled in parseBinaryExpressionRhs
-    if (currentToken.data == SquareBracketOpen) parseArrayAccessExpression()
   }
 
   private def parseUnaryExpression() = {
@@ -247,18 +225,15 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
       var curTokenPrecedence = 0
       currentToken.data match {
         case Assign =>
-          curTokenPrecedence = 8
+          curTokenPrecedence = 7
           curTokenRightAssoc = true
-        case LogicalOr => curTokenPrecedence = 7
-        case LogicalAnd => curTokenPrecedence = 6
-        case Equals | Unequal => curTokenPrecedence = 5
-        case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 4
-        case Plus | Minus => curTokenPrecedence = 3
-        case Mult | Divide | Modulo => curTokenPrecedence = 2
-        case Dot => curTokenPrecedence = 1
-        case _ =>
-          while (expressionStack.nonEmpty && expressionStack.head.isInstanceOf[RightAssocBinaryExpression]) expressionStack.pop()
-          return
+        case LogicalOr => curTokenPrecedence = 6
+        case LogicalAnd => curTokenPrecedence = 5
+        case Equals | Unequal => curTokenPrecedence = 4
+        case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 3
+        case Plus | Minus => curTokenPrecedence = 2
+        case Mult | Divide | Modulo => curTokenPrecedence = 1
+        case _ => return
       }
 
       val curPrecedenceWithAssoc: Integer = if (curTokenRightAssoc) curPrecedence else curPrecedence + 1
@@ -266,11 +241,7 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
       if (curPrecedenceWithAssoc < curPrecedence) {
         // The token will be consumed and handled by a higher call to parseBinaryExpressionRhs
         return
-      } else if (curPrecedenceWithAssoc == curPrecedence) {
-        consume()
-        expressionStack.push(new RightAssocBinaryExpression())
-        return
-      } else { // curPrecedenceWithAssoc > curPrecedence
+      } else {
         consume()
         parseBinaryExpression(curPrecedenceWithAssoc)
       }
@@ -282,36 +253,8 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
     parseBinaryExpressionRhs(curPrecedenceLevel)
   }
 
-  private def closeExpression() = {
-    if (expressionStack.isEmpty) {
-      unexpectedToken()
-    } else {
-      currentToken.data match {
-        case SquareBracketClosed =>
-          if (expressionStack.head.isInstanceOf[ArrayAccessExpression]) { consume(); closeArrayAccessExpression() }
-          else if (expressionStack.head.isInstanceOf[ArrayCreateExpression]) { consume(); closeNewArrayExpressionPostfix() }
-          else unexpectedToken()
-        case ParenClosed =>
-          if (expressionStack.head.isInstanceOf[ParenthesizedExpression]) { consume(); closeParenthesizedExpression() }
-          else if (expressionStack.head.isInstanceOf[MethodCall]) { consume(); closeMethodCallExpression() }
-          else unexpectedToken()
-        case Comma =>
-          if (expressionStack.head.isInstanceOf[MethodCall]) { consume(); continueMethodCallExpression(); }
-          else unexpectedToken()
-      }
-    }
-  }
-
-  private def parseExpression() = {
-    do {
-      parseBinaryExpression()
-
-      // Handle the closing of an expression
-      while (expressionClosingToken(currentToken.data)) {
-        closeExpression()
-      }
-
-    } while (expressionStack.nonEmpty)
+  private def parseExpression(): Unit = {
+    parseBinaryExpression()
   }
 
   private def parseExpressionStatement() = {
@@ -322,12 +265,10 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
   /**
    * Parses a statement // TODO: and adds it to the given block.
    */
-  private def parseStatement(block: Block) = {
+  private def parseStatement(): Unit = {
     currentToken.data match {
       case CurlyBraceOpen =>
-        consume()
-        blockStack.push(new Block())
-        // return to parseBlock
+        parseBlock()
       case Semicolon =>
         // EmptyStatement
         consume()
@@ -350,17 +291,11 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
     }
   }
 
-  private def parseBlock() = {
+  private def parseBlock(): Unit = {
     expectSymbol(CurlyBraceOpen)
-    blockStack.push(new Block())
-    while (blockStack.nonEmpty) {
-      while (currentToken.data != EOF && currentToken.data != CurlyBraceClosed) {
-        parseStatement(blockStack.top)
-      }
-      // currentToken == CurlyBraceClosed
-      consume()
-      blockStack.pop()
-    }
+    while (currentToken.data != CurlyBraceClosed)
+        parseStatement()
+    consume()
   }
 
   private def parseType() = {
@@ -382,5 +317,4 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
         more = false
     } while(more)
   }
-  
 }
