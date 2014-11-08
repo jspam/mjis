@@ -10,7 +10,7 @@ object MJIS extends Build {
       .settings(assemblySettings: _*)
       .settings(
         name := "mjis",
-        jarName in assembly := "mjc.jar",
+        jarName in assembly := "run.sh",
         assemblyOption in assembly ~= { _.copy(prependShellScript = Some(defaultShellScript)) },
         scalaVersion := "2.11.4",
         scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-Xlint", "-Xfuture"),
