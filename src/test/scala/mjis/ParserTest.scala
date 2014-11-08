@@ -32,17 +32,23 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parseStatements("{}") should succeedParsing()
   }
 
-  ignore should "accept many nested blocks" in {
+  it should "accept many nested blocks" in {
     // {{{{...}}{{...}}}}
     parseStatements(repeat("{", 10000) + repeat("}", 5000)
       + repeat("{", 5000) + repeat("}", 10000)) should succeedParsing()
+  }
+
+  it should "accept many nested if-else constructs" in {
+    // if(1){if(1){...}}else{if(1){...}}
+    parseStatements(repeat("if(1){", 10000) + repeat("}", 10000)
+      + "else " + repeat("if(1){", 10000) + repeat("}", 10000)) should succeedParsing()
   }
 
   it should "accept assignments" in {
     parseStatements("a=a;\na=a=a;") should succeedParsing()
   }
 
-  ignore should "accept long assignment chains" in {
+  it should "accept long assignment chains" in {
     // a=a=a=...=a;
     parseStatements(repeat("a=", 10000) + "a;") should succeedParsing()
   }
@@ -51,18 +57,17 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parseStatements("a(b);\na(b, c);\na(b, c(d));") should succeedParsing()
   }
 
-  ignore should "accept long method call chains" in {
-    // a((((((...(null)...))))));
-    parseStatements(repeat("a(", 10000) + "null"
-      + Seq.fill(10000)(")") + ";") should succeedParsing()
+  it should "accept long method call chains" in {
+    // a(a(...a(null)...));
+    parseStatements(repeat("a(", 10000) + "null" + repeat(")", 10000) + ";") should succeedParsing()
   }
 
-  ignore should "accept long parenthesis chains" in {
+  it should "accept long parenthesis chains" in {
     // ((((...((a))...))));
     parseStatements(repeat("(", 10000) + "a" + repeat(")", 10000) + ";") should succeedParsing()
   }
 
-  ignore should "accept long chains of alternating expressions and parentheses" in {
+  it should "accept long chains of alternating expressions and parentheses" in {
     // a+(a+(a+(a+(...a+(a+(a))...))));
     parseStatements(repeat("a+(", 10000) + "a" + repeat(")", 10000) + ";") should succeedParsing()
   }
@@ -93,8 +98,11 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "accept binary expressions" in {
-    parseStatements("a+b;a-b;a*b;a/b;a%b;a&&b;a||b;a>b;a<b;a<=b;a>=b;a==b;a!=b;"
-      ) should succeedParsing()
+    parseStatements("a+b;a-b;a*b;a/b;a%b;a&&b;a||b;a>b;a<b;a<=b;a>=b;a==b;a!=b;") should succeedParsing()
+  }
+
+  it should "accept binary expression chains" in {
+    parseStatements("a+b*c+d;") should succeedParsing()
   }
 
   it should "accept nested binary expressions" in {
