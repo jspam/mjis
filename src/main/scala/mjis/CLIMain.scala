@@ -23,6 +23,7 @@ object CLIMain extends App {
       config.copy(files = config.files :+ file)
     } validate { file =>
       if(!Files.exists(file)) failure(s"File $file does not exist!")
+      if(!Files.isReadable(file)) failure(s"File $file is not readable!")
       else success
     } text ("Input files")
     opt[Unit]("from-stdin") optional () action { (phase, config) =>
