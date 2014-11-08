@@ -149,4 +149,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     // TODO validate that AST includes an expressionStatement node
   }
 
+  it should "accept array access' into new arrays" in {
+    parseStatements("new array[10][][1];") should succeedParsing()
+  }
 }

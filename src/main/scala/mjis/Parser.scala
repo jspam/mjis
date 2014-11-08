@@ -121,16 +121,16 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
     }
   }
 
-  private def parseNewArrayExpressionPostfix(): Unit = {
+  private def parseNewArrayExpressionSuffix(): Unit = {
     // first dimension
     expectSymbol(SquareBracketOpen)
     parseExpression()
     expectSymbol(SquareBracketClosed)
 
-    // other dimensions
-    while (currentToken.data == SquareBracketOpen) {
+    // other dimensions (we have to take care not to consume a [ that might belong to an array access)
+    while (currentToken.data == SquareBracketOpen && tokens.peek(1).data == SquareBracketClosed) {
       consume()
-      expectSymbol(SquareBracketClosed)
+      consume()
     }
   }
 
@@ -174,12 +174,12 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
                 expectSymbol(ParenClosed)
               case SquareBracketOpen =>
                 // NewArrayExpression
-                parseNewArrayExpressionPostfix()
+                parseNewArrayExpressionSuffix()
               case _ => unexpectedToken("'(' or '['")
             }
           case _ =>
             consume()
-            parseNewArrayExpressionPostfix()
+            parseNewArrayExpressionSuffix()
         }
       case _ => unexpectedToken("primary expression")
     }
