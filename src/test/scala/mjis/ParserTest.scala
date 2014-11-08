@@ -1,5 +1,7 @@
 package mjis
 
+import mjis.Parser.UnexpectedTokenError
+import mjis.TokenData.Assign
 import org.scalatest._
 import ParserTestMatchers._
 
@@ -126,6 +128,11 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
     parser.findings.head.asInstanceOf[Parser.UnexpectedTokenError].token.data shouldBe TokenData.EOF
     parser.findings.head.pos.column shouldBe 6  // the char after "class"
+  }
+
+  "UnexpectedTokenError" should "output the unexpected token, but not its position" in {
+    val error = new UnexpectedTokenError(new Token(Assign, new Position(3, 4, "=")))
+    error.msg should equal("unexpected token: =")
   }
 
 }
