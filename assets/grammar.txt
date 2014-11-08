@@ -1,13 +1,12 @@
 lookahead
 1         Program → ClassDeclaration*
 1         ClassDeclaration → 'class' IDENT { ClassMember* }
-4         ClassMember → Field | Method | MainMethod
-0         Field → 'public' Type IDENT ';'
-0         MainMethod → 'public' 'static' 'void' IDENT ( 'String' '[' ']' IDENT ) Block
-1         Method → 'public' Type IDENT ( Parameters? ) Block
-inf       Parameters → Parameter | Parameter ',' Parameters
+1         ClassMember → 'public' (MainMethod | TYPE IDENT (';' | Method))
+0         MainMethod → 'static' 'void' IDENT ( 'String' '[' ']' IDENT ) Block
+1         Method → '(' Parameters? ')' Block
+1         Parameters → Parameter (',' Parameters)*
 0         Parameter → Type IDENT
-inf       Type → Type '[' ']' | BasicType
+1         Type → BasicType ('[' ']')*
 1         BasicType → 'int' | 'boolean' | 'void' | IDENT
 1         Statement → Block
            | EmptyStatement
@@ -23,24 +22,21 @@ inf       Type → Type '[' ']' | BasicType
 1         IfStatement → 'if' '(' Expression ')' Statement ('else' Statement)?
 0         ExpressionStatement → Expression ';'
 1         ReturnStatement → 'return' Expression? ';'
-inf       Expression → AssignmentExpression
-inf       AssignmentExpression → LogicalOrExpression ('=' AssignmentExpression)?
-inf       LogicalOrExpression → (LogicalOrExpression '||')? LogicalAndExpression
-inf       LogicalAndExpression → (LogicalAndExpression '&&')? EqualityExpression
-inf       EqualityExpression → (EqualityExpression ('==' | '!='))? RelationalExpression
-inf       RelationalExpression → (RelationalExpression ('<' | '<=' | '>' | '>='))? AdditiveExpression
-inf       AdditiveExpression → (AdditiveExpression ('+' | '-'))? MultiplicativeExpression
-inf       MultiplicativeExpression → (MultiplicativeExpression ('*' | '/' | '%'))? UnaryExpression
+1         Expression → AssignmentExpression
+1         AssignmentExpression → LogicalOrExpression ('=' AssignmentExpression)?
+1         LogicalOrExpression → LogicalAndExpression ('||' LogicalOrExpression)?
+1         LogicalAndExpression → EqualityExpression ('&&' LogicalAndExpression)?
+1         EqualityExpression → RelationalExpression (('==' | '!=') EqualityExpression)?
+1         RelationalExpression → AdditiveExpression (('<' | '<=' | '>' | '>=') RelationalExpression)?
+1         AdditiveExpression → MultiplicativeExpression (('+' | '-') AdditiveExpression)?
+1         MultiplicativeExpression → UnaryExpression (('*' | '/' | '%') MultiplicativeExpression)?
 1         UnaryExpression → PostfixExpression | ('!' | '-') UnaryExpression
 1         PostfixExpression → PrimaryExpression (PostfixOp)*
-3         PostfixOp → MethodInvocation
-           | FieldAccess
+1         PostfixOp → '.' IDENT ('(' Arguments ')')?
            | ArrayAccess
-0         MethodInvocation → '.' IDENT '(' Arguments ')'
-0         FieldAccess → '.' IDENT
 0         ArrayAccess → '[' Expression ']'
 1         Arguments → (Expression (',' Expression)*)?
-3         PrimaryExpression → 'null'
+2         PrimaryExpression → 'null'
            | 'false'
            | 'true'
            | INTEGER_LITERAL
@@ -48,7 +44,6 @@ inf       MultiplicativeExpression → (MultiplicativeExpression ('*' | '/' | '%
            | IDENT '(' Arguments ')'
            | 'this'
            | '(' Expression ')'
-           | NewObjectExpression
-           | NewArrayExpression
-0         NewObjectExpression → 'new' IDENT '(' ')'
-2         NewArrayExpression → 'new' BasicType '[' Expression ']' ('[' ']')*
+           | 'new' (NewObjectExpression | NewArrayExpression)
+0         NewObjectExpression → IDENT '(' ')'
+2         NewArrayExpression → BasicType '[' Expression ']' ('[' ']')*
