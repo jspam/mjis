@@ -80,7 +80,6 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
         |(null);
         |a[2][3][b];
         |new myType();
-        |new int[5+a][][];
       """.stripMargin) should succeedParsing()
   }
 
@@ -100,6 +99,10 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   it should "accept nested binary expressions" in {
     parseStatements("a+b*c-d!=(e>f*g);'") should succeedParsing()
+  }
+
+  it should "accept array creations" in {
+    parseStatements("new int[5]; new int[a][][]; new a[c-(d)][];")
   }
 
   it should "accept field accesses and method calls" in {

@@ -121,8 +121,6 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
   }
 
   private def parseNewArrayExpressionPostfix(): Unit = {
-    parseBasicType()
-
     // first dimension
     expectSymbol(SquareBracketOpen)
     parseExpression()
@@ -167,11 +165,19 @@ class Parser(tokens: BufferedIterator[Token]) extends AnalysisPhase[Any] {
         consume()
         currentToken.data match {
           case Identifier(_) =>
-            // NewObjectExpression
             consume()
-            expectSymbol(ParenOpen)
-            expectSymbol(ParenClosed)
+            currentToken.data match {
+              case ParenOpen =>
+                // NewObjectExpression
+                consume()
+                expectSymbol(ParenClosed)
+              case SquareBracketOpen =>
+                // NewArrayExpression
+                parseNewArrayExpressionPostfix()
+              case _ => unexpectedToken("'(' or '['")
+            }
           case _ =>
+            consume()
             parseNewArrayExpressionPostfix()
         }
       case _ => unexpectedToken("primary expression")
