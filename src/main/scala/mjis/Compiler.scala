@@ -8,7 +8,11 @@ object Compiler {
   def compile(config: Config): Boolean = {
     // Concatenate input files
     val concatenatedInputStream = new SequenceInputStream((config.files map {
-      path: Path => new BufferedInputStream(new FileInputStream(path.toFile))
+      path: Path =>
+        if (path.toString() == "")
+          new BufferedInputStream(System.in)
+        else
+          new BufferedInputStream(new FileInputStream(path.toFile))
     }).iterator)
 
     val lexer = new Lexer(new InputStreamReader(concatenatedInputStream, "ASCII"))

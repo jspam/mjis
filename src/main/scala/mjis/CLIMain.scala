@@ -19,12 +19,18 @@ object CLIMain extends App {
     opt[String]("stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")
-    arg[Path]("<file>...") unbounded () action { (file, config) =>
+    arg[Path]("<file>...") unbounded () optional () action { (file, config) =>
       config.copy(files = config.files :+ file)
     } validate { file =>
       if(!Files.exists(file)) failure(s"File $file does not exist!")
       else success
     } text ("Input files")
+    opt[Unit]("from-stdin") optional () action { (phase, config) =>
+      // stdin == the `file' ""
+      // according to the SUS and MSDN, real file names must be of length > 0 on both UNIX and windows
+      val stdin: Path = Paths.get("")
+      config.copy(files = Seq(stdin))
+    } text ("Read input from stdin (ignores files)")
   }
 
   parser.parse(args, Config()) map { config =>
