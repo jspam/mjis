@@ -13,7 +13,7 @@ Creating a stand-alone compiler jar file
 
  - Run `sbt assembly` from inside the mjis directory
  - Location of compiler: target/scala-2.11/mjc.jar
- - Use the compiler, e. g. `java -jar mjc.jar Hello.java`
+ - Use the compiler, e. g. `./mjc.jar Hello.java`. (Yes, you can execute the `.jar` file directly. If such black magic scares you, `java -jar mjc.jar Hello.java` is your friend.)
 
 Generating IDE project files
 ----------------------------
