@@ -115,8 +115,8 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
   }
 
-  ignore should "accept long chains of field accesses" in {
-    parseStatements(repeat("a.", 10000) + "b;") should succeedParsing()
+  it should "accept long chains of field accesses" in {
+    parseStatements(repeat("a.", 1000000) + "b;") should succeedParsing()
   }
 
   it should "reject a class declaration without class name" in {
@@ -131,6 +131,22 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
     parser.findings.head.asInstanceOf[Parser.UnexpectedTokenError].token.data shouldBe TokenData.EOF
     parser.findings.head.pos.column shouldBe 6  // the char after "class"
+  }
+
+  it should "reject a program that declares variables inside non-block conditional scope" in {
+    val parser = new Parser(new Lexer("class a { public void foo ( ) { if ( a ) int i ; } }").result)
+    parser.result
+    parser.success shouldBe false
+    parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
+    parser.findings.head.pos.column shouldBe 42  // beginning of int
+  }
+
+  it should "properly recognize expression statements" in {
+    // this is interesting because it's a spot where the grammar isn't SLL(1)
+    val parser = new Parser(new Lexer("class a { public void foo ( ) { a [ 2 ] ; } }").result)
+    parser.result
+    parser.success shouldBe true
+    // TODO validate that AST includes an expressionStatement node
   }
 
 }
