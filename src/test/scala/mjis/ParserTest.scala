@@ -24,6 +24,23 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parseProgram("class Test { }") should succeedParsing()
   }
 
+  it should "accept many empty classes" in {
+    parseProgram(repeat("class A { }", 10000)) should succeedParsing()
+  }
+  
+  it should "accept fields of any type" in {
+    parseProgram("class C { public int x; public boolean y;"
+               + " public void z; public MyType u;}") should succeedParsing()
+  }
+  
+  it should "accept many fields, main methods and methods" in {
+    parseProgram("class C {"
+        + repeat("""|public int x;
+                    |public static void main(String[] args) {}
+                    |public int z(int j, A b) {}""".stripMargin, 
+                    10000) + "}") should succeedParsing()
+  }
+  
   it should "accept an empty block" in {
     parseStatements("") should succeedParsing()
   }
@@ -44,6 +61,19 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
       + "else " + repeat("if(1){", 10000) + repeat("}", 10000)) should succeedParsing()
   }
 
+  it should "accept many nested and consecutive while loops" in {
+    parseStatements(repeat("while(0) {", 10000) + repeat("}", 10000)
+        + repeat("while(0);", 10000)) should succeedParsing()
+  }
+  
+  it should "accept a program with many return statements" in {
+    parseStatements(repeat("return 0;", 10000)) should succeedParsing()
+  }
+  
+  it should "accept a program with different local variable declarations" in {
+    parseStatements("int a; boolean b; myType[] c = xyz;") should succeedParsing()
+  }
+  
   it should "accept assignments" in {
     parseStatements("a=a;\na=a=a;") should succeedParsing()
   }
