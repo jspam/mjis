@@ -120,7 +120,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   it should "reject arbitrary expressions in member accesses" in {
     val parser = parseStatements("a.(b+c);")
     parser shouldNot succeedParsing()
-    parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
+    parser.findings.head shouldBe a [Parser.UnexpectedTokenError]
   }
 
   it should "accept long chains of field accesses" in {
@@ -130,13 +130,13 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   it should "reject a class declaration without class name" in {
     val parser = parseProgram("class { }")
     parser shouldNot succeedParsing()
-    parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
+    parser.findings.head shouldBe a [Parser.UnexpectedTokenError]
   }
 
   it should "reject a program with a premature EOF" in {
     val parser = parseProgram("class")
     parser shouldNot succeedParsing()
-    parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
+    parser.findings.head shouldBe a [Parser.UnexpectedTokenError]
     parser.findings.head.asInstanceOf[Parser.UnexpectedTokenError].token.data shouldBe TokenData.EOF
     parser.findings.head.pos.column shouldBe 6  // the char after "class"
   }
@@ -145,8 +145,14 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     val parser = new Parser(new Lexer("class a { public void foo ( ) { if ( a ) int i ; } }").result)
     parser.result
     parser.success shouldBe false
-    parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
+    parser.findings.head shouldBe a [Parser.UnexpectedTokenError]
     parser.findings.head.pos.column shouldBe 42  // beginning of int
+  }
+
+  it should "reject an attept to create an array of something other than a basic type" in {
+    val parser = parseStatements("new 3[4];")
+    parser shouldNot succeedParsing()
+    parser.findings.head shouldBe a [Parser.UnexpectedTokenError]
   }
 
   it should "properly recognize expression statements" in {

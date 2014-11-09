@@ -149,7 +149,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
     expectSymbol(CurlyBraceOpen)
     def remainder(): TailRec[Any] = {
       if (currentToken.data == CurlyBraceClosed) {
-        expectSymbol(CurlyBraceClosed)
+        consume()
         done(null)
       } else {
         tailcall(parseBlockStatement()).flatMap(_ => remainder())
@@ -323,7 +323,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
               case _ => unexpectedToken("'(' or '['")
             }
           case _ =>
-            consume()
+            parseBasicType()
             parseNewArrayExpressionSuffix()
         }
       case _ => unexpectedToken("primary expression")
@@ -371,8 +371,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
   }
 
   /**
-   * Parses the right-hand side of a binary expression. The recursion is guaranteed to be finite
-   * as the precedence level will increase with every recursive call.
+   * Parses the right-hand side of a binary expression.
    */
   private def parseBinaryExpressionRhs(curPrecedence: Integer = 1): TailRec[Any] = {
     var curTokenRightAssoc = false
