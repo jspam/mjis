@@ -149,6 +149,12 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parser.findings.head.pos.column shouldBe 42  // beginning of int
   }
 
+  it should "reject an attept to create an array of something other than a basic type" in {
+    val parser = parseStatements("new 3[4];")
+    parser shouldNot succeedParsing()
+    parser.findings.head shouldBe an [Parser.UnexpectedTokenError]
+  }
+
   it should "properly recognize expression statements" in {
     // this is interesting because it's a spot where the grammar isn't SLL(1)
     val parser = new Parser(new Lexer("class a { public void foo ( ) { a [ 2 ] ; } }").result)
