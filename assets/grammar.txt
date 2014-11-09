@@ -1,53 +1,49 @@
-Program → ClassDeclaration*
-ClassDeclaration → 'class' IDENT { ClassMember* }
-ClassMember → Field | Method | MainMethod
-Field → 'public' Type IDENT ';'
-MainMethod → 'public' 'static' 'void' IDENT ( 'String' '[' ']' IDENT ) Block
-Method → 'public' Type IDENT ( Parameters? ) Block
-Parameters → Parameter | Parameter ',' Parameters
-Parameter → Type IDENT
-Type → Type '[' ']' | BasicType
-BasicType → 'int' | 'boolean' | 'void' | IDENT
-Statement → Block
- | EmptyStatement
- | IfStatement
- | ExpressionStatement
- | WhileStatement
- | ReturnStatement
-Block → { BlockStatement* }
-BlockStatement → Statement | LocalVariableDeclarationStatement
-LocalVariableDeclarationStatement → Type IDENT ('=' Expression)? ';'
-EmptyStatement → ';'
-WhileStatement → 'while' '(' Expression ')' Statement
-IfStatement → 'if' '(' Expression ')' Statement (else Statement)?
-ExpressionStatement → Expression ';'
-ReturnStatement → 'return' Expression? ';'
-Expression → AssignmentExpression
-AssignmentExpression → LogicalOrExpression ('=' AssignmentExpression)?
-LogicalOrExpression → (LogicalOrExpression '||')? LogicalAndExpression
-LogicalAndExpression → (LogicalAndExpression '&&')? EqualityExpression
-EqualityExpression → (EqualityExpression ('==' | '!='))? RelationalExpression
-RelationalExpression → (RelationalExpression ('<' | '<=' | '>' | '>='))? AdditiveExpression
-AdditiveExpression → (AdditiveExpression ('+' | '-'))? MultiplicativeExpression
-MultiplicativeExpression → (MultiplicativeExpression ('*' | '/' | '%'))? UnaryExpression
-UnaryExpression → PostfixExpression | ('!' | '-') UnaryExpression
-PostfixExpression → PrimaryExpression (PostfixOp)*
-PostfixOp → MethodInvocation
- | FieldAccess
- | ArrayAccess
-MethodInvocation → '.' IDENT '(' Arguments ')'
-FieldAccess → '.' IDENT
-ArrayAccess → '[' Expression ']'
-Arguments → (Expression (',' Expression)*)?
-PrimaryExpression → 'null'
- | 'false'
- | 'true'
- | INTEGER_LITERAL
- | IDENT
- | IDENT '(' Arguments ')'
- | 'this'
- | '(' Expression ')'
- | NewObjectExpression
- | NewArrayExpression
-NewObjectExpression → 'new' IDENT '(' ')'
-NewArrayExpression → 'new' BasicType '[' Expression ']' ('[' ']')*
+lookahead
+1         Program → ClassDeclaration*
+1         ClassDeclaration → 'class' IDENT { ClassMember* }
+1         ClassMember → 'public' (MainMethod | TYPE IDENT (';' | Method))
+0         MainMethod → 'static' 'void' IDENT ( 'String' '[' ']' IDENT ) Block
+1         Method → '(' Parameters? ')' Block
+1         Parameters → Parameter (',' Parameters)*
+0         Parameter → Type IDENT
+1         Type → BasicType ('[' ']')*
+1         BasicType → 'int' | 'boolean' | 'void' | IDENT
+1         Statement → Block
+           | EmptyStatement
+           | IfStatement
+           | ExpressionStatement
+           | WhileStatement
+           | ReturnStatement
+1         Block → { BlockStatement* }
+3         BlockStatement → Statement | LocalVariableDeclarationStatement
+1         LocalVariableDeclarationStatement → Type IDENT ('=' Expression)? ';'
+0         EmptyStatement → ';'
+0         WhileStatement → 'while' '(' Expression ')' Statement
+1         IfStatement → 'if' '(' Expression ')' Statement ('else' Statement)?
+0         ExpressionStatement → Expression ';'
+1         ReturnStatement → 'return' Expression? ';'
+1         Expression → AssignmentExpression
+1         AssignmentExpression → LogicalOrExpression ('=' AssignmentExpression)?
+1         LogicalOrExpression → LogicalAndExpression ('||' LogicalOrExpression)?
+1         LogicalAndExpression → EqualityExpression ('&&' LogicalAndExpression)?
+1         EqualityExpression → RelationalExpression (('==' | '!=') EqualityExpression)?
+1         RelationalExpression → AdditiveExpression (('<' | '<=' | '>' | '>=') RelationalExpression)?
+1         AdditiveExpression → MultiplicativeExpression (('+' | '-') AdditiveExpression)?
+1         MultiplicativeExpression → UnaryExpression (('*' | '/' | '%') MultiplicativeExpression)?
+1         UnaryExpression → PostfixExpression | ('!' | '-') UnaryExpression
+1         PostfixExpression → PrimaryExpression (PostfixOp)*
+1         PostfixOp → '.' IDENT ('(' Arguments ')')?
+           | ArrayAccess
+0         ArrayAccess → '[' Expression ']'
+1         Arguments → (Expression (',' Expression)*)?
+2         PrimaryExpression → 'null'
+           | 'false'
+           | 'true'
+           | INTEGER_LITERAL
+           | IDENT
+           | IDENT '(' Arguments ')'
+           | 'this'
+           | '(' Expression ')'
+           | 'new' (NewObjectExpression | NewArrayExpression)
+0         NewObjectExpression → IDENT '(' ')'
+2         NewArrayExpression → BasicType '[' Expression ']' ('[' ']')*
