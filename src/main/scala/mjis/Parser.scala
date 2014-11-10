@@ -373,7 +373,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
   /**
    * Parses the right-hand side of a binary expression.
    */
-  private def parseBinaryExpressionRhs(curPrecedence: Integer = 1): TailRec[Any] = {
+  private def parseBinaryExpressionRhs(minPrecedence: Integer = 1): TailRec[Any] = {
     var curTokenRightAssoc = false
     var curTokenPrecedence = 0
     currentToken.data match {
@@ -389,19 +389,13 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
       case _ => return done(null)
     }
 
-    val curPrecedenceWithAssoc: Integer = if (curTokenRightAssoc) curPrecedence else curPrecedence + 1
-
-    if (curPrecedenceWithAssoc < curPrecedence) {
-      // The token will be consumed and handled by a higher call to parseBinaryExpressionRhs
-      done(null)
-    } else {
-      consume()
-      tailcall(parseBinaryExpression(curPrecedenceWithAssoc))
-    }
+    // TODO: Implement precedence climbing
+    consume()
+    tailcall(parseBinaryExpression(if (curTokenRightAssoc) curTokenPrecedence else curTokenPrecedence + 1))
   }
 
-  private def parseBinaryExpression(curPrecedenceLevel: Integer = 1): TailRec[Any] = {
+  private def parseBinaryExpression(minPrecedence: Integer = 1): TailRec[Any] = {
     parseUnaryExpression(). // left-hand side
-      flatMap(_ => parseBinaryExpressionRhs(curPrecedenceLevel))
+      flatMap(_ => parseBinaryExpressionRhs(minPrecedence))
   }
 }

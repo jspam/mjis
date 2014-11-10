@@ -30,7 +30,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   
   it should "accept fields of any type" in {
     parseProgram("class C { public int x; public boolean y;"
-               + " public void z; public MyType u;}") should succeedParsing()
+               + " public void z; public MyType u; public MyType[] v;}") should succeedParsing()
   }
   
   it should "accept many fields, main methods and methods" in {
@@ -39,6 +39,10 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
                     |public static void main(String[] args) {}
                     |public int z(int j, A b) {}""".stripMargin, 
                     10000) + "}") should succeedParsing()
+  }
+
+  it should "accept main methods with any name" in {
+    parseProgram("class C { public static void foobar(String[] args) {} }") should succeedParsing()
   }
   
   it should "accept an empty block" in {
@@ -71,7 +75,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   }
   
   it should "accept a program with different local variable declarations" in {
-    parseStatements("int a; boolean b; myType[] c = xyz;") should succeedParsing()
+    parseStatements("int a; boolean b; myType[] c = xyz; myType x = 42;") should succeedParsing()
   }
   
   it should "accept assignments" in {
@@ -115,6 +119,8 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
         |(null);
         |a[2][3][b];
         |new myType();
+        |new myType[3+x][][];
+        |new int[3+x][][];
       """.stripMargin) should succeedParsing()
   }
 
@@ -154,7 +160,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "accept long chains of field accesses" in {
-    parseStatements(repeat("a.", 1000000) + "b;") should succeedParsing()
+    parseStatements(repeat("a.", 10000) + "b;") should succeedParsing()
   }
 
   it should "reject a class declaration without class name" in {
@@ -183,6 +189,23 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     val parser = parseStatements("new 3[4];")
     parser shouldNot succeedParsing()
     parser.findings.head shouldBe a [Parser.UnexpectedTokenError]
+  }
+
+  it should "reject invalid main methods" in {
+    val tests = List("public static void main(int[] args) {}", "public static void main(String args) {}",
+      "public static void main(MyClass args) {}", "public static void main(MyClass2 args) {}")
+    all(tests.map(p => parseProgram("class Test {" + p + "}"))) shouldNot succeedParsing()
+  }
+
+  it should "reject invalid 'new' expressions" in {
+    val tests = List("new 3;", "new a[][6];", "new;", "new class()", "new MyClass;", "new MyClass(3);")
+    all(tests.map(parseStatements)) shouldNot succeedParsing()
+  }
+
+  it should "reject invalid field declarations" in {
+    val tests = List("public 3;", "public int;", "public void x(3, 4);", "public void[3] foo;",
+      "public int a, b;")
+    all(tests.map(p => parseProgram("class Test{" + p + "}"))) shouldNot succeedParsing()
   }
 
   it should "properly recognize expression statements" in {
