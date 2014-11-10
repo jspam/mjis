@@ -8,8 +8,12 @@ import mjis.TokenData._
 /** Mutable version of scala.util.parsing.input.StreamReader.
   * The current input line is buffered for direct access.
   */
-class LineReader(input: java.io.Reader) {
+object LineReader {
   final val eof = '\u001a' // The SUB control character. Any char outside the spec will do.
+}
+
+class LineReader(input: java.io.Reader) {
+  import LineReader._
   private var line = 1
   var offset = 0
   var lastLine = false
