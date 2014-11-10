@@ -245,7 +245,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
 
   // mutual recursion: Expression -> {pretty much everyting} -> Expression
 
-  private def parseExpression(): TailRec[Any] = tailcall(parseBinaryExpression())
+  private def parseExpression(): TailRec[Any] = tailcall(parseBinaryExpression(minPrecedence = 1))
 
   private def parseNewArrayExpressionSuffix(): TailRec[Any] = {
     // first dimension
@@ -370,31 +370,34 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
     parsePostfixExpression()
   }
 
-  /**
-   * Parses the right-hand side of a binary expression.
-   */
-  private def parseBinaryExpressionRhs(minPrecedence: Integer = 1): TailRec[Any] = {
+  private def parseBinaryExpressionRhs(minPrecedence: Integer): TailRec[Integer] = {
     var curTokenRightAssoc = false
-    var curTokenPrecedence = 0
+    var curTokenPrecedence = 1
     currentToken.data match {
       case Assign =>
-        curTokenPrecedence = 7
+        curTokenPrecedence = 1
         curTokenRightAssoc = true
-      case LogicalOr => curTokenPrecedence = 6
-      case LogicalAnd => curTokenPrecedence = 5
+      case LogicalOr => curTokenPrecedence = 2
+      case LogicalAnd => curTokenPrecedence = 3
       case Equals | Unequal => curTokenPrecedence = 4
-      case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 3
-      case Plus | Minus => curTokenPrecedence = 2
-      case Mult | Divide | Modulo => curTokenPrecedence = 1
-      case _ => return done(null)
+      case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 5
+      case Plus | Minus => curTokenPrecedence = 6
+      case Mult | Divide | Modulo => curTokenPrecedence = 7
+      case _ => return done(-1)
     }
 
-    // TODO: Implement precedence climbing
-    consume()
-    tailcall(parseBinaryExpression(if (curTokenRightAssoc) curTokenPrecedence else curTokenPrecedence + 1))
+    def remainder(precedence: Integer): TailRec[Integer] = {
+      if (precedence < minPrecedence) {
+        done(precedence)
+      } else {
+        consume()
+        tailcall(parseBinaryExpression(minPrecedence + (if (curTokenRightAssoc) 0 else 1))).flatMap(remainder)
+      }
+    }
+    remainder(curTokenPrecedence)
   }
 
-  private def parseBinaryExpression(minPrecedence: Integer = 1): TailRec[Any] = {
+  private def parseBinaryExpression(minPrecedence: Integer): TailRec[Integer] = {
     parseUnaryExpression(). // left-hand side
       flatMap(_ => parseBinaryExpressionRhs(minPrecedence))
   }

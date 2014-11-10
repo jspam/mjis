@@ -150,6 +150,10 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parseStatements("a+b*c-d!=(e>f*g);") should succeedParsing()
   }
 
+  it should "accept nested expressions containing assignments" in {
+    parseStatements("a||b=c||d;") should succeedParsing()
+  }
+
   it should "accept array creations" in {
     parseStatements("new int[5]; new int[a][][]; new a[c-(d)][];")
   }
