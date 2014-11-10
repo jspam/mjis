@@ -1,13 +1,18 @@
 package mjis
 
-import mjis.Parser.UnexpectedTokenError
-import mjis.TokenData.Assign
 import org.scalatest._
-import ParserTestMatchers._
+import CompilerTestMatchers._
 
 class ParserTest extends FlatSpec with Matchers with Inspectors {
 
-  def parseProgram(program: String) = new Parser(new Lexer(program).result)
+  def parseProgram(program: String) = {
+    val lexer = new Lexer(program)
+    val parser = new Parser(lexer.result)
+    // The lexer result is only traversable once, so evaluate it only after the parser has finished.
+    parser.result
+    lexer should succeedLexing()
+    parser
+  }
   def parseStatements(statements: String) = parseProgram(
     "class Test { public void test() {" + System.lineSeparator() + statements + System.lineSeparator() + "} }"
   )
@@ -125,7 +130,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "accept unary expressions" in {
-    parseStatements("-c;\n-(-c);\n!c;\n!!c;\n!-!-c;\n!(-(!(-(c))));'") should succeedParsing()
+    parseStatements("-c;\n-(-c);\n!c;\n!!c;\n!-!-c;\n!(-(!(-(c))));") should succeedParsing()
   }
 
   it should "accept long chains of unary expressions" in {
@@ -142,7 +147,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "accept nested binary expressions" in {
-    parseStatements("a+b*c-d!=(e>f*g);'") should succeedParsing()
+    parseStatements("a+b*c-d!=(e>f*g);") should succeedParsing()
   }
 
   it should "accept array creations" in {
