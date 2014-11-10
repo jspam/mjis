@@ -6,8 +6,12 @@ import CompilerTestMatchers._
 class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   def parseProgram(program: String) = {
-    new Lexer(program) should succeedLexing()
-    new Parser(new Lexer(program).result)
+    val lexer = new Lexer(program)
+    val parser = new Parser(lexer.result)
+    // The lexer result is only traversable once, so evaluate it only after the parser has finished.
+    parser.result
+    lexer should succeedLexing()
+    parser
   }
   def parseStatements(statements: String) = parseProgram(
     "class Test { public void test() {" + System.lineSeparator() + statements + System.lineSeparator() + "} }"
