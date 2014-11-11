@@ -19,7 +19,11 @@ object Compiler {
     val parser = new Parser(lexer.result)
 
     if (config.stopAfter == "lexer") {
-      lexer.dumpResult().foreach(System.out.println)
+      val out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(java.io.FileDescriptor.out), "ASCII"))
+      lexer.dumpResult().foreach(s => {
+        out.write(s)
+        out.newLine()
+      })
     } else {
       parser.result // something something
     }
