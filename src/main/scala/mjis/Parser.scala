@@ -370,7 +370,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
     parsePostfixExpression()
   }
 
-  private def parseBinaryExpressionRhs(minPrecedence: Integer): TailRec[Integer] = {
+  private def parseBinaryExpressionRhs(minPrecedence: Int): TailRec[Int] = {
     var curTokenRightAssoc = false
     var curTokenPrecedence = 1
     currentToken.data match {
@@ -386,7 +386,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
       case _ => return done(-1)
     }
 
-    def remainder(precedence: Integer): TailRec[Integer] = {
+    def remainder(precedence: Int): TailRec[Int] = {
       if (precedence < minPrecedence) {
         done(precedence)
       } else {
@@ -397,7 +397,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Any] {
     remainder(curTokenPrecedence)
   }
 
-  private def parseBinaryExpression(minPrecedence: Integer): TailRec[Integer] = {
+  private def parseBinaryExpression(minPrecedence: Int): TailRec[Int] = {
     parseUnaryExpression(). // left-hand side
       flatMap(_ => parseBinaryExpressionRhs(minPrecedence))
   }
