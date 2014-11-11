@@ -1,7 +1,9 @@
 package mjis
 
+import mjis.ast._
 import org.scalatest._
 import CompilerTestMatchers._
+import mjis.ast.SyntaxTree
 
 class ParserTest extends FlatSpec with Matchers with Inspectors {
 
@@ -22,20 +24,27 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   /* Tests start here */
 
   "The parser" should "accept an empty program" in {
-    parseProgram("") should succeedParsing()
+    parseProgram("") should succeedParsingWith(Program(Nil))
   }
 
   it should "accept a program consisting of an empty class" in {
-    parseProgram("class Test { }") should succeedParsing()
+    parseProgram("class Test { }") should succeedParsingWith(Program(List(ClassDecl("Test", Nil, Nil))))
   }
 
   it should "accept many empty classes" in {
     parseProgram(repeat("class A { }", 10000)) should succeedParsing()
   }
-  
+
   it should "accept fields of any type" in {
-    parseProgram("class C { public int x; public boolean y;"
-               + " public void z; public MyType u; public MyType[] v;}") should succeedParsing()
+    parseProgram("class C { public int x; public boolean y; public void z; public MyType u; public MyType[] v;}") should
+      succeedParsingWith(
+        Program(List(
+          ClassDecl("C", Nil, List(
+            FieldDecl("x", TypeBasic("Int")),
+            FieldDecl("y", TypeBasic("Boolean")),
+            FieldDecl("z", TypeBasic("Void")),
+            FieldDecl("u", TypeBasic("MyType")),
+            FieldDecl("v", TypeConstructor("Array", "MyType")))))))
   }
   
   it should "accept many fields, main methods and methods" in {

@@ -7,7 +7,7 @@ package mjis
 trait Phase[O] {
   protected def getResult(): O
   def dumpResult(): Iterator[String]
-  lazy val result = getResult()
+  lazy val result: O = getResult()
   def findings: List[Finding]
 }
 
