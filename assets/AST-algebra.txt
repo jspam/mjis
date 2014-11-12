@@ -1,0 +1,30 @@
+Program                           :: ClassDeclaration*
+ClassDeclaration                  :: IDENT ClassMember*
+ClassMember                        = MainMethod | Method | Field
+MainMethod                        :: (name: IDENT) (paramName: IDENT) Block
+Method                            :: IDENT Parameter* Block
+Parameter                         :: Type IDENT
+Type                               = IntType | BooleanType | VoidType | CustomType | ArrayType
+IntType                           ::
+BooleanType                       ::
+VoidType                          ::
+CustomType                        :: IDENT
+ArrayType                         :: Type
+Statement                          = Block | EmptyStatement | IfStatement | ExpressionStatement | WhileStatement | ReturnStatement | LocalVariableDeclarationStatement
+Block                             :: Statement*
+LocalVariableDeclarationStatement :: Type IDENT Expression?
+EmptyStatement                    ::
+WhileStatement                    :: Expression Statement
+IfStatement                       :: Expression Statement Statement?
+ExpressionStatement               :: Expression
+ReturnStatement                   :: Expression?
+Expression                         = PrimaryExpression | FieldAccess | ArrayAccess | MethodInvocation
+FieldAccess                       :: Expression IDENT
+MethodInvocation                  :: Expression? IDENT Expression*
+ArrayAccess                       :: Expression Expression
+PrimaryExpression                  = NullLiteral | FalseLiteral | TrueLiteral | IntegerLiteral | ThisLiteral | VariableRef | NewObjectExpression | NewArrayExpression
+NullLiteral                       ::
+...
+VariableRef                       :: IDENT
+NewObjectExpression               :: IDENT
+NewArrayExpression                :: BasicType (firstDimSize: Expression) (additionalDims: int)
