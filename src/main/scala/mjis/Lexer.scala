@@ -90,9 +90,17 @@ object Lexer {
     def msg = s"unknown token"
     def severity = Severity.ERROR
   }
+
+  // Don't pay the Unicode performance penalty ...
+  implicit class ASCIIChar(val ch: Char) extends AnyVal {
+    def isASCIIDigit = ch >= '0' && ch <= '9'
+    def isASCIILetter = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+    def isASCIILetterOrDigit = ch.isASCIIDigit || ch.isASCIILetter
+  }
 }
 
 class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIterator[Token]] {
+  import Lexer.ASCIIChar
 
   // abstraction over constant-length (quasi-)tokens
   private abstract class Symbol()
@@ -142,12 +150,12 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
 
   private def lexInteger(): Token = {
     val pos = input.pos
-    new Token(IntegerLiteral(takeWhile(_.isDigit)), pos)
+    new Token(IntegerLiteral(takeWhile(_.isASCIIDigit)), pos)
   }
 
   private def lexIdentifier(): Token = {
     val pos = input.pos
-    val ident = takeWhile(c => c.isLetterOrDigit || c == '_')
+    val ident = takeWhile(c => c.isASCIILetterOrDigit || c == '_')
     val data =
       if (keywords.contains(ident)) keywords(ident)
       else if (unusedKeywords(ident)) UnusedFeature(ident)
@@ -168,14 +176,14 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
   @annotation.tailrec
   private def lexToken(): Token = {
     if (input.atEnd) new Token(TokenData.EOF, input.pos)
-    else if (input.currentChar == '_' || input.currentChar.isLetter)
+    else if (input.currentChar == '_' || input.currentChar.isASCIILetter)
       lexIdentifier()
     else if (input.currentChar == '0') {
       // special case: always a single token
       val token = new Token(TokenData.IntegerLiteral("0"), input.pos)
       input.consume()
       token
-    } else if (input.currentChar.isDigit)
+    } else if (input.currentChar.isASCIIDigit)
       lexInteger()
     else if (whitespace(input.currentChar)) {
       input.consume()
