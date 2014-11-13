@@ -212,31 +212,29 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
   private def parseLocalVariableDeclarationStatement(): LocalVarDeclStatement = {
     val typ = parseType()
     val name = expectIdentifier()
-    var body: Expression = EmptyTree
-    if (currentToken.data == Assign) {
+    val body = if (currentToken.data == Assign) {
       consume()
-      body = parseExpression().result
-    }
+      Some(parseExpression().result)
+    } else None
     expectSymbol(Semicolon)
     LocalVarDeclStatement(name, typ, body)
   }
 
   // mutual recursion: Statement -> If/WhileStatement -> Statement
 
-  private def parseStatement(): TailRec[Expression] = {
+  private def parseStatement(): TailRec[Statement] = {
     currentToken.data match {
       case CurlyBraceOpen => parseBlock()
       case Semicolon =>
         consume()
-        done(EmptyTree)
+        done(EmptyStatement)
       case IfToken    => tailcall(parseIfStatement())
       case WhileToken => tailcall(parseWhileStatement())
       case Return     => done(parseReturnStatement())
       case _ =>
-        // expression statement
         val expr = parseExpression().result
         expectSymbol(Semicolon)
-        done(expr)
+        done(ExpressionStatement(expr))
     }
   }
 
@@ -252,7 +250,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         val elseStmt = parseStatement().result
         done(If(cond, trueStat, elseStmt))
       } else
-        done(If(cond, trueStat, EmptyTree))
+        done(If(cond, trueStat, EmptyStatement))
     })
   }
 
@@ -264,15 +262,15 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     parseStatement().flatMap(stmt => done(While(cond, stmt)))
   }
 
-  private def parseReturnStatement(): Expression = {
+  private def parseReturnStatement(): Statement = {
     expectSymbol(Return)
-    val stmt: Expression =
+    val expr =
       if (currentToken.data != Semicolon && !atEOF)
-        parseExpression().result
+        Some(parseExpression().result)
       else
-        EmptyTree
+        None
     expectSymbol(Semicolon)
-    stmt
+    ReturnStatement(expr)
   }
 
   // mutual recursion: Expression -> {pretty much everything} -> Expression
@@ -295,18 +293,18 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     })
   }
 
-  private def parseParenthesizedArguments(): TailRec[Expression] = {
+  private def parseParenthesizedArguments(): TailRec[ListBuffer[Expression]] = {
     expectSymbol(ParenOpen)
-    def remainder(expectComma: Boolean): TailRec[Expression] = {
+    def remainder(params: ListBuffer[Expression], expectComma: Boolean): TailRec[ListBuffer[Expression]] = {
       if (currentToken.data != ParenClosed) {
         if (expectComma) expectSymbol(Comma)
-        parseExpression().flatMap(e => remainder(expectComma = true))
+        parseExpression().flatMap(e => remainder(params += e, expectComma = true))
       } else {
         consume()
-        done(null)
+        done(params)
       }
     }
-    remainder(expectComma = false)
+    remainder(ListBuffer.empty, expectComma = false)
   }
 
   private def parsePrimaryExpression(): TailRec[Expression] = {
@@ -330,7 +328,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         // Identifier or method call
         consume()
         if (currentToken.data == ParenOpen)
-          parseParenthesizedArguments()
+          parseParenthesizedArguments().map(params => Apply(s, ThisLiteral +: params))
         else
           done(Ident(s))
       case ParenOpen =>
@@ -363,35 +361,29 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     }
   }
 
-  private def parseArrayAccess(): TailRec[Apply] = {
+  private def parseArrayAccess(e: Expression): TailRec[Apply] = {
     expectSymbol(SquareBracketOpen)
-    parseExpression().map(e => {
+    parseExpression().map(param => {
       expectSymbol(SquareBracketClosed)
-      Apply("apply", ListBuffer(e))
+      Apply("apply", ListBuffer(e, param))
     })
   }
 
-  private def parsePostfixExpression(): TailRec[Expression] =
-    for {
-      expr <- parsePrimaryExpression()
-      post <- parsePostfixOp()
-    } yield Select(expr, post)
+  private def parsePostfixExpression(): TailRec[Expression] = parsePrimaryExpression().flatMap(parsePostfixOp)
 
-  private def parsePostfixOp(): TailRec[Expression] = {
+  private def parsePostfixOp(e: Expression): TailRec[Expression] = {
     currentToken.data match {
       case SquareBracketOpen =>
-        parseArrayAccess().flatMap(e => {
-          parsePostfixOp()
-        })
+        parseArrayAccess(e).flatMap(parsePostfixOp)
       case Dot =>
         // field access or method invocation
         consume()
-        expectIdentifier()
+        val ident = expectIdentifier()
         if (currentToken.data == ParenOpen)
-          parseParenthesizedArguments().flatMap(_ => parsePostfixOp())
-        else parsePostfixOp()
+          parseParenthesizedArguments().flatMap(params => parsePostfixOp(Apply(ident, ListBuffer(e) ++= params)))
+        else parsePostfixOp(Select(e, ident))
       case _ =>
-        done(null)
+        done(e)
     }
   }
 
