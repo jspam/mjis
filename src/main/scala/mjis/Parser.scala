@@ -95,17 +95,17 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
       // found main method
       consume()
       expectSymbol(VoidType)
-      expectIdentifier()
+      val mainName = expectIdentifier()
       expectSymbol(ParenOpen)
       if (expectIdentifier() != "String") {
         _findings += new Parser.InvalidMainMethodError(currentToken, "main must have a single parameter of type String[]")
       }
       expectSymbol(SquareBracketOpen)
       expectSymbol(SquareBracketClosed)
-      val ident = expectIdentifier()
+      val paramName = expectIdentifier()
       expectSymbol(ParenClosed)
       val block = parseBlock().result
-      MethodDecl(ident, Nil, TypeBasic("Void"), block)
+      MethodDecl(mainName, List(Parameter(paramName, TypeArray(TypeBasic("String")))), TypeBasic("Void"), block)
     } else {
       val typ = parseType()
       val ident = expectIdentifier()
@@ -146,7 +146,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     var typ: TypeDef = basicTyp
     while (currentToken.data == SquareBracketOpen) {
       consume()
-      typ = TypeConstructor("Array", basicTyp.name)
+      typ = TypeArray(basicTyp)
       expectSymbol(SquareBracketClosed)
     }
     typ
@@ -172,18 +172,18 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
 
   private def parseBlock(): TailRec[Block] = {
     expectSymbol(CurlyBraceOpen)
-    def remainder(): TailRec[Block] = {
+    def remainder(stmts: ListBuffer[Statement]): TailRec[Block] = {
       if (currentToken.data == CurlyBraceClosed) {
         consume()
-        done(null)
+        done(Block(stmts.toList))
       } else {
-        tailcall(parseBlockStatement()).flatMap(_ => remainder())
+        tailcall(parseBlockStatement()).flatMap(stmt => remainder(stmts += stmt))
       }
     }
-    remainder()
+    remainder(ListBuffer.empty)
   }
 
-  private def parseBlockStatement(): TailRec[Any] = {
+  private def parseBlockStatement(): TailRec[Statement] = {
     // the grammar doesn't allow variable declarations in conditional structures, hence the special production
     currentToken.data match {
       case IntType | BooleanType | VoidType =>
@@ -407,7 +407,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
       case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 5
       case Plus | Minus => curTokenPrecedence = 6
       case Mult | Divide | Modulo => curTokenPrecedence = 7
-      case _ => return done((null, -1))
+      case _ => return done((lhs, -1))
     }
 
     def remainder(lhs: Expression, precedence: Int): TailRec[(Expression, Int)] = {

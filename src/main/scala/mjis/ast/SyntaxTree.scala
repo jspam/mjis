@@ -44,7 +44,7 @@ final case class Parameter(name: String, override val typ: TypeDef) extends Synt
 
 sealed trait TypeDef extends SyntaxTree
 final case class TypeBasic(name: String) extends TypeDef
-final case class TypeConstructor(name: String, typVar: String) extends TypeDef
+final case class TypeArray(elementType: TypeDef) extends TypeDef
 
 sealed trait Statement extends SyntaxTree
 

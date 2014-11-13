@@ -23,7 +23,7 @@ trait CompilerTestMatchers {
       def findError: String =
         if (!parser.success) s"Findings:$n${parser.findings.mkString(n)}"
         else if (expectedAST.isDefined)
-          s"$n  Expected AST: ${expectedAST.get}$n  Computed AST: $result$n"
+          s"$n  Expected AST: ${expectedAST.get}$n  Computed AST: ${result.get}$n"
         else
           ""
       MatchResult(

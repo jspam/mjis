@@ -5,6 +5,8 @@ import org.scalatest._
 import CompilerTestMatchers._
 import mjis.ast.SyntaxTree
 
+import scala.collection.mutable.ListBuffer
+
 class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   def parseProgram(program: String) = {
@@ -18,10 +20,17 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   def parseStatements(statements: String) = parseProgram(
     "class Test { public void test() {" + System.lineSeparator() + statements + System.lineSeparator() + "} }"
   )
+  def statementsAST(innerAST: Statement*) = Program(List(
+    ClassDecl("Test", List(
+      MethodDecl("test", List(), TypeBasic("Void"),
+        Block(innerAST.toList)
+      )
+    ), List())
+  ))
 
   def repeat(str: String, count: Integer) = Seq.fill(count)(str).mkString("")
 
-  /* Tests start here */
+  /* class declarations */
 
   "The parser" should "accept an empty program" in {
     parseProgram("") should succeedParsingWith(Program(Nil))
@@ -44,7 +53,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
             FieldDecl("y", TypeBasic("Boolean")),
             FieldDecl("z", TypeBasic("Void")),
             FieldDecl("u", TypeBasic("MyType")),
-            FieldDecl("v", TypeConstructor("Array", "MyType")))))))
+            FieldDecl("v", TypeArray(TypeBasic("MyType"))))))))
   }
   
   it should "accept many fields, main methods and methods" in {
@@ -56,15 +65,30 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "accept main methods with any name" in {
-    parseProgram("class C { public static void foobar(String[] args) {} }") should succeedParsing()
+    parseProgram("class C { public static void foobar(String[] args) {} }") should succeedParsingWith(Program(List(
+      ClassDecl("C", List(
+        MethodDecl("foobar", List(Parameter("args", TypeArray(TypeBasic("String")))), TypeBasic("Void"), Block(List()))
+      ), List())
+    )))
   }
-  
+
+  /* statements */
+
   it should "accept an empty block" in {
-    parseStatements("") should succeedParsing()
+    parseStatements("") should succeedParsingWith(statementsAST())
   }
 
   it should "accept a nested empty block" in {
-    parseStatements("{}") should succeedParsing()
+    parseStatements("{}") should succeedParsingWith(statementsAST(Block(List())))
+  }
+
+  it should "accept a program with different local variable declarations" in {
+    parseStatements("int a; boolean b; myType[] c = xyz; myType x = 42;") should succeedParsingWith(statementsAST(
+      LocalVarDeclStatement("a", TypeBasic("Int"), None),
+      LocalVarDeclStatement("b", TypeBasic("Boolean"), None),
+      LocalVarDeclStatement("c", TypeArray(TypeBasic("myType")), Some(Ident("xyz"))),
+      LocalVarDeclStatement("x", TypeBasic("myType"), Some(IntLiteral("42")))
+    ))
   }
 
   it should "accept many nested blocks" in {
@@ -87,11 +111,20 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   it should "accept a program with many return statements" in {
     parseStatements(repeat("return 0;", 10000)) should succeedParsing()
   }
-  
-  it should "accept a program with different local variable declarations" in {
-    parseStatements("int a; boolean b; myType[] c = xyz; myType x = 42;") should succeedParsing()
+
+  it should "properly recognize expression statements" in {
+    // this is interesting because it's a spot where the grammar isn't SLL(1)
+    parseProgram("class a { public void foo ( ) { a [ 2 ] ; } }") should succeedParsingWith(Program(List(
+      ClassDecl("a", List(
+        MethodDecl("foo", List(), TypeBasic("Void"), Block(List(
+          ExpressionStatement(Apply("apply", ListBuffer(Ident("a"), IntLiteral("2"))))
+        )))
+      ), List())
+    )))
   }
-  
+
+  /* expressions */
+
   it should "accept assignments" in {
     parseStatements("a=a;\na=a=a;") should succeedParsing()
   }
@@ -171,14 +204,20 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     parseStatements("a.b.c;a.b.c();a[b].c().c()[d];") should succeedParsing()
   }
 
+  it should "accept long chains of field accesses" in {
+    parseStatements(repeat("a.", 10000) + "b;") should succeedParsing()
+  }
+
+  it should "accept array access' into new arrays" in {
+    parseStatements("new array[10][][1];") should succeedParsing()
+  }
+
+  /* negative test cases */
+
   it should "reject arbitrary expressions in member accesses" in {
     val parser = parseStatements("a.(b+c);")
     parser shouldNot succeedParsing()
     parser.findings.head shouldBe a [Parser.UnexpectedTokenError]
-  }
-
-  it should "accept long chains of field accesses" in {
-    parseStatements(repeat("a.", 10000) + "b;") should succeedParsing()
   }
 
   it should "reject a class declaration without class name" in {
@@ -224,17 +263,5 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     val tests = List("public 3;", "public int;", "public void x(3, 4);", "public void[3] foo;",
       "public int a, b;")
     all(tests.map(p => parseProgram("class Test{" + p + "}"))) shouldNot succeedParsing()
-  }
-
-  it should "properly recognize expression statements" in {
-    // this is interesting because it's a spot where the grammar isn't SLL(1)
-    val parser = new Parser(new Lexer("class a { public void foo ( ) { a [ 2 ] ; } }").result)
-    parser.result
-    parser.success shouldBe true
-    // TODO validate that AST includes an expressionStatement node
-  }
-
-  it should "accept array access' into new arrays" in {
-    parseStatements("new array[10][][1];") should succeedParsing()
   }
 }
