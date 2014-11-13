@@ -95,17 +95,17 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
       // found main method
       consume()
       expectSymbol(VoidType)
-      expectIdentifier()
+      val mainName = expectIdentifier()
       expectSymbol(ParenOpen)
       if (expectIdentifier() != "String") {
         _findings += new Parser.InvalidMainMethodError(currentToken, "main must have a single parameter of type String[]")
       }
       expectSymbol(SquareBracketOpen)
       expectSymbol(SquareBracketClosed)
-      val ident = expectIdentifier()
+      val paramName = expectIdentifier()
       expectSymbol(ParenClosed)
       val block = parseBlock().result
-      MethodDecl(ident, Nil, TypeBasic("Void"), block)
+      MethodDecl(mainName, List(Parameter(paramName, TypeArray(TypeBasic("String")))), TypeBasic("Void"), block)
     } else {
       val typ = parseType()
       val ident = expectIdentifier()
@@ -146,7 +146,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     var typ: TypeDef = basicTyp
     while (currentToken.data == SquareBracketOpen) {
       consume()
-      typ = TypeConstructor("Array", basicTyp.name)
+      typ = TypeArray(typ)
       expectSymbol(SquareBracketClosed)
     }
     typ
@@ -172,18 +172,18 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
 
   private def parseBlock(): TailRec[Block] = {
     expectSymbol(CurlyBraceOpen)
-    def remainder(): TailRec[Block] = {
+    def remainder(stmts: ListBuffer[Statement]): TailRec[Block] = {
       if (currentToken.data == CurlyBraceClosed) {
         consume()
-        done(null)
+        done(Block(stmts.toList))
       } else {
-        tailcall(parseBlockStatement()).flatMap(_ => remainder())
+        tailcall(parseBlockStatement()).flatMap(stmt => remainder(stmts += stmt))
       }
     }
-    remainder()
+    remainder(ListBuffer.empty)
   }
 
-  private def parseBlockStatement(): TailRec[Any] = {
+  private def parseBlockStatement(): TailRec[Statement] = {
     // the grammar doesn't allow variable declarations in conditional structures, hence the special production
     currentToken.data match {
       case IntType | BooleanType | VoidType =>
@@ -212,31 +212,29 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
   private def parseLocalVariableDeclarationStatement(): LocalVarDeclStatement = {
     val typ = parseType()
     val name = expectIdentifier()
-    var body: Expression = EmptyTree
-    if (currentToken.data == Assign) {
+    val initializer = if (currentToken.data == Assign) {
       consume()
-      body = parseExpression().result
-    }
+      Some(parseExpression().result)
+    } else None
     expectSymbol(Semicolon)
-    LocalVarDeclStatement(name, typ, body)
+    LocalVarDeclStatement(name, typ, initializer)
   }
 
   // mutual recursion: Statement -> If/WhileStatement -> Statement
 
-  private def parseStatement(): TailRec[Expression] = {
+  private def parseStatement(): TailRec[Statement] = {
     currentToken.data match {
       case CurlyBraceOpen => parseBlock()
       case Semicolon =>
         consume()
-        done(EmptyTree)
+        done(EmptyStatement)
       case IfToken    => tailcall(parseIfStatement())
       case WhileToken => tailcall(parseWhileStatement())
       case Return     => done(parseReturnStatement())
       case _ =>
-        // expression statement
         val expr = parseExpression().result
         expectSymbol(Semicolon)
-        done(expr)
+        done(ExpressionStatement(expr))
     }
   }
 
@@ -252,7 +250,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         val elseStmt = parseStatement().result
         done(If(cond, trueStat, elseStmt))
       } else
-        done(If(cond, trueStat, EmptyTree))
+        done(If(cond, trueStat, EmptyStatement))
     })
   }
 
@@ -264,49 +262,50 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     parseStatement().flatMap(stmt => done(While(cond, stmt)))
   }
 
-  private def parseReturnStatement(): Expression = {
+  private def parseReturnStatement(): Statement = {
     expectSymbol(Return)
-    val stmt: Expression =
+    val expr =
       if (currentToken.data != Semicolon && !atEOF)
-        parseExpression().result
+        Some(parseExpression().result)
       else
-        EmptyTree
+        None
     expectSymbol(Semicolon)
-    stmt
+    ReturnStatement(expr)
   }
 
   // mutual recursion: Expression -> {pretty much everything} -> Expression
 
-  private def parseExpression(): TailRec[Expression] = tailcall(parseBinaryExpression(minPrecedence = 1)).
-    flatMap(tuple => done(tuple._1))
+  private def parseExpression(): TailRec[Expression] = tailcall(parseBinaryExpression(minPrecedence = 1))
 
-  private def parseNewArrayExpressionSuffix(): TailRec[Expression] = {
+  private def parseNewArrayExpressionSuffix(typ: TypeBasic): TailRec[Expression] = {
     // first dimension
     expectSymbol(SquareBracketOpen)
-    parseExpression().flatMap(e => {
+    parseExpression().map(firstDimSize => {
       expectSymbol(SquareBracketClosed)
 
+      var additionalDims = 0
       // other dimensions (we have to take care not to consume a [ that might belong to an array access)
       while (currentToken.data == SquareBracketOpen && tokens.peek(1).data == SquareBracketClosed) {
         consume()
         consume()
+        additionalDims += 1
       }
-      done(null)
+      NewArray(typ, firstDimSize, additionalDims)
     })
   }
 
-  private def parseParenthesizedArguments(): TailRec[Expression] = {
+  private def parseParenthesizedArguments(): TailRec[List[Expression]] = {
     expectSymbol(ParenOpen)
-    def remainder(expectComma: Boolean): TailRec[Expression] = {
+    def remainder(params: ListBuffer[Expression], expectComma: Boolean): TailRec[List[Expression]] = {
       if (currentToken.data != ParenClosed) {
         if (expectComma) expectSymbol(Comma)
-        parseExpression().flatMap(e => remainder(expectComma = true))
+        parseExpression().flatMap(e => remainder(params += e, expectComma = true))
       } else {
         consume()
-        done(null)
+        done(params.toList)
       }
     }
-    remainder(expectComma = false)
+    remainder(ListBuffer.empty, expectComma = false)
   }
 
   private def parsePrimaryExpression(): TailRec[Expression] = {
@@ -330,113 +329,103 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         // Identifier or method call
         consume()
         if (currentToken.data == ParenOpen)
-          parseParenthesizedArguments()
+          parseParenthesizedArguments().map(params => Apply(s, ThisLiteral +: params))
         else
           done(Ident(s))
       case ParenOpen =>
         consume()
         parseExpression().map(e => {
           expectSymbol(ParenClosed)
-          null
+          e
         })
       case NewToken =>
         consume()
         currentToken.data match {
-          case Identifier(_) =>
+          case Identifier(typeName) =>
             consume()
             currentToken.data match {
               case ParenOpen =>
                 // NewObjectExpression
                 consume()
                 expectSymbol(ParenClosed)
-                done(null)
+                done(NewObject(TypeBasic(typeName)))
               case SquareBracketOpen =>
                 // NewArrayExpression
-                parseNewArrayExpressionSuffix()
+                parseNewArrayExpressionSuffix(TypeBasic(typeName))
               case _ => unexpectedToken("'(' or '['")
             }
           case _ =>
-            parseBasicType()
-            parseNewArrayExpressionSuffix()
+            val typ = parseBasicType()
+            parseNewArrayExpressionSuffix(typ)
         }
       case _ => unexpectedToken("primary expression")
     }
   }
 
-  private def parseArrayAccess(): TailRec[Apply] = {
+  private def parseArrayAccess(e: Expression): TailRec[Apply] = {
     expectSymbol(SquareBracketOpen)
-    parseExpression().map(e => {
+    parseExpression().map(param => {
       expectSymbol(SquareBracketClosed)
-      Apply("apply", ListBuffer(e))
+      Apply("apply", List(e, param))
     })
   }
 
-  private def parsePostfixExpression(): TailRec[Expression] =
-    for {
-      expr <- parsePrimaryExpression()
-      post <- parsePostfixOp()
-    } yield Select(expr, post)
+  private def parsePostfixExpression(): TailRec[Expression] = parsePrimaryExpression().flatMap(parsePostfixOp)
 
-  private def parsePostfixOp(): TailRec[Expression] = {
+  private def parsePostfixOp(e: Expression): TailRec[Expression] = {
     currentToken.data match {
       case SquareBracketOpen =>
-        parseArrayAccess().flatMap(e => {
-          parsePostfixOp()
-        })
+        parseArrayAccess(e).flatMap(parsePostfixOp)
       case Dot =>
         // field access or method invocation
         consume()
-        expectIdentifier()
+        val ident = expectIdentifier()
         if (currentToken.data == ParenOpen)
-          parseParenthesizedArguments().flatMap(_ => parsePostfixOp())
-        else parsePostfixOp()
+          parseParenthesizedArguments().flatMap(params => parsePostfixOp(Apply(ident, e +: params)))
+        else parsePostfixOp(Select(e, ident))
       case _ =>
-        done(null)
+        done(e)
     }
   }
 
-  private def parseUnaryExpression(): TailRec[Expression] = {
-    while (currentToken.data == Not || currentToken.data == Minus) {
+  private def parseUnaryExpression(): TailRec[Expression] = currentToken.data match {
+    case Not =>
       consume()
-    }
-    parsePostfixExpression()
+      tailcall(parseUnaryExpression()).map(e => Apply("!", List(e)))
+    case Minus =>
+      consume()
+      tailcall(parseUnaryExpression()).map(e => Apply("-", List(e)))
+    case _ =>
+      parsePostfixExpression()
   }
 
-  private def parseBinaryExpressionRhs(lhs: Expression, minPrecedence: Int): TailRec[(Expression, Int)] = {
-    var curTokenRightAssoc = false
-    var curTokenPrecedence = 1
-    currentToken.data match {
-      case Assign =>
-        curTokenPrecedence = 1
-        curTokenRightAssoc = true
-      case LogicalOr => curTokenPrecedence = 2
-      case LogicalAnd => curTokenPrecedence = 3
-      case Equals | Unequal => curTokenPrecedence = 4
-      case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 5
-      case Plus | Minus => curTokenPrecedence = 6
-      case Mult | Divide | Modulo => curTokenPrecedence = 7
-      case _ => return done((null, -1))
+  private def parseBinaryExpressionRhs(lhs: Expression, minPrecedence: Int): TailRec[Expression] = {
+    val (precedence, leftAssoc) = currentToken.data match {
+      case Assign => (1, false)
+      case LogicalOr => (2, true)
+      case LogicalAnd => (3, true)
+      case Equals | Unequal => (4, true)
+      case Smaller | SmallerEquals | Greater | GreaterEquals => (5, true)
+      case Plus | Minus => (6, true)
+      case Mult | Divide | Modulo => (7, true)
+      case _ => return done(lhs)
     }
 
-    def remainder(lhs: Expression, precedence: Int): TailRec[(Expression, Int)] = {
-      if (precedence < minPrecedence) {
-        done((lhs, precedence))
-      } else {
-        val expr = new Apply(currentToken.data.literal, ListBuffer(lhs))
-        consume()
-        tailcall(parseBinaryExpression(curTokenPrecedence + (if (curTokenRightAssoc) 0 else 1))).
-          flatMap {
-            case (rhs, precedence) => {
-              expr.arguments += rhs
-              remainder(expr, precedence)
-            }
-          }
-      }
+    if (precedence < minPrecedence) {
+      done(lhs)
+    } else {
+      val op = currentToken.data
+      consume()
+      tailcall(parseBinaryExpression(precedence + (if (leftAssoc) 1 else 0))).flatMap(rhs =>
+        parseBinaryExpressionRhs(op match {
+          case Assign => Assignment(lhs, rhs)
+          case _ =>      Apply(op.literal, List(lhs, rhs))
+        }, minPrecedence)
+      )
     }
-    remainder(lhs, curTokenPrecedence)
   }
 
-  private def parseBinaryExpression(minPrecedence: Int): TailRec[(Expression, Int)] = {
+  private def parseBinaryExpression(minPrecedence: Int): TailRec[Expression] = {
     parseUnaryExpression(). // left-hand side
       flatMap(lhs => parseBinaryExpressionRhs(lhs, minPrecedence))
   }

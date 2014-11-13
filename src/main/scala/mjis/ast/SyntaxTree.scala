@@ -39,37 +39,38 @@ final case class MethodDecl(
   override val typ: TypeDef,
   body: SyntaxTree) extends MemberDecl
 
-final case class Parameters(parameters: List[Parameter]) extends SyntaxTree
 /* `typ` `name` */
 final case class Parameter(name: String, override val typ: TypeDef) extends SyntaxTree
 
 sealed trait TypeDef extends SyntaxTree
 final case class TypeBasic(name: String) extends TypeDef
-final case class TypeConstructor(name: String, typVar: String) extends TypeDef
+final case class TypeArray(elementType: TypeDef) extends TypeDef
+
+sealed trait Statement extends SyntaxTree
 
 /* `typ` `name` ( = `body`) */
-final case class LocalVarDeclStatement(name: String, override val typ: TypeDef, initializer: Expression) extends Statement
-sealed trait Expression extends SyntaxTree {
-  def toStatement: Statement = ???
-}
-
-sealed trait Statement extends Expression
-final case class Block(statements: List[SyntaxTree]) extends Statement
-case object EmptyTree extends Statement
+final case class LocalVarDeclStatement(name: String, override val typ: TypeDef, initializer: Option[Expression]) extends Statement
+final case class Block(statements: List[Statement]) extends Statement
+final case object EmptyStatement extends Statement
 /* if (`condition`) { `ifTrue` } else { `ifFalse` } */
-final case class If(condition: Expression, ifTrue: Expression, ifFalse: Expression) extends Statement
+final case class If(condition: Expression, ifTrue: Statement, ifFalse: Statement) extends Statement
 /* while (`condition`) { `block` } */
-final case class While(condition: Expression, body: Expression) extends Statement
+final case class While(condition: Expression, body: Statement) extends Statement
+final case class ExpressionStatement(expr: Expression) extends Statement
+final case class ReturnStatement(returnValue: Option[Expression]) extends Statement
+
+sealed trait Expression extends SyntaxTree
 
 /* `lhs` = `rhs` */
-final case class Assignment(lhs: Expression, rhs: Expression) extends Statement
-
+final case class Assignment(lhs: Expression, rhs: Expression) extends Expression
 /* `name`(`args`) */
-final case class Apply(name: String, arguments: ListBuffer[SyntaxTree]) extends Expression
+final case class Apply(name: String, arguments: List[Expression]) extends Expression
 /* new `typ`() */
-final case class New(override val typ: TypeDef) extends Expression
+final case class NewObject(override val typ: TypeBasic) extends Expression
+/* new `typ`[firstDimSize][]^additionalDims */
+final case class NewArray(override val typ: TypeBasic, firstDimSize: Expression, additionalDims: Int) extends Expression
 /* `qualifier`.`name` */
-final case class Select(qualifier: Expression, name: Expression) extends Expression
+final case class Select(qualifier: Expression, name: String) extends Expression
 
 sealed trait Literal extends Expression
 
