@@ -146,7 +146,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     var typ: TypeDef = basicTyp
     while (currentToken.data == SquareBracketOpen) {
       consume()
-      typ = TypeArray(basicTyp)
+      typ = TypeArray(typ)
       expectSymbol(SquareBracketClosed)
     }
     typ
@@ -212,12 +212,12 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
   private def parseLocalVariableDeclarationStatement(): LocalVarDeclStatement = {
     val typ = parseType()
     val name = expectIdentifier()
-    val body = if (currentToken.data == Assign) {
+    val initializer = if (currentToken.data == Assign) {
       consume()
       Some(parseExpression().result)
     } else None
     expectSymbol(Semicolon)
-    LocalVarDeclStatement(name, typ, body)
+    LocalVarDeclStatement(name, typ, initializer)
   }
 
   // mutual recursion: Statement -> If/WhileStatement -> Statement
@@ -275,33 +275,34 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
 
   // mutual recursion: Expression -> {pretty much everything} -> Expression
 
-  private def parseExpression(): TailRec[Expression] = tailcall(parseBinaryExpression(minPrecedence = 1)).
-    flatMap(tuple => done(tuple._1))
+  private def parseExpression(): TailRec[Expression] = tailcall(parseBinaryExpression(minPrecedence = 1))
 
-  private def parseNewArrayExpressionSuffix(): TailRec[Expression] = {
+  private def parseNewArrayExpressionSuffix(typ: TypeBasic): TailRec[Expression] = {
     // first dimension
     expectSymbol(SquareBracketOpen)
-    parseExpression().flatMap(e => {
+    parseExpression().map(firstDimSize => {
       expectSymbol(SquareBracketClosed)
 
+      var additionalDims = 0
       // other dimensions (we have to take care not to consume a [ that might belong to an array access)
       while (currentToken.data == SquareBracketOpen && tokens.peek(1).data == SquareBracketClosed) {
         consume()
         consume()
+        additionalDims += 1
       }
-      done(null)
+      NewArray(typ, firstDimSize, additionalDims)
     })
   }
 
-  private def parseParenthesizedArguments(): TailRec[ListBuffer[Expression]] = {
+  private def parseParenthesizedArguments(): TailRec[List[Expression]] = {
     expectSymbol(ParenOpen)
-    def remainder(params: ListBuffer[Expression], expectComma: Boolean): TailRec[ListBuffer[Expression]] = {
+    def remainder(params: ListBuffer[Expression], expectComma: Boolean): TailRec[List[Expression]] = {
       if (currentToken.data != ParenClosed) {
         if (expectComma) expectSymbol(Comma)
         parseExpression().flatMap(e => remainder(params += e, expectComma = true))
       } else {
         consume()
-        done(params)
+        done(params.toList)
       }
     }
     remainder(ListBuffer.empty, expectComma = false)
@@ -335,27 +336,27 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         consume()
         parseExpression().map(e => {
           expectSymbol(ParenClosed)
-          null
+          e
         })
       case NewToken =>
         consume()
         currentToken.data match {
-          case Identifier(_) =>
+          case Identifier(typeName) =>
             consume()
             currentToken.data match {
               case ParenOpen =>
                 // NewObjectExpression
                 consume()
                 expectSymbol(ParenClosed)
-                done(null)
+                done(NewObject(TypeBasic(typeName)))
               case SquareBracketOpen =>
                 // NewArrayExpression
-                parseNewArrayExpressionSuffix()
+                parseNewArrayExpressionSuffix(TypeBasic(typeName))
               case _ => unexpectedToken("'(' or '['")
             }
           case _ =>
-            parseBasicType()
-            parseNewArrayExpressionSuffix()
+            val typ = parseBasicType()
+            parseNewArrayExpressionSuffix(typ)
         }
       case _ => unexpectedToken("primary expression")
     }
@@ -365,7 +366,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     expectSymbol(SquareBracketOpen)
     parseExpression().map(param => {
       expectSymbol(SquareBracketClosed)
-      Apply("apply", ListBuffer(e, param))
+      Apply("apply", List(e, param))
     })
   }
 
@@ -380,55 +381,51 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         consume()
         val ident = expectIdentifier()
         if (currentToken.data == ParenOpen)
-          parseParenthesizedArguments().flatMap(params => parsePostfixOp(Apply(ident, ListBuffer(e) ++= params)))
+          parseParenthesizedArguments().flatMap(params => parsePostfixOp(Apply(ident, e +: params)))
         else parsePostfixOp(Select(e, ident))
       case _ =>
         done(e)
     }
   }
 
-  private def parseUnaryExpression(): TailRec[Expression] = {
-    while (currentToken.data == Not || currentToken.data == Minus) {
+  private def parseUnaryExpression(): TailRec[Expression] = currentToken.data match {
+    case Not =>
       consume()
-    }
-    parsePostfixExpression()
+      tailcall(parseUnaryExpression()).map(e => Apply("!", List(e)))
+    case Minus =>
+      consume()
+      tailcall(parseUnaryExpression()).map(e => Apply("-", List(e)))
+    case _ =>
+      parsePostfixExpression()
   }
 
-  private def parseBinaryExpressionRhs(lhs: Expression, minPrecedence: Int): TailRec[(Expression, Int)] = {
-    var curTokenRightAssoc = false
-    var curTokenPrecedence = 1
-    currentToken.data match {
-      case Assign =>
-        curTokenPrecedence = 1
-        curTokenRightAssoc = true
-      case LogicalOr => curTokenPrecedence = 2
-      case LogicalAnd => curTokenPrecedence = 3
-      case Equals | Unequal => curTokenPrecedence = 4
-      case Smaller | SmallerEquals | Greater | GreaterEquals => curTokenPrecedence = 5
-      case Plus | Minus => curTokenPrecedence = 6
-      case Mult | Divide | Modulo => curTokenPrecedence = 7
-      case _ => return done((lhs, -1))
+  private def parseBinaryExpressionRhs(lhs: Expression, minPrecedence: Int): TailRec[Expression] = {
+    val (precedence, leftAssoc) = currentToken.data match {
+      case Assign => (1, false)
+      case LogicalOr => (2, true)
+      case LogicalAnd => (3, true)
+      case Equals | Unequal => (4, true)
+      case Smaller | SmallerEquals | Greater | GreaterEquals => (5, true)
+      case Plus | Minus => (6, true)
+      case Mult | Divide | Modulo => (7, true)
+      case _ => return done(lhs)
     }
 
-    def remainder(lhs: Expression, precedence: Int): TailRec[(Expression, Int)] = {
-      if (precedence < minPrecedence) {
-        done((lhs, precedence))
-      } else {
-        val expr = new Apply(currentToken.data.literal, ListBuffer(lhs))
-        consume()
-        tailcall(parseBinaryExpression(curTokenPrecedence + (if (curTokenRightAssoc) 0 else 1))).
-          flatMap {
-            case (rhs, precedence) => {
-              expr.arguments += rhs
-              remainder(expr, precedence)
-            }
-          }
-      }
+    if (precedence < minPrecedence) {
+      done(lhs)
+    } else {
+      val op = currentToken.data
+      consume()
+      tailcall(parseBinaryExpression(precedence + (if (leftAssoc) 1 else 0))).flatMap(rhs =>
+        parseBinaryExpressionRhs(op match {
+          case Assign => Assignment(lhs, rhs)
+          case _ =>      Apply(op.literal, List(lhs, rhs))
+        }, minPrecedence)
+      )
     }
-    remainder(lhs, curTokenPrecedence)
   }
 
-  private def parseBinaryExpression(minPrecedence: Int): TailRec[(Expression, Int)] = {
+  private def parseBinaryExpression(minPrecedence: Int): TailRec[Expression] = {
     parseUnaryExpression(). // left-hand side
       flatMap(lhs => parseBinaryExpressionRhs(lhs, minPrecedence))
   }
