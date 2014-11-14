@@ -16,6 +16,9 @@ object CLIMain extends App {
     opt[Unit]("lextest") action { (phase, config) =>
       config.copy(stopAfter = "lexer")
     } text ("Run the lexer and output the result in a standardized format")
+    opt[Unit]("print-ast") action { (phase, config) =>
+      config.copy(stopAfter = "parser")
+    } text ("Run the parser and output the result in a standardized format")
     opt[String]("stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")
@@ -35,6 +38,10 @@ object CLIMain extends App {
   }
 
   parser.parse(args, Config()) map { config =>
+    if (config.files.isEmpty) {
+      parser.reportError("Must specify at least one file or --from-stdin")
+      parser.showUsage
+    }
     System.exit(if (Compiler.compile(config)) 0 else 2)
   } getOrElse {
     System.exit(1)
