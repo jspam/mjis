@@ -1,0 +1,182 @@
+Program → ClassDeclaration*
+   Program.node = new Program(List(ClassDeclaration_1.node, ..., ClassDeclaration_n.node))
+
+ClassDeclaration → 'class' IDENT { ClassMember* }
+   ClassDeclaration.node = new ClassDeclaration(IDENT, List(ClassMember_1.node, ..., ClassMember_n.node))
+
+ClassMember → Field
+   ClassMember.node = Field.node
+
+ClassMember → Method
+   ClassMember.node = Method.node
+
+ClassMember → MainMethod
+   ClassMember.node = MainMethod.node
+
+Field → 'public' Type IDENT
+   Field.node = new Field(Type.node, IDENT)
+
+Method → 'public' Type IDENT '(' Parameters? ')' Block
+   Method.node = new Method(Type.node, Parameters.node, Block.node)
+
+MainMethod → 'public' 'static' 'void' IDENT '(' 'String' '[' ']' IDENT ')' Block
+   MainMethod.node = new MainMethod(IDENT1, IDENT2, Block.node)
+
+Parameters → Parameter (',' Parameter)*
+   Parameters.node = List(Parameter_1.node, Parameter_2.node, ..., Parameter_n.node)
+
+Parameters → epsilon
+   Parameters.node = List()
+
+Parameter → Type IDENT
+   Parameter.node = new Parameter(Type.node, IDENT)
+
+Type → BasicType
+   Type.node = BasicType.node
+
+Type → Type '[' ']'
+   Type.node = new ArrayType(Type.node)
+
+BasicType → 'int'
+   BasicType.node = new IntType()
+
+BasicType → 'boolean'
+   BasicType.node = new BooleanType()
+
+BasicType → 'void'
+   BasicType.node = new VoidType()
+
+BasicType => IDENT
+   BasicType.node = new CustomType(IDENT)
+
+Statement → Block | EmptyStatement | IfStatement | ExpressionStatement | WhileStatement | ReturnStatement
+   Statement.node = _.node
+
+Block → { BlockStatement* }
+   Block.node = new Block(List(BlockStatement_1.node, ..., BlockStatement_n.node))
+
+BlockStatement → Statement
+   BlockStatement.node = Statement.node
+
+BlockStatement → LocalVariableDeclarationStatement
+   BlockStatement.node = LocalVariableDeclarationStatement.node
+
+LocalVariableDeclarationStatement → Type IDENT ('=' Expression)? ';'
+   LocalVariableDeclarationStatement.node = new LocalVariableDeclaration(Type.node, IDENT, Expression.node)
+
+EmptyStatement → ';'
+   EmptyStatement.node = new EmptyStatement()
+
+WhileStatement → 'while' '(' Expression ')' Statement
+   WhileStatement.node = new WhileStatement(Expression.node, Statement.node)
+
+IfStatement → 'if' '(' Expression ')' Statement ('else' Statement)?
+   IfStatement.node = new IfStatement(Expression.node, Statement.node, Statement.node)
+
+ExpressionStatement → Expression ';'
+   ExpressionStatement.node = new ExpressionStatement(Expression.node)
+
+ReturnStatement → 'return' Expression? ';'
+   ReturnStatement.node = new ReturnStatement(Expression.node)
+
+Expression → AssignmentExpression
+   Expression.node = AssignmentExpression.node
+
+AssignmentExpression → LogicalOrExpression
+   AssignmentExpression.node = LogicalOrExpression.node
+
+AssignmentExpression → LogicalOrExpression '=' AssignmentExpression
+   AssignmentExpression.node = new MethodInvocation('=', List(LogicalOrExpression.node, AssignmentExpression.node))
+
+LogicalOrExpression → LogicalAndExpression
+   LogicalOrExpression.node = LogicalAndExpression.node
+
+LogicalOrExpression → LogicalAndExpression '||' LogicalOrExpression
+   LogicalOrExpression.node = new MethodInvocation('||', List(LogicalAndExpression.node, LogicalOrExpression.node))
+
+LogicalAndExpression → EqualityExpression
+   LogicalAndExpression.node = EqualityExpression.node
+
+LogicalAndExpression → EqualityExpression '&&' LogicalAndExpression
+   LogicalAndExpression.node = new MethodInvocation('&&', List(EqualityExpression.node, LogicalAndExpression.node))
+
+EqualityExpression → RelationalExpression
+   EqualityExpression.node = RelationalExpression.node
+
+EqualityExpression → RelationalExpression ('==' | '!=') EqualityExpression
+   EqualityExpression.node = new MethodInvocation(op, List(RelationalExpression.node, EqualityExpression.node))
+
+RelationalExpression → AdditiveExpression
+   RelationalExpression.node = AdditiveExpression.node
+
+RelationalExpression → AdditiveExpression ('<' | '<=' | '>' | '>=') RelationalExpression
+   RelationalExpression.node = new MethodInvocation(op, List(AdditiveExpression.node, RelationalExpression.node))
+
+AdditiveExpression → MultiplicativeExpression
+   AdditiveExpression.node = MultiplicativeExpression.node
+
+AdditiveExpression → MultiplicativeExpression ('+' | '-') AdditiveExpression
+   AdditiveExpression.node = new MethodInvocation(op, List(MultiplicativeExpression.node, AdditiveExpression.node))
+
+MultiplicativeExpression → UnaryExpression
+   MultiplicativeExpression.node = UnaryExpression.node
+
+MultiplicativeExpression → UnaryExpression ('*' | '/' | '%') MultiplicativeExpression
+   MultiplicativeExpression.node = new MethodInvocation(op, List(UnaryExpression.node, MultiplicativeExpression.node))
+
+UnaryExpression → PostfixExpression
+   UnaryExpression.node = PostfixExpression.node
+
+UnaryExpression → ('!' | '-') UnaryExpression
+   UnaryExpression.node = new MethodInvocation(op, List(UnaryExpression.node))
+
+PostfixExpression → PrimaryExpression
+  PostfixExpression.node = PrimaryExpression.node
+
+PostfixExpression → PostfixExpression '[' Expression ']'   /* ArrayAccess */
+  PostfixExpression.node = new ArrayAccess(PostfixExpression.node, Expression.node)
+
+PostfixExpression → PostfixExpression '.' IDENT '(' Arguments ')'   /* MethodInvocation */
+  PostfixExpression.node = new MethodInvocation(IDENT, List(PostfixExpression.node) ++ Arguments.node)
+
+PostfixExpression → PostfixExpression '.' IDENT /* FieldAccess */
+  PostfixExpression.node = new FieldAccess(PostfixExpression.node, IDENT)
+
+Arguments → Expression (',' Expression)*
+   Arguments.node = List(Expression_1.node, Expression_2.node, ..., Expression_n.node)
+
+Arguments → epsilon
+   Arguments.node = List()
+
+PrimaryExpression → 'null'
+   PrimaryExpression.node = new NullLiteral()
+
+PrimaryExpression → 'false'
+   PrimaryExpression.node = new FalseLiteral()
+
+PrimaryExpression → 'true'
+   PrimaryExpression.node = new TrueLiteral()
+
+PrimaryExpression → INTEGER_LITERAL
+   PrimaryExpression.node = new IntegerLiteral(INTEGER_LITERAL)
+
+PrimaryExpression → IDENT
+   PrimaryExpression.node = new VariableRef(IDENT)
+
+PrimaryExpression → 'this'
+   PrimaryExpression.node = new ThisLiteral()
+
+PrimaryExpression → '(' Expression ')'
+   PrimaryExpression.node = Expression.node
+
+PrimaryExpression → 'new' NewObjectExpression
+   PrimaryExpression.node = NewObjectExpression.node
+
+PrimaryExpression → 'new' NewArrayExpression)
+   PrimaryExpression.node = NewArrayExpression.node
+
+NewObjectExpression → IDENT '(' ')'
+   NewObjectExpression.node = new NewObjectExpression(IDENT)
+
+NewArrayExpression → BasicType '[' Expression ']' ('[' ']')*
+   NewArrayExpression.node = new NewArrayExpression(BasicType.node, Expression.node, *.count)
