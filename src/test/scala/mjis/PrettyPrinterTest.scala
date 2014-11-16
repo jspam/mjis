@@ -16,10 +16,11 @@ class PrettyPrinterTest extends FlatSpec with Matchers with Inspectors {
     parser
   }
 
-  "The pretty-printer" should "collapse empty classes" in {
+  "The pretty-printer" should "not collapse empty classes" in {
     prettyPrintProgram(
         """class A {}""") should succeedPrettyPrintingWith(
-        """class A { }
+        """class A {
+           |}
            |""".stripMargin)
   }
 

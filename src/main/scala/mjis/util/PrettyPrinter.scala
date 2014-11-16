@@ -26,22 +26,18 @@ class PrettyPrinter(writer: BufferedWriter) {
 
   private def printClassDecl(cl: ClassDecl): Unit = {
     emit(s"class ${cl.name} {")
-    if (cl.methods.isEmpty && cl.fields.isEmpty)
-      emit(" }")
-    else {
-      indent()
-      for (m <- cl.methods.sortBy { _.name }) {
-        newLine()
-        printMethodDecl(m)
-      }
-      for (f <- cl.fields.sortBy { _.name }) {
-        newLine()
-        printFieldDecl(f)
-      }
-      unindent()
+    indent()
+    for (m <- cl.methods.sortBy { _.name }) {
       newLine()
-      emit("}")
+      printMethodDecl(m)
     }
+    for (f <- cl.fields.sortBy { _.name }) {
+      newLine()
+      printFieldDecl(f)
+    }
+    unindent()
+    newLine()
+    emit("}")
     newLine()
   }
 
