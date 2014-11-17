@@ -50,7 +50,7 @@ final case class TypeArray(elementType: TypeDef) extends TypeDef
 sealed trait Statement extends SyntaxTree
 
 /* `typ` `name` ( = `body`) */
-final case class LocalVarDeclStatement(name: String, override val typ: TypeDef, initializer: Option[Expression]) extends Statement
+final case class LocalVarDeclStatement(name: String, override val typ: TypeDef, initializer: Option[Expression]) extends Statement with Decl
 final case class Block(statements: List[Statement]) extends Statement
 final case object EmptyStatement extends Statement
 /* if (`condition`) { `ifTrue` } else { `ifFalse` } */
