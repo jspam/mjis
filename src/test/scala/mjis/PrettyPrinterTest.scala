@@ -81,6 +81,26 @@ class PrettyPrinterTest extends FlatSpec with Matchers with Inspectors {
            |""".stripMargin)
   }
 
+  it should "only print empty statements when necessary" in {
+    prettyPrintProgram(
+        """class HelloWorld
+           |{
+           |  public int bar(int a, int b) {
+           |    if (true)
+           |      ;
+           |    ;;;;;
+           |  }
+           |}""".stripMargin) should succeedPrettyPrintingWith(
+        """class HelloWorld {
+           |	public int bar(int a, int b) {
+           |		if (true)
+           |			;
+           |	}
+           |}
+           |""".stripMargin)
+
+  }
+
   it should "properly prettyprint the example from the sheet" in {
     prettyPrintProgram(
         """class HelloWorld
