@@ -1,16 +1,16 @@
 package mjis.util
 
 import mjis.ast._
-import java.io.BufferedWriter
+import java.io.Writer
 import scala.collection.immutable.StringOps
 
-class PrettyPrinter(writer: BufferedWriter) {
+class PrettyPrinter(writer: Writer) {
   private var indent_level = 0
   private def emit(s: String) = writer.write(s)
   private def indent() = { indent_level += 1 }
   private def unindent() = { indent_level -= 1 }
   private def newLine(): Unit = {
-    writer.newLine()
+    writer.write(System.lineSeparator())
     for (_ <- 0 until indent_level) emit("\t")
   }
 
@@ -98,7 +98,7 @@ class PrettyPrinter(writer: BufferedWriter) {
         }
         emit(";")
       case block: Block => printBlock(block)
-      case _ => ???
+      case EmptyStatement => emit(";")
     }
   }
 

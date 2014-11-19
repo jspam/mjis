@@ -4,7 +4,7 @@ import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast.SyntaxTree
 import System.{ lineSeparator => n }
 import mjis.util.PrettyPrinter
-import java.io.{StringWriter, BufferedWriter}
+import java.io.{StringReader, StringWriter, BufferedWriter}
 
 trait CompilerTestMatchers {
 
@@ -39,17 +39,26 @@ trait CompilerTestMatchers {
     def apply(parser: Parser) = {
       val result = parser.result
       val stw = new StringWriter();
-      val buf = new BufferedWriter(stw)
-      new PrettyPrinter(buf).print(result.get)
-      buf.flush()
+      new PrettyPrinter(stw).print(result.get)
       val prettyPrint = stw.toString()
       def findError: String = s"$n  Expected String:$n$expectedString$n  Computed String:$n$prettyPrint$n"
+
       val success = prettyPrint == expectedString
       val error = if (success) "" else findError
 
+      // second pass to make sure round-tripping works and pretty printer is idempotent
+      val roundtrip_result = new Parser((new Lexer(new StringReader(prettyPrint))).result).result
+      val stw2 = new StringWriter();
+      new PrettyPrinter(stw2).print(roundtrip_result.get)
+      val prettyPrint2 = stw2.toString()
+      def findError2: String = s"$n  Round-tripping failed:$n$prettyPrint2$n  Computed String:$n$prettyPrint$n"
+
+      val success2 = prettyPrint == prettyPrint2
+      val error2 = if (success2) "" else findError2
+
       MatchResult(
-        success,
-        s"Pretty printing failed, expected it to succeed.$error",
+        success && success2,
+        s"Pretty printing failed, expected it to succeed.$error$error2",
         "Parsing succeeded, expected it to fail")
     }
   }
