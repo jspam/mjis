@@ -111,7 +111,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
       val paramName = expectIdentifier()
       expectSymbol(ParenClosed)
       val block = parseBlock().result
-      MethodDecl(mainName, List(Parameter(paramName, TypeArray(TypeBasic("String")))), TypeBasic("void"), block, isStatic=true)
+      MethodDecl(mainName, List(Parameter(paramName, TypeArray(TypeBasic("String")))), Builtins.VoidType, block, isStatic=true)
     } else {
       val typ = parseType()
       val ident = expectIdentifier()
@@ -136,11 +136,11 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
   private def parseBasicType(): TypeBasic = {
     currentToken.data match {
       case IntType           =>
-        consume(); TypeBasic("int")
+        consume(); Builtins.IntType
       case BooleanType       =>
-        consume(); TypeBasic("boolean")
+        consume(); Builtins.BooleanType
       case VoidType          =>
-        consume(); TypeBasic("void")
+        consume(); Builtins.VoidType
       case Identifier(ident) =>
         consume(); TypeBasic(ident)
       case _                 => unexpectedToken("type name")

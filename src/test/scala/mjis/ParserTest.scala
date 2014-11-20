@@ -19,7 +19,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   )
   def statementsAST(innerAST: Statement*) = Program(List(
     ClassDecl("Test", List(
-      MethodDecl("test", List(), TypeBasic("void"),
+      MethodDecl("test", List(), Builtins.VoidType,
         Block(innerAST.toList)
       )
     ), List())
@@ -47,9 +47,9 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
       succeedParsingWith(
         Program(List(
           ClassDecl("C", Nil, List(
-            FieldDecl("x", TypeBasic("int")),
-            FieldDecl("y", TypeBasic("boolean")),
-            FieldDecl("z", TypeBasic("void")),
+            FieldDecl("x", Builtins.IntType),
+            FieldDecl("y", Builtins.BooleanType),
+            FieldDecl("z", Builtins.VoidType),
             FieldDecl("u", TypeBasic("MyType")),
             FieldDecl("v", TypeArray(TypeBasic("MyType"), 2)))))))
   }
@@ -65,7 +65,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   it should "accept main methods with any name" in {
     parseProgram("class C { public static void foobar(String[] args) {} }") should succeedParsingWith(Program(List(
       ClassDecl("C", List(
-        MethodDecl("foobar", List(Parameter("args", TypeArray(TypeBasic("String")))), TypeBasic("void"), Block(List()), isStatic=true)
+        MethodDecl("foobar", List(Parameter("args", TypeArray(TypeBasic("String")))), Builtins.VoidType, Block(List()), isStatic=true)
       ), List())
     )))
   }
@@ -82,8 +82,8 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   it should "accept a program with different local variable declarations" in {
     parseStatements("int a; boolean b; myType[] c = xyz; myType x = 42;") should succeedParsingWith(statementsAST(
-      LocalVarDeclStatement("a", TypeBasic("int"), None),
-      LocalVarDeclStatement("b", TypeBasic("boolean"), None),
+      LocalVarDeclStatement("a", Builtins.IntType, None),
+      LocalVarDeclStatement("b", Builtins.BooleanType, None),
       LocalVarDeclStatement("c", TypeArray(TypeBasic("myType")), Some(Ident("xyz"))),
       LocalVarDeclStatement("x", TypeBasic("myType"), Some(IntLiteral("42")))
     ))
@@ -114,7 +114,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     // this is interesting because it's a spot where the grammar isn't SLL(1)
     parseProgram("class a { public void foo ( ) { a [ 2 ] ; } }") should succeedParsingWith(Program(List(
       ClassDecl("a", List(
-        MethodDecl("foo", List(), TypeBasic("void"), Block(List(
+        MethodDecl("foo", List(), Builtins.VoidType, Block(List(
           ExpressionStatement(Apply("[]", List(Ident("a"), IntLiteral("2")), isOperator=true))
         )))
       ), List())
@@ -148,7 +148,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
       NullLiteral,
       NewObject(TypeBasic("myType")),
       NewArray(TypeBasic("myType"), Apply("+", List(IntLiteral("3"), Ident("x")), isOperator=true), 2),
-      NewArray(TypeBasic("int"), Apply("+", List(IntLiteral("3"), Ident("x")), isOperator=true), 2)
+      NewArray(Builtins.IntType, Apply("+", List(IntLiteral("3"), Ident("x")), isOperator=true), 2)
     ))
   }
 
@@ -266,8 +266,8 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   it should "accept array creations" in {
     parseStatements("new int[5]; new int[a][][]; new a[c-(d)][];") should succeedParsingWith(expressionsAST(
-      NewArray(TypeBasic("int"), IntLiteral("5"), 0),
-      NewArray(TypeBasic("int"), Ident("a"), 2),
+      NewArray(Builtins.IntType, IntLiteral("5"), 0),
+      NewArray(Builtins.IntType, Ident("a"), 2),
       NewArray(TypeBasic("a"), Apply("-", List(Ident("c"), Ident("d")), isOperator=true), 1)
     ))
   }
