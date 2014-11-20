@@ -3,6 +3,7 @@ package mjis
 import java.io.BufferedWriter
 import mjis.Typer._
 import mjis.ast._
+import mjis.Builtins._
 import scala.collection.mutable.ListBuffer
 import scala.util.control.TailCalls._
 
@@ -96,10 +97,11 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
 
   private def typecheckMethodDecl(m: MethodDecl) = {
     m.parameters.foreach(p => assertNotVoid(p.typ))
-    typecheckStatement(m.body).result
+    typecheckStatement(m.body, m).result
   }
 
-  private def typecheckStatement(s: Statement): TailRec[Unit] = {
+  /** @param m The surrounding method declaration of the statement */
+  private def typecheckStatement(s: Statement, m: MethodDecl): TailRec[Unit] = {
     s match {
       case LocalVarDeclStatement(_, typ, initializer) =>
         assertNotVoid(typ)
@@ -113,21 +115,25 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       case b: Block =>
         def remainder(stmts: List[Statement]): TailRec[Unit] = stmts.headOption match {
           case None => done(Unit)
-          case Some(stmt) => tailcall(typecheckStatement(stmt)).flatMap(_ => remainder(stmts.tail))
+          case Some(stmt) => tailcall(typecheckStatement(stmt, m)).flatMap(_ => remainder(stmts.tail))
         }
         remainder(b.statements)
       case If(cond, ifTrue, ifFalse) =>
         typecheckExpression(cond)
         assertConvertible(getType(cond), TypeBasic("boolean"))
-        tailcall(typecheckStatement(ifTrue)).flatMap(_ => tailcall(typecheckStatement(ifFalse)))
+        tailcall(typecheckStatement(ifTrue, m)).flatMap(_ => tailcall(typecheckStatement(ifFalse, m)))
       case While(cond, body) =>
         typecheckExpression(cond)
         assertConvertible(getType(cond), TypeBasic("boolean"))
-        tailcall(typecheckStatement(body))
+        tailcall(typecheckStatement(body, m))
       case ExpressionStatement(expr) =>
         tailcall(typecheckExpression(expr))
       case ReturnStatement(Some(expr)) =>
+        assertConvertible(getType(expr), m.typ)
         tailcall(typecheckExpression(expr))
+      case ReturnStatement(None) =>
+        assertConvertible(VoidType, m.typ)
+        done(Unit)
       case _ => done(Unit)
     }
   }

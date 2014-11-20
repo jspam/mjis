@@ -21,9 +21,7 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
   def stmts(text: String): Program = compile(s"class Test { public void test() { $text } }")
 
-  def method(text: String): Program = {
-    compile(s"class Test { $text }")
-  }
+  def method(text: String): Program = compile(s"class Test { $text }")
 
   "The typer" should "type literals correctly" in {
     stmts("true;") should succeedTyping
@@ -49,7 +47,7 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     stmts("new void[42];") shouldNot succeedTyping
   }
 
-  ignore should "check for a correct return type" in {
+  it should "check for a correct return type" in {
     for ((retType, retTypeIdx) <- List("void", "int", "boolean", "int[]", "boolean[][]").zipWithIndex) {
       for ((retVal, retValIdx) <- List("", "42", "true", "new int[42]", "new boolean[42][]").zipWithIndex) {
         val prog = s"public $retType test() { return $retVal; }"
