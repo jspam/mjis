@@ -89,6 +89,17 @@ trait CompilerTestMatchers {
     }
   }
 
+  class NamerSuccessMatcher extends Matcher[Program] {
+    def apply(program: Program) = {
+      val namer = new Namer(program)
+      namer.result
+      MatchResult(
+        namer.success,
+        s"Naming failed, expected it to succeed. Findings:$n${namer.findings.mkString(n)}",
+        "Naming succeeded, expected it to fail")
+    }
+  }
+
   def succeedLexing() = new LexerSuccessMatcher()
   def succeedParsing() = new ParserSuccessMatcher(None)
   def succeedParsingWith(expectedAST: SyntaxTree) = new ParserSuccessMatcher(Some(expectedAST))
@@ -96,7 +107,7 @@ trait CompilerTestMatchers {
   def succeedTyping = new TyperSuccessMatcher()
   def failTyping = new TyperFailMatcher()
   def failTypingWith(expectedFinding: Finding) = new TyperFailMatcher(expectedFinding)
-
+  def succeedNaming() = new NamerSuccessMatcher()
 }
 
 object CompilerTestMatchers extends CompilerTestMatchers
