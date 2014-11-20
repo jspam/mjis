@@ -38,19 +38,19 @@ trait CompilerTestMatchers {
   class PrettyPrinterSuccessMatcher(expectedString: String) extends Matcher[Parser] {
     def apply(parser: Parser) = {
       val result = parser.result
-      val stw = new StringWriter();
+      val stw = new StringWriter()
       new PrettyPrinter(stw).print(result.get)
-      val prettyPrint = stw.toString()
+      val prettyPrint = stw.toString
       def findError: String = s"$n  Expected String:$n$expectedString$n  Computed String:$n$prettyPrint$n"
 
       val success = prettyPrint == expectedString
       val error = if (success) "" else findError
 
       // second pass to make sure round-tripping works and pretty printer is idempotent
-      val roundtrip_result = new Parser((new Lexer(new StringReader(prettyPrint))).result).result
-      val stw2 = new StringWriter();
+      val roundtrip_result = new Parser(new Lexer(new StringReader(prettyPrint)).result).result
+      val stw2 = new StringWriter()
       new PrettyPrinter(stw2).print(roundtrip_result.get)
-      val prettyPrint2 = stw2.toString()
+      val prettyPrint2 = stw2.toString
       def findError2: String = s"$n  Round-tripping failed:$n$prettyPrint2$n  Computed String:$n$prettyPrint$n"
 
       val success2 = prettyPrint == prettyPrint2
@@ -95,7 +95,7 @@ trait CompilerTestMatchers {
       namer.result
       MatchResult(
         namer.success,
-        s"Naming failed, expected it to succeed. Findings:$n${namer.findings.mkString(n)}",
+        s"Naming failed. Findings:$n${namer.findings.mkString(n)}",
         "Naming succeeded, expected it to fail")
     }
   }

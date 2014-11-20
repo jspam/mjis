@@ -27,28 +27,27 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
   def getMethod(c: ClassDecl, name: String) = c.methods.find(decl => decl.name == name).orNull
 
-  def getRefDecl(s: Statement): Decl = s. asInstanceOf[Ref[Decl]].decl.get
-  def getExprRefDecl(s: Statement): Decl = s.asInstanceOf[ExpressionStatement].expr.asInstanceOf[Ref[Decl]].decl.get
+  def getRefDecl(s: Statement): Decl = s.asInstanceOf[ExpressionStatement].expr.asInstanceOf[Ref[Decl]].decl.get
 
   "The namer" should "recognize local variable references" in {
     val program = parseStatements("int x; x;")
     program should succeedNaming
     val statements = getStatements(program)
-    getExprRefDecl(statements(1)) shouldBe statements(0)
+    getRefDecl(statements(1)) shouldBe statements(0)
   }
 
   it should "recognize shadowing variable references" in {
     val program = parseStatements("int x; { boolean x; x; }")
     program should succeedNaming
     val statements = getStatements(program)
-    getExprRefDecl(statements(2)) shouldBe statements(1)
+    getRefDecl(statements(2)) shouldBe statements(1)
   }
 
   it should "recognize method references" in {
     val program = parseStatements("test();")
     program should succeedNaming
     val statements = getStatements(program)
-    getExprRefDecl(statements(0)) shouldBe program.classes(0).methods(0)
+    getRefDecl(statements(0)) shouldBe program.classes(0).methods(0)
   }
 
   it should "disallow accessing the 'this' pointer in a static method" in {
@@ -57,7 +56,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "recognize built-in methods" in {
-    val program = parseStatements("1+1;1-1;1*1;1/1;1%1;1<=1;1<1;1==1;1!=1;1>1;1>=1;1||1;1&&1;-1;!1;")
+    val program = parseStatements("1+1;1-1;1*1;1/1;1%1;1<=1;1<1;1==1;1!=1;1>1;1>=1;false||true;true&&false;-1;!true;")
     program should succeedNaming
     val statements = getStatements(program)
     val expected = List(getMethod(IntDecl, "+"), getMethod(IntDecl, "-"), getMethod(IntDecl, "*"),
@@ -84,7 +83,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "recognize a user-defined System.out.println function" in {
-    val program = parseProgram("class Test { public void test() { System.out.println(42); } public _System System } " +
+    val program = parseProgram("class Test { public void test() { System.out.println(42); } public _System System; } " +
       "class _Out { public void println(int x) {} } class _System { public _Out out; }")
     program should succeedNaming
     val statements = getStatements(program)

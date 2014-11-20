@@ -67,6 +67,7 @@ class PostOrderVisitor(inner: SyntaxTreeVisitor[Unit]) extends SyntaxTreeVisitor
     inner.visit(cls)
   }
   def visit(method: MethodDecl): Unit = {
+    method.parameters.foreach(visit)
     visit(method.body)
     inner.visit(method)
   }
@@ -122,10 +123,14 @@ class PostOrderVisitor(inner: SyntaxTreeVisitor[Unit]) extends SyntaxTreeVisitor
   def visit(expr: IntLiteral): Unit = inner.visit(expr)
   def visit(stmt: NullLiteral.type): Unit = inner.visit(stmt)
   def visit(expr: NewArray): Unit = {
+    expr.typ.accept(this)
     expr.firstDimSize.accept(this)
     inner.visit(expr)
   }
-  def visit(expr: NewObject): Unit = inner.visit(expr)
+  def visit(expr: NewObject): Unit = {
+    expr.typ.accept(this)
+    inner.visit(expr)
+  }
   def visit(expr: Select): Unit = {
     expr.qualifier.accept(this)
     inner.visit(expr)

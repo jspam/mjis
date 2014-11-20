@@ -7,6 +7,11 @@ sealed trait SyntaxTree {
   def accept[A](visitor: SyntaxTreeVisitor[A]): A
 }
 
+abstract class SyntaxTreeError(/* element: SyntaxTree */) extends Finding {
+  def severity = Severity.ERROR
+  override def pos: Position = new Position(0, 0, "") // TODO: element.position
+}
+
 /** A syntax tree element that has a reference to a Decl. */
 sealed trait Ref[D <: Decl] extends SyntaxTree {
   private var _decl: Option[D] = None
@@ -131,8 +136,9 @@ final case class Ident(name: String) extends Literal with Ref[Decl] {
   override def accept[A](visitor: SyntaxTreeVisitor[A]): A = visitor.visit(this)
   override def toString = name
 }
-final case class ThisLiteral() extends Literal {
+final case class ThisLiteral() extends Literal with Ref[TypedDecl] {
   override def accept[A](visitor: SyntaxTreeVisitor[A]): A = visitor.visit(this)
+  override val name = "this"
 }
 case object NullLiteral extends Literal {
   override def accept[A](visitor: SyntaxTreeVisitor[A]): A = visitor.visit(this)
