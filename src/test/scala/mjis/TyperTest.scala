@@ -3,6 +3,7 @@ package mjis
 import mjis.CompilerTestMatchers._
 import mjis.Typer.InvalidTypeError
 import mjis.ast._
+import mjis.Builtins._
 import org.scalatest._
 
 class TyperTest extends FlatSpec with Matchers with Inspectors {
@@ -81,6 +82,11 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     stmt("while (true);") should succeedTyping
     stmt("while (null);") should failTypingWith(InvalidTypeError(TypeBasic("boolean"), TypeBasic("null")))
     stmt("while (42);") should failTypingWith(InvalidTypeError(TypeBasic("boolean"), TypeBasic("int")))
+  }
+
+  it should "type check initializers of local variables" in {
+    stmt("int foo = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    // stmt("int foo = true + 2;") should failTypingWith(InvalidTypeError(IntType, BooleanType)) // needs namer
   }
 
 }
