@@ -51,7 +51,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
             FieldDecl("y", TypeBasic("boolean")),
             FieldDecl("z", TypeBasic("void")),
             FieldDecl("u", TypeBasic("MyType")),
-            FieldDecl("v", TypeArray(TypeArray(TypeBasic("MyType")))))))))
+            FieldDecl("v", TypeArray(TypeBasic("MyType"), 2)))))))
   }
 
   it should "accept many fields, main methods and methods" in {
@@ -143,8 +143,8 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
       TrueLiteral,
       IntLiteral("1337"),
       Ident("myVar"),
-      Apply("myFunc", List(ThisLiteral)),
-      ThisLiteral,
+      Apply("myFunc", List(ThisLiteral())),
+      ThisLiteral(),
       NullLiteral,
       NewObject(TypeBasic("myType")),
       NewArray(TypeBasic("myType"), Apply("+", List(IntLiteral("3"), Ident("x")), isOperator=true), 2),
@@ -166,9 +166,9 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   it should "accept method calls with parameters" in {
     parseStatements("a(b);\na(b, c);\na(b, c(d));") should succeedParsingWith(expressionsAST(
-      Apply("a", List(ThisLiteral, Ident("b"))),
-      Apply("a", List(ThisLiteral, Ident("b"), Ident("c"))),
-      Apply("a", List(ThisLiteral, Ident("b"), Apply("c", List(ThisLiteral, Ident("d")))))
+      Apply("a", List(ThisLiteral(), Ident("b"))),
+      Apply("a", List(ThisLiteral(), Ident("b"), Ident("c"))),
+      Apply("a", List(ThisLiteral(), Ident("b"), Apply("c", List(ThisLiteral(), Ident("d")))))
     ))
   }
 
