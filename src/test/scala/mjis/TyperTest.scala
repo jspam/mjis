@@ -23,7 +23,9 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
       classes(0).methods(0).body.statements(0)
   }
 
-  def typedStmt(text: String): Typed = stmt(text).asInstanceOf[Typed]
+  def method(text: String): MethodDecl = {
+    compile(s"class Test { $text }").classes(0).methods(0)
+  }
 
   def expr(expr: String): Expression = {
     stmt(expr + ";").asInstanceOf[ExpressionStatement].expr
@@ -50,11 +52,16 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     expr("new void[42]") shouldNot succeedTyping
   }
 
-  it should "type return statements correctly" in {
-    typedStmt("return;") should succeedTypingWith(TypeBasic("void"))
-    typedStmt("return true;") should succeedTypingWith(TypeBasic("boolean"))
-    typedStmt("return null;") should succeedTypingWith(TypeBasic("null"))
-    typedStmt("return 42;") should succeedTypingWith(TypeBasic("int"))
+  ignore should "check for a correct return type" in {
+    for ((retType, retTypeIdx) <- List("void", "int", "boolean", "int[]", "boolean[][]").zipWithIndex) {
+      for ((retVal, retValIdx) <- List("", "42", "true", "new int[42]", "new boolean[42][]").zipWithIndex) {
+        val prog = s"public $retType test() { return $retVal; }"
+        withClue(prog) {
+          if (retTypeIdx == retValIdx) method(prog) should succeedTyping
+          else method(prog) shouldNot succeedTyping
+        }
+      }
+    }
   }
 
   it should "type empty statements correctly" in {
