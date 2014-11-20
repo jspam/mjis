@@ -29,6 +29,10 @@ object Typer {
   case class WrongNumberOfParametersError(expected: Int, actual: Int) extends SyntaxTreeError {
     override def msg: String = s"Wrong number of parameters: expected $expected, got $actual"
   }
+
+  case class MissingReturnStatementError() extends SyntaxTreeError {
+    override def msg: String = s"Control flow may reach end of non-void function"
+  }
 }
 
 class Typer(val input: Program) extends AnalysisPhase[Program] {
@@ -97,11 +101,15 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
 
   private def typecheckMethodDecl(m: MethodDecl) = {
     m.parameters.foreach(p => assertNotVoid(p.typ))
-    typecheckStatement(m.body, m).result
+    val hasReturnStatement = typecheckStatement(m.body, m).result
+    if (!hasReturnStatement && m.typ != VoidType) {
+      throw new TypecheckException(MissingReturnStatementError())
+    }
   }
 
-  /** @param m The surrounding method declaration of the statement */
-  private def typecheckStatement(s: Statement, m: MethodDecl): TailRec[Unit] = {
+  /** @param m The surrounding method declaration of the statement
+    * @return whether this statement or all of its children is/contains a ReturnStatement */
+  private def typecheckStatement(s: Statement, m: MethodDecl): TailRec[Boolean] = {
     s match {
       case LocalVarDeclStatement(_, typ, initializer) =>
         assertNotVoid(typ)
@@ -109,32 +117,37 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
           case Some(expr) =>
             typecheckExpression(expr)
             assertConvertible(getType(expr), typ)
-            done(Unit)
-          case None => done(Unit)
+            done(false)
+          case None => done(false)
         }
       case b: Block =>
-        def remainder(stmts: List[Statement]): TailRec[Unit] = stmts.headOption match {
-          case None => done(Unit)
-          case Some(stmt) => tailcall(typecheckStatement(stmt, m)).flatMap(_ => remainder(stmts.tail))
+        def remainder(stmts: List[Statement], hasReturnStatement: Boolean): TailRec[Boolean] = stmts.headOption match {
+          case None => done(hasReturnStatement)
+          case Some(stmt) => tailcall(typecheckStatement(stmt, m)).
+            flatMap(hasReturnStatement => remainder(stmts.tail, hasReturnStatement))
         }
-        remainder(b.statements)
+        remainder(b.statements, hasReturnStatement = false)
       case If(cond, ifTrue, ifFalse) =>
         typecheckExpression(cond)
         assertConvertible(getType(cond), TypeBasic("boolean"))
-        tailcall(typecheckStatement(ifTrue, m)).flatMap(_ => tailcall(typecheckStatement(ifFalse, m)))
+        tailcall(typecheckStatement(ifTrue, m)).flatMap(ifTrueHasReturn => {
+          tailcall(typecheckStatement(ifFalse, m)).flatMap(ifFalseHasReturn => {
+            done(ifTrueHasReturn && ifFalseHasReturn)
+          })
+        })
       case While(cond, body) =>
         typecheckExpression(cond)
         assertConvertible(getType(cond), TypeBasic("boolean"))
         tailcall(typecheckStatement(body, m))
       case ExpressionStatement(expr) =>
-        tailcall(typecheckExpression(expr))
+        tailcall(typecheckExpression(expr)).flatMap(_ => done(false))
       case ReturnStatement(Some(expr)) =>
         assertConvertible(getType(expr), m.typ)
-        tailcall(typecheckExpression(expr))
+        tailcall(typecheckExpression(expr)).flatMap(_ => done(true))
       case ReturnStatement(None) =>
         assertConvertible(VoidType, m.typ)
-        done(Unit)
-      case _ => done(Unit)
+        done(true)
+      case _ => done(false)
     }
   }
 

@@ -1,7 +1,7 @@
 package mjis
 
 import mjis.CompilerTestMatchers._
-import mjis.Typer.InvalidTypeError
+import mjis.Typer._
 import mjis.ast._
 import mjis.Builtins._
 import org.scalatest._
@@ -84,6 +84,20 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     stmts("int x = null;") should failTypingWith(InvalidTypeError(IntType, NullType))
     stmts("boolean x = null;") should failTypingWith(InvalidTypeError(BooleanType, NullType))
     stmts("Test x = null;") should succeedTyping
+  }
+
+  it should "check that a non-void function reaches a return statement on every code path" in {
+    method("public void foo() { } ") should succeedTyping
+    method("public int foo() { { { { return 0; } } } } ") should succeedTyping
+    method("public int foo() { { while (true) return 0; } }") should succeedTyping
+    method("public int foo() { { while (true) { return 0; } } }") should succeedTyping
+    method("public int foo() { { if (true) return 0; else return 1; } }") should succeedTyping
+    method("public int foo() { { if (true) { return 0; } else { return 1; } } }") should succeedTyping
+
+    method("public int foo() { }") should failTypingWith(MissingReturnStatementError())
+    method("public int foo() { if (true) return 0; else; }") should failTypingWith(MissingReturnStatementError())
+    method("public int foo() { if (true) { if (false) return 0; else; } else return 1; }") should
+      failTypingWith(MissingReturnStatementError())
   }
 
 }
