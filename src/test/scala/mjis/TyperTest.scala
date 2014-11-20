@@ -19,10 +19,9 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     parser.result.orNull
   }
 
-  def stmt(text: String): Statement = {
-    compile(s"class Test { public void test() { $text } }").
-      classes(0).methods(0).body.statements(0)
-  }
+  def stmts(text: String): Program = compile(s"class Test { public void test() { $text } }")
+
+  def stmt(text: String): Statement = stmts(text).classes(0).methods(0).body.statements(0)
 
   def method(text: String): MethodDecl = {
     compile(s"class Test { $text }").classes(0).methods(0)
@@ -87,6 +86,12 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   it should "type check initializers of local variables" in {
     stmt("int foo = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
     // stmt("int foo = true + 2;") should failTypingWith(InvalidTypeError(IntType, BooleanType)) // needs namer
+  }
+
+  it should "allow assigning 'null' to references only" in {
+    stmts("int x = null;") should failTypingWith(InvalidTypeError(IntType, NullType))
+    stmts("boolean x = null;") should failTypingWith(InvalidTypeError(BooleanType, NullType))
+    stmts("Test x = null;") should succeedTyping
   }
 
 }

@@ -104,7 +104,7 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
 
   private def typecheckMethodDecl(m: MethodDecl) = {
     m.parameters.foreach(p => assertNotVoid(p.typ))
-    typecheckStatement(m.body)
+    typecheckStatement(m.body).result
   }
 
   private def typecheckStatement(s: Statement): TailRec[Unit] = {
@@ -119,13 +119,11 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
           case None => done(Unit)
         }
       case b: Block =>
-        val it = b.statements.iterator
-        def remainder(): TailRec[Unit] = {
-          if (it.hasNext) {
-            tailcall(typecheckStatement(it.next())).flatMap(_ => remainder())
-          } else done(Unit)
+        def remainder(stmts: List[Statement]): TailRec[Unit] = stmts.headOption match {
+          case None => done(Unit)
+          case Some(stmt) => tailcall(typecheckStatement(stmt)).flatMap(_ => remainder(stmts.tail))
         }
-        remainder()
+        remainder(b.statements)
       case If(cond, ifTrue, ifFalse) =>
         typecheckExpression(cond)
         assertConvertible(getType(cond), TypeBasic("boolean"))
