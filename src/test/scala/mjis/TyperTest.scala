@@ -51,6 +51,7 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   it should "disallow void everywhere but in method declarations" in {
     stmt("void x;") shouldNot succeedTyping
     compile("class Test { public void field; }") shouldNot succeedTyping
+    compile("class Test { public int method(void foo) {} }") shouldNot succeedTyping
     expr("new void[42]") shouldNot succeedTyping
   }
 

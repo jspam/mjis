@@ -103,6 +103,7 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
   }
 
   private def typecheckMethodDecl(m: MethodDecl) = {
+    m.parameters.foreach(p => assertNotVoid(p.typ))
     typecheckStatement(m.body)
   }
 
