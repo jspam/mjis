@@ -21,38 +21,32 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
   def stmts(text: String): Program = compile(s"class Test { public void test() { $text } }")
 
-  def stmt(text: String): Statement = stmts(text).classes(0).methods(0).body.statements(0)
-
-  def method(text: String): MethodDecl = {
-    compile(s"class Test { $text }").classes(0).methods(0)
-  }
-
-  def expr(expr: String): Expression = {
-    stmt(expr + ";").asInstanceOf[ExpressionStatement].expr
+  def method(text: String): Program = {
+    compile(s"class Test { $text }")
   }
 
   "The typer" should "type literals correctly" in {
-    expr("true") should succeedTypingWith(BooleanType)
-    expr("false") should succeedTypingWith(BooleanType)
-    expr("42") should succeedTypingWith(IntType)
-    expr("null") should succeedTypingWith(NullType)
+    stmts("true;") should succeedTyping
+    stmts("false;") should succeedTyping
+    stmts("42;") should succeedTyping
+    stmts("null;") should succeedTyping
   }
 
   it should "type NewArrayExpressions correctly" in {
-    expr("new int[1]") should succeedTypingWith(TypeArray(IntType, 1))
-    expr("new boolean[2][][]") should succeedTypingWith(TypeArray(BooleanType, 3))
+    stmts("new int[1];") should succeedTyping
+    stmts("new boolean[2][][];") should succeedTyping
   }
 
   it should "check that the dimensions in NewArrayExpressions are Integers" in {
-    expr("new int[true][]") should failTypingWith(InvalidTypeError(IntType, BooleanType))
-    expr("new boolean[null][]") should failTypingWith(InvalidTypeError(IntType, NullType))
+    stmts("new int[true][];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    stmts("new boolean[null][];") should failTypingWith(InvalidTypeError(IntType, NullType))
   }
 
   it should "disallow void everywhere but in method declarations" in {
-    stmt("void x;") shouldNot succeedTyping
+    stmts("void x;") shouldNot succeedTyping
     compile("class Test { public void field; }") shouldNot succeedTyping
     compile("class Test { public int method(void foo) {} }") shouldNot succeedTyping
-    expr("new void[42]") shouldNot succeedTyping
+    stmts("new void[42];") shouldNot succeedTyping
   }
 
   ignore should "check for a correct return type" in {
@@ -68,23 +62,23 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "type empty statements correctly" in {
-    stmt(";") should succeedTyping
+    stmts(";") should succeedTyping
   }
 
   it should "check whether the condition of an If statement is a Boolean expression" in {
-    stmt("if (true);") should succeedTyping
-    stmt("if (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
-    stmt("if (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    stmts("if (true);") should succeedTyping
+    stmts("if (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
+    stmts("if (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
   }
 
   it should "check whether the condition of a While statement is a Boolean expression" in {
-    stmt("while (true);") should succeedTyping
-    stmt("while (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
-    stmt("while (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    stmts("while (true);") should succeedTyping
+    stmts("while (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
+    stmts("while (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
   }
 
   it should "type check initializers of local variables" in {
-    stmt("int foo = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    stmts("int foo = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
     // stmt("int foo = true + 2;") should failTypingWith(InvalidTypeError(IntType, BooleanType)) // needs namer
   }
 

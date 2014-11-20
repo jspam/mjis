@@ -30,11 +30,11 @@ object Typer {
   }
 }
 
-class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
+class Typer(val input: Program) extends AnalysisPhase[Program] {
 
   private case class TypecheckException(finding: Finding) extends Exception
 
-  override protected def getResult(): SyntaxTree = { typecheckSyntaxTree(input); input }
+  override protected def getResult(): Program = { typecheckProgram(input); input }
 
   private val _findings = ListBuffer.empty[Finding]
   override def findings: List[Finding] = _findings.toList
@@ -77,20 +77,12 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
     }
   }
 
-  def typecheckSyntaxTree(t: SyntaxTree) = {
+  private def typecheckProgram(p: Program) = {
     try {
-      t match {
-        case e: Expression => typecheckExpression(e)
-        case s: Statement => typecheckStatement(s)
-        case p: Program => typecheckProgram(p)
-      }
+      p.classes.foreach(typecheckClassDecl)
     } catch {
       case TypecheckException(error) => _findings += error
     }
-  }
-
-  private def typecheckProgram(p: Program) = {
-    p.classes.foreach(typecheckClassDecl)
   }
 
   private def typecheckClassDecl(c: ClassDecl) = {
