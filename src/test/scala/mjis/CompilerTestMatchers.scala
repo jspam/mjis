@@ -1,7 +1,7 @@
 package mjis
 
 import org.scalatest.matchers.{ MatchResult, Matcher }
-import mjis.ast.SyntaxTree
+import mjis.ast._
 import System.{ lineSeparator => n }
 import mjis.util.PrettyPrinter
 import java.io.{StringReader, StringWriter, BufferedWriter}
@@ -63,10 +63,55 @@ trait CompilerTestMatchers {
     }
   }
 
+  class TyperSuccessMatcherWithExpectedType(expectedType: TypeDef = null) extends Matcher[Expression] {
+    def apply(expr: Expression) = {
+      val typer = new Typer(expr)
+      typer.result
+      def findError: String =
+        if (!typer.success) s"Typing failed, Findings:$n${typer.findings.mkString(n)}"
+        else if (typer.getType(expr) != expectedType) s"Expected $expectedType, got ${typer.getType(expr)}"
+        else ""
+      MatchResult(
+        typer.success && typer.getType(expr) == expectedType,
+        findError,
+        s"Typing succeeded, expecting it to fail")
+    }
+  }
+
+  class TyperSuccessMatcher extends Matcher[SyntaxTree] {
+    def apply(tree: SyntaxTree) = {
+      val typer = new Typer(tree)
+      typer.result
+      MatchResult(
+        typer.success,
+        s"Typing failed, Findings:$n${typer.findings.mkString(n)}",
+        s"Typing succeeded, expecting it to fail")
+    }
+  }
+
+  class TyperFailMatcher(expectedFinding: Finding = null) extends Matcher[SyntaxTree] {
+    def apply(tree: SyntaxTree) = {
+      val typer = new Typer(tree)
+      typer.result
+      def findError: String =
+        if (typer.success) s"Typing succeeded, expecting it to fail"
+        else if (typer.findings.head != expectedFinding) s"Expected $expectedFinding, got ${typer.findings.head}"
+        else ""
+      MatchResult(
+        !typer.success && typer.findings.head == expectedFinding,
+        findError,
+        s"Typing failed, expecting it to succeed")
+    }
+  }
+
   def succeedLexing() = new LexerSuccessMatcher()
   def succeedParsing() = new ParserSuccessMatcher(None)
   def succeedParsingWith(expectedAST: SyntaxTree) = new ParserSuccessMatcher(Some(expectedAST))
   def succeedPrettyPrintingWith(expectedString: String) = new PrettyPrinterSuccessMatcher(expectedString)
+  def succeedTyping = new TyperSuccessMatcher()
+  def succeedTypingWith(expectedType: TypeDef) = new TyperSuccessMatcherWithExpectedType(expectedType)
+  def failTyping = new TyperFailMatcher()
+  def failTypingWith(expectedFinding: Finding) = new TyperFailMatcher(expectedFinding)
 
 }
 
