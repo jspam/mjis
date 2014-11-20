@@ -48,7 +48,9 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     expr("new boolean[null][]") should failTypingWith(InvalidTypeError(TypeBasic("int"), TypeBasic("null")))
   }
 
-  it should "disallow NewArrayExpressions with void as basic type" in {
+  it should "disallow void everywhere but in method declarations" in {
+    stmt("void x;") shouldNot succeedTyping
+    compile("class Test { public void field; }") shouldNot succeedTyping
     expr("new void[42]") shouldNot succeedTyping
   }
 

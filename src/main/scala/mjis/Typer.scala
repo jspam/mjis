@@ -13,8 +13,8 @@ object Typer {
     override def pos: Position = new Position(0, 0, "") // TODO: element.position
   }
 
-  case class ArrayOfVoidError() extends SyntaxTreeError {
-    override def msg: String = s"Unresolved reference"
+  case class VoidUsageError() extends SyntaxTreeError {
+    override def msg: String = s"'void' is only valid as a method return type"
   }
 
   case class UnresolvedReferenceError() extends SyntaxTreeError {
@@ -71,11 +71,18 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
       throw new TypecheckException(new InvalidTypeError(to, from))
   }
 
+  private def assertNotVoid(typ: TypeDef) = {
+    if (typ == TypeBasic("void")) {
+      throw new TypecheckException(new VoidUsageError())
+    }
+  }
+
   def typecheckSyntaxTree(t: SyntaxTree) = {
     try {
       t match {
         case e: Expression => typecheckExpression(e)
         case s: Statement => typecheckStatement(s)
+        case p: Program => typecheckProgram(p)
       }
     } catch {
       case TypecheckException(error) => _findings += error
@@ -87,7 +94,12 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
   }
 
   private def typecheckClassDecl(c: ClassDecl) = {
+    c.fields.foreach(typecheckFieldDecl)
     c.methods.foreach(typecheckMethodDecl)
+  }
+
+  private def typecheckFieldDecl(f: FieldDecl) = {
+    assertNotVoid(f.typ)
   }
 
   private def typecheckMethodDecl(m: MethodDecl) = {
@@ -96,13 +108,15 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
 
   private def typecheckStatement(s: Statement): TailRec[Unit] = {
     s match {
-      case LocalVarDeclStatement(_, typ, initializer) => initializer match {
-        case Some(expr) =>
-          typecheckExpression(expr)
-          assertConvertible(getType(expr), typ)
-          done(Unit)
-        case None => done(Unit)
-      }
+      case LocalVarDeclStatement(_, typ, initializer) =>
+        assertNotVoid(typ)
+        initializer match {
+          case Some(expr) =>
+            typecheckExpression(expr)
+            assertConvertible(getType(expr), typ)
+            done(Unit)
+          case None => done(Unit)
+        }
       case b: Block =>
         val it = b.statements.iterator
         def remainder(): TailRec[Unit] = {
@@ -152,9 +166,7 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
             remainder()
         }
       case NewArray(typ, firstDimSize, _) =>
-        if (typ == TypeBasic("void")) {
-          throw new TypecheckException(new ArrayOfVoidError())
-        }
+        assertNotVoid(typ)
         assertConvertible(getType(firstDimSize), TypeBasic("int"))
         done(Unit)
       case _ => done(Unit)
