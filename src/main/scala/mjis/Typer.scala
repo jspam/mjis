@@ -167,13 +167,11 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
             if (a.arguments.size != decl.parameters.size) {
               throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size, a.arguments.size))
             }
-            val it = a.arguments.iterator
-            def remainder(): TailRec[Unit] = {
-              if (it.hasNext) {
-                tailcall(typecheckExpression(it.next())).flatMap(_ => remainder())
-              } else done(Unit)
+            def remainder(arguments: List[Expression]): TailRec[Unit] = arguments.headOption match {
+              case None => done(Unit)
+              case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => remainder(arguments.tail))
             }
-            remainder()
+            remainder(a.arguments)
         }
       case NewArray(typ, firstDimSize, _) =>
         assertNotVoid(typ)
