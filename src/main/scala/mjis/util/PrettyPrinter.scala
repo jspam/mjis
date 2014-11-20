@@ -126,7 +126,7 @@ class PrettyPrinter(writer: Writer) {
         emit(".")
         emit(name)
       case Ident(name) => emit(name)
-      case ThisLiteral => emit("this")
+      case ThisLiteral() => emit("this")
       case NullLiteral => emit("null")
       case IntLiteral(value) => emit(value)
       case TrueLiteral => emit("true")
@@ -158,7 +158,7 @@ class PrettyPrinter(writer: Writer) {
       }
     } else {
       // normal method calls
-      if (invoc.arguments(0) != ThisLiteral) {
+      if (invoc.arguments(0) != ThisLiteral()) {
         // all explicit `this` literals are stripped (there's no way to find out which ones were implicit anyways)
         printExpression(invoc.arguments(0))
         emit(".")
@@ -220,9 +220,9 @@ class PrettyPrinter(writer: Writer) {
   private def printType(typ: TypeDef): Unit = {
     typ match {
       case TypeBasic(name) => emit(name)
-      case TypeArray(elementType) =>
-        printType(elementType)
-        emit("[]")      
+      case TypeArray(basicType, numDimensions) =>
+        printType(basicType)
+        for (_ <- 0 until numDimensions) emit("[]")
     }
   }
 }

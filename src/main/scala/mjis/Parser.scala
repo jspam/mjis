@@ -95,7 +95,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     ClassDecl(ident, methods.toList, fields.toList)
   }
 
-  private def parseClassMember(): MemberDecl = {
+  private def parseClassMember(): TypedDecl = {
     expectSymbol(Public)
     if (currentToken.data == Static) {
       // found main method
@@ -148,14 +148,14 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
   }
 
   private def parseType(): TypeDef = {
-    val basicTyp: TypeBasic = parseBasicType()
-    var typ: TypeDef = basicTyp
+    val basicType: TypeBasic = parseBasicType()
+    var numDimensions = 0
     while (currentToken.data == SquareBracketOpen) {
       consume()
-      typ = TypeArray(typ)
+      numDimensions += 1
       expectSymbol(SquareBracketClosed)
     }
-    typ
+    if (numDimensions == 0) basicType else TypeArray(basicType, numDimensions)
   }
 
   private def parseParameters(): List[Parameter] = {
@@ -330,12 +330,12 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         done(IntLiteral(int))
       case This =>
         consume()
-        done(ThisLiteral)
+        done(ThisLiteral())
       case Identifier(s) =>
         // Identifier or method call
         consume()
         if (currentToken.data == ParenOpen)
-          parseParenthesizedArguments().map(params => Apply(s, ThisLiteral +: params))
+          parseParenthesizedArguments().map(params => Apply(s, ThisLiteral() +: params))
         else
           done(Ident(s))
       case ParenOpen =>
