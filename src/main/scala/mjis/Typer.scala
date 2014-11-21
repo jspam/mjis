@@ -124,7 +124,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
         def remainder(stmts: List[Statement], hasReturnStatement: Boolean): TailRec[Boolean] = stmts.headOption match {
           case None => done(hasReturnStatement)
           case Some(stmt) => tailcall(typecheckStatement(stmt, m)).
-            flatMap(hasReturnStatement => remainder(stmts.tail, hasReturnStatement))
+            flatMap(nextStatementHasReturn => remainder(stmts.tail, hasReturnStatement || nextStatementHasReturn))
         }
         remainder(b.statements, hasReturnStatement = false)
       case If(cond, ifTrue, ifFalse) =>
