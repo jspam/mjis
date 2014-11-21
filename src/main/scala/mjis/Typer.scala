@@ -56,16 +56,16 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
         case None => throw new TypecheckException(new UnresolvedReferenceError)
         case Some(decl) => decl.typ
       }
-      case NullLiteral => TypeBasic("null")
-      case _: IntLiteral => TypeBasic("int")
-      case _: BooleanLiteral => TypeBasic("boolean")
+      case NullLiteral => NullType
+      case _: IntLiteral => IntType
+      case _: BooleanLiteral => BooleanType
     }
   }
 
   private def isConvertible(from: TypeDef, to: TypeDef) = {
-    if (from == TypeBasic("null")) {
+    if (from == NullType) {
       // null is convertible to every reference type
-      to != TypeBasic("void") && to != TypeBasic("int") && to != TypeBasic("boolean")
+      to != VoidType && to != IntType && to != BooleanType
     } else {
       // we don't have any subtype relations
       from == to
@@ -77,7 +77,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   }
 
   private def assertNotVoid(typ: TypeDef) = {
-    if (typ == TypeBasic("void")) {
+    if (typ == VoidType) {
       throw new TypecheckException(new VoidUsageError())
     }
   }
@@ -120,16 +120,16 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
             done(false)
           case None => done(false)
         }
-      case b: Block =>
+      case Block(statements) =>
         def remainder(stmts: List[Statement], hasReturnStatement: Boolean): TailRec[Boolean] = stmts.headOption match {
           case None => done(hasReturnStatement)
           case Some(stmt) => tailcall(typecheckStatement(stmt, m)).
             flatMap(nextStatementHasReturn => remainder(stmts.tail, hasReturnStatement || nextStatementHasReturn))
         }
-        remainder(b.statements, hasReturnStatement = false)
+        remainder(statements, hasReturnStatement = false)
       case If(cond, ifTrue, ifFalse) =>
         typecheckExpression(cond)
-        assertConvertible(getType(cond), TypeBasic("boolean"))
+        assertConvertible(getType(cond), BooleanType)
         tailcall(typecheckStatement(ifTrue, m)).flatMap(ifTrueHasReturn => {
           tailcall(typecheckStatement(ifFalse, m)).flatMap(ifFalseHasReturn => {
             done(ifTrueHasReturn && ifFalseHasReturn)
@@ -137,7 +137,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
         })
       case While(cond, body) =>
         typecheckExpression(cond)
-        assertConvertible(getType(cond), TypeBasic("boolean"))
+        assertConvertible(getType(cond), BooleanType)
         tailcall(typecheckStatement(body, m))
       case ExpressionStatement(expr) =>
         tailcall(typecheckExpression(expr)).flatMap(_ => done(false))
@@ -175,7 +175,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
         }
       case NewArray(typ, firstDimSize, _) =>
         assertNotVoid(typ)
-        assertConvertible(getType(firstDimSize), TypeBasic("int"))
+        assertConvertible(getType(firstDimSize), IntType)
         done(Unit)
       case _ => done(Unit)
     }
