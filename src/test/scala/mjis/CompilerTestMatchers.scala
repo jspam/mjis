@@ -63,24 +63,9 @@ trait CompilerTestMatchers {
     }
   }
 
-  class TyperSuccessMatcherWithExpectedType(expectedType: TypeDef = null) extends Matcher[Expression] {
-    def apply(expr: Expression) = {
-      val typer = new Typer(expr)
-      typer.result
-      def findError: String =
-        if (!typer.success) s"Typing failed, Findings:$n${typer.findings.mkString(n)}"
-        else if (typer.getType(expr) != expectedType) s"Expected $expectedType, got ${typer.getType(expr)}"
-        else ""
-      MatchResult(
-        typer.success && typer.getType(expr) == expectedType,
-        findError,
-        s"Typing succeeded, expecting it to fail")
-    }
-  }
-
-  class TyperSuccessMatcher extends Matcher[SyntaxTree] {
-    def apply(tree: SyntaxTree) = {
-      val typer = new Typer(tree)
+  class TyperSuccessMatcher extends Matcher[Program] {
+    def apply(p: Program) = {
+      val typer = new Typer(p)
       typer.result
       MatchResult(
         typer.success,
@@ -89,9 +74,9 @@ trait CompilerTestMatchers {
     }
   }
 
-  class TyperFailMatcher(expectedFinding: Finding = null) extends Matcher[SyntaxTree] {
-    def apply(tree: SyntaxTree) = {
-      val typer = new Typer(tree)
+  class TyperFailMatcher(expectedFinding: Finding = null) extends Matcher[Program] {
+    def apply(p: Program) = {
+      val typer = new Typer(p)
       typer.result
       def findError: String =
         if (typer.success) s"Typing succeeded, expecting it to fail"
@@ -109,7 +94,6 @@ trait CompilerTestMatchers {
   def succeedParsingWith(expectedAST: SyntaxTree) = new ParserSuccessMatcher(Some(expectedAST))
   def succeedPrettyPrintingWith(expectedString: String) = new PrettyPrinterSuccessMatcher(expectedString)
   def succeedTyping = new TyperSuccessMatcher()
-  def succeedTypingWith(expectedType: TypeDef) = new TyperSuccessMatcherWithExpectedType(expectedType)
   def failTyping = new TyperFailMatcher()
   def failTypingWith(expectedFinding: Finding) = new TyperFailMatcher(expectedFinding)
 

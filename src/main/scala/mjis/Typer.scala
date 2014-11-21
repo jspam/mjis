@@ -3,6 +3,7 @@ package mjis
 import java.io.BufferedWriter
 import mjis.Typer._
 import mjis.ast._
+import mjis.Builtins._
 import scala.collection.mutable.ListBuffer
 import scala.util.control.TailCalls._
 
@@ -13,8 +14,8 @@ object Typer {
     override def pos: Position = new Position(0, 0, "") // TODO: element.position
   }
 
-  case class ArrayOfVoidError() extends SyntaxTreeError {
-    override def msg: String = s"Unresolved reference"
+  case class VoidUsageError() extends SyntaxTreeError {
+    override def msg: String = s"'void' is only valid as a method return type"
   }
 
   case class UnresolvedReferenceError() extends SyntaxTreeError {
@@ -28,13 +29,17 @@ object Typer {
   case class WrongNumberOfParametersError(expected: Int, actual: Int) extends SyntaxTreeError {
     override def msg: String = s"Wrong number of parameters: expected $expected, got $actual"
   }
+
+  case class MissingReturnStatementError() extends SyntaxTreeError {
+    override def msg: String = s"Control flow may reach end of non-void function"
+  }
 }
 
-class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
+class Typer(val input: Program) extends AnalysisPhase[Program] {
 
   private case class TypecheckException(finding: Finding) extends Exception
 
-  override protected def getResult(): SyntaxTree = { typecheckSyntaxTree(input); input }
+  override protected def getResult(): Program = { typecheckProgram(input); input }
 
   private val _findings = ListBuffer.empty[Finding]
   override def findings: List[Finding] = _findings.toList
@@ -51,16 +56,16 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
         case None => throw new TypecheckException(new UnresolvedReferenceError)
         case Some(decl) => decl.typ
       }
-      case NullLiteral => TypeBasic("null")
-      case _: IntLiteral => TypeBasic("int")
-      case _: BooleanLiteral => TypeBasic("boolean")
+      case NullLiteral => NullType
+      case _: IntLiteral => IntType
+      case _: BooleanLiteral => BooleanType
     }
   }
 
   private def isConvertible(from: TypeDef, to: TypeDef) = {
-    if (from == TypeBasic("null")) {
+    if (from == NullType) {
       // null is convertible to every reference type
-      to != TypeBasic("void") && to != TypeBasic("int") && to != TypeBasic("boolean")
+      to != VoidType && to != IntType && to != BooleanType
     } else {
       // we don't have any subtype relations
       from == to
@@ -71,59 +76,78 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
       throw new TypecheckException(new InvalidTypeError(to, from))
   }
 
-  def typecheckSyntaxTree(t: SyntaxTree) = {
+  private def assertNotVoid(typ: TypeDef) = {
+    if (typ == VoidType) {
+      throw new TypecheckException(new VoidUsageError())
+    }
+  }
+
+  private def typecheckProgram(p: Program) = {
     try {
-      t match {
-        case e: Expression => typecheckExpression(e)
-        case s: Statement => typecheckStatement(s)
-      }
+      p.classes.foreach(typecheckClassDecl)
     } catch {
       case TypecheckException(error) => _findings += error
     }
   }
 
-  private def typecheckProgram(p: Program) = {
-    p.classes.foreach(typecheckClassDecl)
-  }
-
   private def typecheckClassDecl(c: ClassDecl) = {
+    c.fields.foreach(typecheckFieldDecl)
     c.methods.foreach(typecheckMethodDecl)
   }
 
-  private def typecheckMethodDecl(m: MethodDecl) = {
-    typecheckStatement(m.body)
+  private def typecheckFieldDecl(f: FieldDecl) = {
+    assertNotVoid(f.typ)
   }
 
-  private def typecheckStatement(s: Statement): TailRec[Unit] = {
+  private def typecheckMethodDecl(m: MethodDecl) = {
+    m.parameters.foreach(p => assertNotVoid(p.typ))
+    val hasReturnStatement = typecheckStatement(m.body, m).result
+    if (!hasReturnStatement && m.typ != VoidType) {
+      throw new TypecheckException(MissingReturnStatementError())
+    }
+  }
+
+  /** @param m The surrounding method declaration of the statement
+    * @return whether this statement or all of its children is/contains a ReturnStatement */
+  private def typecheckStatement(s: Statement, m: MethodDecl): TailRec[Boolean] = {
     s match {
-      case LocalVarDeclStatement(_, typ, initializer) => initializer match {
-        case Some(expr) =>
-          typecheckExpression(expr)
-          assertConvertible(getType(expr), typ)
-          done(Unit)
-        case None => done(Unit)
-      }
-      case b: Block =>
-        val it = b.statements.iterator
-        def remainder(): TailRec[Unit] = {
-          if (it.hasNext) {
-            tailcall(typecheckStatement(it.next())).flatMap(_ => remainder())
-          } else done(Unit)
+      case LocalVarDeclStatement(_, typ, initializer) =>
+        assertNotVoid(typ)
+        initializer match {
+          case Some(expr) =>
+            typecheckExpression(expr)
+            assertConvertible(getType(expr), typ)
+            done(false)
+          case None => done(false)
         }
-        remainder()
+      case Block(statements) =>
+        def remainder(stmts: List[Statement], hasReturnStatement: Boolean): TailRec[Boolean] = stmts.headOption match {
+          case None => done(hasReturnStatement)
+          case Some(stmt) => tailcall(typecheckStatement(stmt, m)).
+            flatMap(nextStatementHasReturn => remainder(stmts.tail, hasReturnStatement || nextStatementHasReturn))
+        }
+        remainder(statements, hasReturnStatement = false)
       case If(cond, ifTrue, ifFalse) =>
         typecheckExpression(cond)
-        assertConvertible(getType(cond), TypeBasic("boolean"))
-        tailcall(typecheckStatement(ifTrue)).flatMap(_ => tailcall(typecheckStatement(ifFalse)))
+        assertConvertible(getType(cond), BooleanType)
+        tailcall(typecheckStatement(ifTrue, m)).flatMap(ifTrueHasReturn => {
+          tailcall(typecheckStatement(ifFalse, m)).flatMap(ifFalseHasReturn => {
+            done(ifTrueHasReturn && ifFalseHasReturn)
+          })
+        })
       case While(cond, body) =>
         typecheckExpression(cond)
-        assertConvertible(getType(cond), TypeBasic("boolean"))
-        tailcall(typecheckStatement(body))
+        assertConvertible(getType(cond), BooleanType)
+        tailcall(typecheckStatement(body, m))
       case ExpressionStatement(expr) =>
-        tailcall(typecheckExpression(expr))
+        tailcall(typecheckExpression(expr)).flatMap(_ => done(false))
       case ReturnStatement(Some(expr)) =>
-        tailcall(typecheckExpression(expr))
-      case _ => done(Unit)
+        assertConvertible(getType(expr), m.typ)
+        tailcall(typecheckExpression(expr)).flatMap(_ => done(true))
+      case ReturnStatement(None) =>
+        assertConvertible(VoidType, m.typ)
+        done(true)
+      case _ => done(false)
     }
   }
 
@@ -143,19 +167,15 @@ class Typer(val input: SyntaxTree) extends AnalysisPhase[SyntaxTree] {
             if (a.arguments.size != decl.parameters.size) {
               throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size, a.arguments.size))
             }
-            val it = a.arguments.iterator
-            def remainder(): TailRec[Unit] = {
-              if (it.hasNext) {
-                tailcall(typecheckExpression(it.next())).flatMap(_ => remainder())
-              } else done(Unit)
+            def remainder(arguments: List[Expression]): TailRec[Unit] = arguments.headOption match {
+              case None => done(Unit)
+              case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => remainder(arguments.tail))
             }
-            remainder()
+            remainder(a.arguments)
         }
       case NewArray(typ, firstDimSize, _) =>
-        if (typ == TypeBasic("void")) {
-          throw new TypecheckException(new ArrayOfVoidError())
-        }
-        assertConvertible(getType(firstDimSize), TypeBasic("int"))
+        assertNotVoid(typ)
+        assertConvertible(getType(firstDimSize), IntType)
         done(Unit)
       case _ => done(Unit)
     }
