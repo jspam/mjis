@@ -85,7 +85,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     val methods: ListBuffer[MethodDecl] = ListBuffer.empty
     val fields: ListBuffer[FieldDecl] = ListBuffer.empty
     while (currentToken.data != CurlyBraceClosed) {
-      val member = parseClassMember()
+      val member = parseClassMember(TypeBasic(ident))
       member match {
         case method: MethodDecl => methods += method
         case field: FieldDecl   => fields += field
@@ -95,7 +95,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     ClassDecl(ident, methods.toList, fields.toList)
   }
 
-  private def parseClassMember(): TypedDecl = {
+  private def parseClassMember(cls: TypeBasic): TypedDecl = {
     expectSymbol(Public)
     if (currentToken.data == Static) {
       // found main method
@@ -123,8 +123,8 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
         case ParenOpen =>
           // found method
           consume()
-          var params: List[Parameter] = Nil
-          if (currentToken.data != ParenClosed) params = parseParameters()
+          var params = List(Parameter("this", cls))
+          if (currentToken.data != ParenClosed) params ++= parseParameters()
           expectSymbol(ParenClosed)
           val body = parseBlock().result
           MethodDecl(ident, params, typ, body)

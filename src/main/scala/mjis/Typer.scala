@@ -9,10 +9,7 @@ import scala.util.control.TailCalls._
 
 object Typer {
 
-  abstract class SyntaxTreeError(/* element: SyntaxTree */) extends Finding {
-    def severity = Severity.ERROR
-    override def pos: Position = new Position(0, 0, "") // TODO: element.position
-  }
+  case class TypecheckException(finding: Finding) extends Exception
 
   case class VoidUsageError() extends SyntaxTreeError {
     override def msg: String = s"'void' is only valid as a method return type"
@@ -33,21 +30,9 @@ object Typer {
   case class MissingReturnStatementError() extends SyntaxTreeError {
     override def msg: String = s"Control flow may reach end of non-void function"
   }
-}
-
-class Typer(val input: Program) extends AnalysisPhase[Program] {
-
-  private case class TypecheckException(finding: Finding) extends Exception
-
-  override protected def getResult(): Program = { typecheckProgram(input); input }
-
-  private val _findings = ListBuffer.empty[Finding]
-  override def findings: List[Finding] = _findings.toList
-
-  override def dumpResult(writer: BufferedWriter): Unit = ???
 
   @annotation.tailrec
-  final def getType(t: Expression): TypeDef = {
+  def getType(t: Expression): TypeDef = {
     t match {
       case Assignment(_, rhs) => getType(rhs)
       case NewObject(typ) => typ
@@ -61,6 +46,16 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       case _: BooleanLiteral => BooleanType
     }
   }
+}
+
+class Typer(val input: Program) extends AnalysisPhase[Program] {
+
+  override protected def getResult(): Program = { typecheckProgram(input); input }
+
+  private val _findings = ListBuffer.empty[Finding]
+  override def findings: List[Finding] = _findings.toList
+
+  override def dumpResult(writer: BufferedWriter): Unit = ???
 
   private def isConvertible(from: TypeDef, to: TypeDef) = {
     if (from == NullType) {

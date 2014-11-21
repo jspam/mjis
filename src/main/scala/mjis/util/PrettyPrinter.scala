@@ -179,16 +179,15 @@ class PrettyPrinter(writer: Writer) {
       emit("static ")
     printType(method.typ)
     emit(" " + method.name + "(")
-    var i = 0
-    for (param <- method.parameters) {
+    for (i <- (if (method.isStatic) 0 else 1) until method.parameters.length) {
+      val param = method.parameters(i)
       printType(param.typ)
       emit(" ")
       emit(param.name)
-      i += 1
-      if (method.parameters.length > i) emit(", ")
+      if (i < method.parameters.length - 1) emit(", ")
     }
     emit(") ")
-    printBlock(method.body.asInstanceOf[Block])
+    printBlock(method.body)
   }
 
   private def printBlock(block: Block): Unit = {

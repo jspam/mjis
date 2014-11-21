@@ -19,7 +19,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   )
   def statementsAST(innerAST: Statement*) = Program(List(
     ClassDecl("Test", List(
-      MethodDecl("test", List(), Builtins.VoidType,
+      MethodDecl("test", List(Parameter("this", TypeBasic("Test"))), Builtins.VoidType,
         Block(innerAST.toList)
       )
     ), List())
@@ -114,7 +114,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     // this is interesting because it's a spot where the grammar isn't SLL(1)
     parseProgram("class a { public void foo ( ) { a [ 2 ] ; } }") should succeedParsingWith(Program(List(
       ClassDecl("a", List(
-        MethodDecl("foo", List(), Builtins.VoidType, Block(List(
+        MethodDecl("foo", List(Parameter("this", TypeBasic("a"))), Builtins.VoidType, Block(List(
           ExpressionStatement(Apply("[]", List(Ident("a"), IntLiteral("2")), isOperator=true))
         )))
       ), List())
