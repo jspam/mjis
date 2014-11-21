@@ -19,6 +19,10 @@ object Typer {
     override def msg: String = s"Unresolved reference"
   }
 
+  case class IncomparableTypesError(type1: TypeDef, type2: TypeDef) extends SyntaxTreeError {
+    override def msg: String = s"Incomparable types: $type1 and $type2"
+  }
+
   case class InvalidTypeError(expected: TypeDef, actual: TypeDef) extends SyntaxTreeError {
     override def msg: String = s"Invalid type: expected $expected, got $actual"
   }
@@ -60,7 +64,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   private def isConvertible(from: TypeDef, to: TypeDef) = {
     if (from == NullType) {
       // null is convertible to every reference type
-      to != VoidType && to != IntType && to != BooleanType
+      to != VoidType && !ValueTypes.contains(to)
     } else {
       // we don't have any subtype relations
       from == to
@@ -163,11 +167,23 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
             if (a.arguments.size != decl.parameters.size) {
               throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size, a.arguments.size))
             }
-            def remainder(arguments: List[Expression]): TailRec[Unit] = arguments.headOption match {
-              case None => done(Unit)
-              case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => remainder(arguments.tail))
+            // Special case == and !=
+            if (decl == EqualsDecl || decl == UnequalDecl) {
+              val typeLeft = getType(a.arguments(0))
+              val typeRight = getType(a.arguments(1))
+              val comparable = isConvertible(typeLeft, typeRight) || isConvertible(typeRight, typeLeft)
+
+              if (!comparable) {
+                throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight))
+              }
+              done(Unit)
+            } else {
+              def remainder(arguments: List[Expression]): TailRec[Unit] = arguments.headOption match {
+                case None => done(Unit)
+                case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => remainder(arguments.tail))
+              }
+              remainder(a.arguments)
             }
-            remainder(a.arguments)
         }
       case NewArray(typ, firstDimSize, _) =>
         assertNotVoid(typ)
