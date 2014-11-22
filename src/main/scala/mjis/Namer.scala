@@ -45,7 +45,10 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     override def visit(method: MethodDecl): Unit = {
       values.enterScope()
       method.parameters.foreach(values.insert)
-      super.visit(method)
+      if (method.isStatic)
+        visit(method.body) // do not visit the arguments since 'String' is not defined in general
+      else
+        super.visit(method)
       values.leaveScope()
     }
     override def visit(stmt: Block): Unit = {
