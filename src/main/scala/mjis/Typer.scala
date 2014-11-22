@@ -15,6 +15,10 @@ object Typer {
     override def msg: String = s"'void' is only valid as a method return type"
   }
 
+  case class ArrayAccessOnNonArrayError(actual: TypeDef) extends SyntaxTreeError {
+    override def msg: String = s"Invalid type: expected an array type, got $actual"
+  }
+
   case class UnresolvedReferenceError() extends SyntaxTreeError {
     override def msg: String = s"Unresolved reference"
   }
@@ -35,19 +39,25 @@ object Typer {
     override def msg: String = s"Control flow may reach end of non-void function"
   }
 
-  @annotation.tailrec
-  def getType(t: Expression): TypeDef = {
+  def getType(t: Expression) = getTypeRec(t).result
+  def getTypeRec(t: Expression): TailRec[TypeDef] = {
     t match {
-      case Assignment(_, rhs) => getType(rhs)
-      case NewObject(typ) => typ
-      case NewArray(typ, _, additionalDims) => TypeArray(typ, additionalDims + 1)
+      case Assignment(_, rhs) => tailcall(getTypeRec(rhs))
+      case NewObject(typ) => done(typ)
+      case NewArray(typ, _, additionalDims) => done(TypeArray(typ, additionalDims + 1))
       case r: Ref[TypedDecl] => r.decl match { /* ThisLiteral, Ident, Select, Apply */
         case None => throw new TypecheckException(new UnresolvedReferenceError)
-        case Some(decl) => decl.typ
+        case Some(ArrayAccessDecl) => /* can only happen when r is an Apply */
+          tailcall(getTypeRec(r.asInstanceOf[Apply].arguments(0))).flatMap {
+            case TypeArray(basicType, numDimensions) =>
+              done(if (numDimensions == 1) basicType else TypeArray(basicType, numDimensions - 1))
+            case otherType => throw new TypecheckException(new ArrayAccessOnNonArrayError(otherType))
+          }
+        case Some(decl) => done(decl.typ)
       }
-      case NullLiteral => NullType
-      case _: IntLiteral => IntType
-      case _: BooleanLiteral => BooleanType
+      case NullLiteral => done(NullType)
+      case _: IntLiteral => done(IntType)
+      case _: BooleanLiteral => done(BooleanType)
     }
   }
 }
@@ -114,7 +124,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
         assertNotVoid(typ)
         initializer match {
           case Some(expr) =>
-            typecheckExpression(expr)
+            typecheckExpression(expr).result
             assertConvertible(getType(expr), typ)
             done(false)
           case None => done(false)
@@ -127,7 +137,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
         }
         remainder(statements, hasReturnStatement = false)
       case If(cond, ifTrue, ifFalse) =>
-        typecheckExpression(cond)
+        typecheckExpression(cond).result
         assertConvertible(getType(cond), BooleanType)
         tailcall(typecheckStatement(ifTrue, m)).flatMap(ifTrueHasReturn => {
           tailcall(typecheckStatement(ifFalse, m)).flatMap(ifFalseHasReturn => {
@@ -135,7 +145,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
           })
         })
       case While(cond, body) =>
-        typecheckExpression(cond)
+        typecheckExpression(cond).result
         assertConvertible(getType(cond), BooleanType)
         tailcall(typecheckStatement(body, m))
         done(false)
@@ -178,17 +188,26 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
               }
               done(Unit)
             } else {
-              def remainder(arguments: List[Expression]): TailRec[Unit] = arguments.headOption match {
-                case None => done(Unit)
-                case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => remainder(arguments.tail))
+              def remainder(args: Seq[Expression], params: Seq[Parameter]): TailRec[Unit] =
+                args.headOption match {
+                  case None => done(Unit)
+                  case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => {
+                    if (!isConvertible(getType(argument), params.head.typ)) {
+                      throw new TypecheckException(InvalidTypeError(params.head.typ, getType(argument)))
+                    }
+                    remainder(args.tail, params.tail)
+                  })
               }
-              remainder(a.arguments)
+              if (decl == ArrayAccessDecl)
+                remainder(a.arguments.tail, decl.parameters.tail)
+              else
+                remainder(a.arguments, decl.parameters)
             }
         }
       case NewArray(typ, firstDimSize, _) =>
         assertNotVoid(typ)
         assertConvertible(getType(firstDimSize), IntType)
-        done(Unit)
+        tailcall(typecheckExpression(firstDimSize)).flatMap(_ => done(Unit))
       case _ => done(Unit)
     }
   }
