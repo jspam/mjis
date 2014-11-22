@@ -78,11 +78,44 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("true + 42;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
   }
 
-  it should "typecheck method arguments" in {
-    "class Test { public void test(int x, int y) { test(true + 42, 42); } }" should
-      failTypingWith(InvalidTypeError(IntType, BooleanType))
-    "class Test { public void test(int x, int y) { test(42, true + 42); } }" should
-      failTypingWith(InvalidTypeError(IntType, BooleanType))
+  it should "typecheck method calls" in {
+    def testProg(stmt: String) = "class Test2 {}" +
+      s"class Test { public void main() { $stmt } " +
+      "public void noParams() {} " +
+      "public void oneIntParam(int x) {} " +
+      "public void twoIntParams(int x, int y) {} " +
+      "public void twoMixedParams(int x, boolean y) {} " +
+      "public void twoArrayParams(int[] x, boolean[] y) {} " +
+      "public void twoObjectParams(Test x, Test2 y) {} }"
+
+    testProg("noParams();") should succeedTyping
+    testProg("noParams(42 + 16);") should failTypingWith(WrongNumberOfParametersError(0, 1))
+    testProg("noParams(42 + 16, new Test(), true);") should failTypingWith(WrongNumberOfParametersError(0, 3))
+
+    testProg("oneIntParam();") should failTypingWith(WrongNumberOfParametersError(1, 0))
+    testProg("oneIntParam(42 + 16);") should succeedTyping
+    testProg("oneIntParam(true);") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+
+    testProg("twoIntParams();") should failTypingWith(WrongNumberOfParametersError(2, 0))
+    testProg("twoIntParams(42 + 16, true);") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+
+    testProg("twoMixedParams(42 + 16, true);") should succeedTyping
+    testProg("twoMixedParams(true, 42 + 16);") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+
+    testProg("twoArrayParams(new int[42], new boolean[42]);") should succeedTyping
+    testProg("twoArrayParams(new int[42][], new boolean[42]);") should
+      failTypingWith(InvalidTypeError(TypeArray(IntType, 1), TypeArray(IntType, 2)))
+    testProg("twoArrayParams(42, new boolean[42]);") should
+      failTypingWith(InvalidTypeError(TypeArray(IntType, 1), IntType))
+
+    testProg("twoObjectParams(new Test(), new Test2());") should succeedTyping
+    testProg("twoObjectParams(null, null);") should succeedTyping
+    testProg("twoObjectParams(new Test2(), new Test2());") should
+      failTypingWith(InvalidTypeError(TypeBasic("Test"), TypeBasic("Test2")))
+
+    // type errors in the argument expressions themselves
+    testProg("twoIntParams(true + 42, 42);") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    testProg("twoIntParams(42, true + 42);") should failTypingWith(InvalidTypeError(IntType, BooleanType))
   }
 
   it should "typecheck the condition of an If statement" in {
@@ -173,6 +206,7 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("int x; int[][] xs = new int[1][]; x = xs[1];") should
       failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 1)))
     fromStatements("int x; int[][] xs = new int[1][]; x = xs[1][2];") should succeedTyping
+    fromStatements("int x = new int[1][][1][2];") should succeedTyping
     fromStatements("int x; int[][] xs = new int[1][]; x = xs[1][2][3];") should
       failTypingWith(ArrayAccessOnNonArrayError(IntType))
 

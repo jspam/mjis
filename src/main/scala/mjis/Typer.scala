@@ -195,7 +195,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
           case None => throw new TypecheckException(new UnresolvedReferenceError)
           case Some(decl) =>
             if (a.arguments.size != decl.parameters.size) {
-              throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size, a.arguments.size))
+              throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size - 1, a.arguments.size - 1))
             }
             // Special case == and !=
             if (decl == EqualsDecl || decl == UnequalDecl) {
