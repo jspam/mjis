@@ -50,6 +50,11 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     getRefDecl(statements(0)) shouldBe program.classes(0).methods(0)
   }
 
+  it should "ignore parameters of a static method" in {
+    val program = parseProgram("class Test{ public static void main(String[] args) { } }")
+    program should succeedNaming
+  }
+
   it should "disallow accessing the 'this' pointer in a static method" in {
     val program = parseProgram("class Test{ public static void foo(String[] fooArgs) { this; } }")
     program shouldNot succeedNaming
