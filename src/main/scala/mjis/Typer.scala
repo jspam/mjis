@@ -55,7 +55,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   private val _findings = ListBuffer.empty[Finding]
   override def findings: List[Finding] = _findings.toList
 
-  override def dumpResult(writer: BufferedWriter): Unit = ???
+  override def dumpResult(writer: BufferedWriter): Unit = {} // no stdout output, just the error code
 
   private def isConvertible(from: TypeDef, to: TypeDef) = {
     if (from == NullType) {

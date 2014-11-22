@@ -19,6 +19,9 @@ object CLIMain extends App {
     opt[Unit]("print-ast") action { (phase, config) =>
       config.copy(stopAfter = "parser")
     } text ("Run the parser and output the result in a standardized format")
+    opt[Unit]("check") action { (phase, config) =>
+      config.copy(stopAfter = "semantics")
+    } text ("Run all semantics checks and exit")
     opt[String]("stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")
