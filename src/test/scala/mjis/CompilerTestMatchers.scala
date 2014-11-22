@@ -3,111 +3,74 @@ package mjis
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
 import System.{ lineSeparator => n }
-import mjis.util.PrettyPrinter
 import java.io.{StringReader, StringWriter, BufferedWriter}
+
+import scala.reflect.ClassTag
 
 trait CompilerTestMatchers {
 
-  class LexerSuccessMatcher() extends Matcher[Lexer] {
-    def apply(lexer: Lexer) = {
-      lexer.result.length
-      MatchResult(
-        lexer.success,
-        "Lexing failed, expected it to succeed. Findings: " + System.lineSeparator() +
-          lexer.findings.mkString(System.lineSeparator()),
-        "Lexing succeeded, expected it to fail")
+  class AnalysisPhaseSuccessMatcher[P <: AnalysisPhase[_]: ClassTag]() extends Matcher[String] {
+    def mkFailureMessage(phase: P): Option[String] = None
+    def apply(input: String) = {
+      val result = Compiler.exec[P](new StringReader(input))
+      val failureMessage = result match {
+        case Left(phase) => mkFailureMessage(phase)
+        case _ => Some(s"Failed, expected to succeed. Findings:$n${result.right.get.mkString(n)}")
+      }
+
+      MatchResult(failureMessage.isEmpty, failureMessage.getOrElse(""), "Succeeded, expected to fail")
     }
   }
 
-  class ParserSuccessMatcher(expectedAST: Option[SyntaxTree]) extends Matcher[Parser] {
-    def apply(parser: Parser) = {
-      val result = parser.result
-      def findError: String =
-        if (!parser.success) s"Findings:$n${parser.findings.mkString(n)}"
-        else if (expectedAST.isDefined)
-          s"$n  Expected AST: ${expectedAST.get}$n  Computed AST: ${result.get}$n"
-        else
-          ""
-      MatchResult(
-        parser.success && (expectedAST.isEmpty || result == expectedAST),
-        "Parsing failed, expected it to succeed. " + findError,
-        "Parsing succeeded, expected it to fail")
+  class AnalysisPhaseSuccessWithMatcher[O, P <: AnalysisPhase[O]: ClassTag](expected: O) extends AnalysisPhaseSuccessMatcher[P] {
+    override def mkFailureMessage(phase: P): Option[String] =
+      if (expected == phase.result) None
+      else Some(s"Expected: $expected${n}Computed: ${phase.result}")
+  }
+
+  class AnalysisPhaseFailureWithMatcher[P <: AnalysisPhase[_]: ClassTag](expectedFinding: Finding) extends Matcher[String] {
+    def apply(input: String) = {
+      val result = Compiler.exec[P](new StringReader(input))
+      val failureMessage = result match {
+        case Right(findings) =>
+          if (expectedFinding == findings.head) None
+          else Some(s"Expected ${expectedFinding}, got ${findings.head}")
+        case _ => Some(s"Succeeded, expected to fail.")
+      }
+
+      MatchResult(failureMessage.isEmpty, failureMessage.getOrElse(""), "Why would you negate this??")
     }
   }
 
-  class PrettyPrinterSuccessMatcher(expectedString: String) extends Matcher[Parser] {
-    def apply(parser: Parser) = {
-      val result = parser.result
-      val stw = new StringWriter()
-      new PrettyPrinter(stw).print(result.get)
-      val prettyPrint = stw.toString
-      def findError: String = s"$n  Expected String:$n$expectedString$n  Computed String:$n$prettyPrint$n"
-
-      val success = prettyPrint == expectedString
-      val error = if (success) "" else findError
-
-      // second pass to make sure round-tripping works and pretty printer is idempotent
-      val roundtrip_result = new Parser(new Lexer(new StringReader(prettyPrint)).result).result
-      val stw2 = new StringWriter()
-      new PrettyPrinter(stw2).print(roundtrip_result.get)
-      val prettyPrint2 = stw2.toString
-      def findError2: String = s"$n  Round-tripping failed:$n$prettyPrint2$n  Computed String:$n$prettyPrint$n"
-
-      val success2 = prettyPrint == prettyPrint2
-      val error2 = if (success2) "" else findError2
-
-      MatchResult(
-        success && success2,
-        s"Pretty printing failed, expected it to succeed.$error$error2",
-        "Parsing succeeded, expected it to fail")
+  class PrettyPrinterSuccessMatcher(expectedString: String) extends AnalysisPhaseSuccessMatcher[Parser]() {
+    override def mkFailureMessage(parser: Parser) = {
+      val out = new StringWriter()
+      parser.dumpResult(new BufferedWriter(out))
+      if (out.toString != expectedString)
+        Some(s"Expected: $expectedString${n}Computed: ${out.toString}")
+      else {
+        // second pass to make sure round-tripping works and pretty printer is idempotent
+        Compiler.exec[Parser](new StringReader(out.toString)) match {
+          case Left(parser2) =>
+            val out2 = new StringWriter()
+            parser2.dumpResult(new BufferedWriter(out2))
+            if (out2.toString == expectedString) None
+            else Some(s"Round-tripping failed:$n${out2.toString}${n}Original String:$n${out.toString}$n")
+          case Right(findings) => Some(s"Round-tripping failed:$n$findings")
+        }
+      }
     }
   }
 
-  class TyperSuccessMatcher extends Matcher[Program] {
-    def apply(p: Program) = {
-      val typer = new Typer(p)
-      typer.result
-      MatchResult(
-        typer.success,
-        s"Typing failed, Findings:$n${typer.findings.mkString(n)}",
-        s"Typing succeeded, expecting it to fail")
-    }
-  }
-
-  class TyperFailMatcher(expectedFinding: Finding = null) extends Matcher[Program] {
-    def apply(p: Program) = {
-      val typer = new Typer(p)
-      typer.result
-      def findError: String =
-        if (typer.success) s"Typing succeeded, expecting it to fail"
-        else if (typer.findings.head != expectedFinding) s"Expected $expectedFinding, got ${typer.findings.head}"
-        else ""
-      MatchResult(
-        !typer.success && typer.findings.head == expectedFinding,
-        findError,
-        s"Typing failed, expecting it to succeed")
-    }
-  }
-
-  class NamerSuccessMatcher extends Matcher[Program] {
-    def apply(program: Program) = {
-      val namer = new Namer(program)
-      namer.result
-      MatchResult(
-        namer.success,
-        s"Naming failed. Findings:$n${namer.findings.mkString(n)}",
-        "Naming succeeded, expected it to fail")
-    }
-  }
-
-  def succeedLexing() = new LexerSuccessMatcher()
-  def succeedParsing() = new ParserSuccessMatcher(None)
-  def succeedParsingWith(expectedAST: SyntaxTree) = new ParserSuccessMatcher(Some(expectedAST))
+  def succeedLexing() = new AnalysisPhaseSuccessMatcher[Lexer]()
+  def succeedParsing() = new AnalysisPhaseSuccessMatcher[Parser]()
+  def succeedParsingWith(expectedAST: Program) = new AnalysisPhaseSuccessWithMatcher[Program, Parser](expectedAST)
+  def failParsingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Parser](expectedFinding)
   def succeedPrettyPrintingWith(expectedString: String) = new PrettyPrinterSuccessMatcher(expectedString)
-  def succeedTyping = new TyperSuccessMatcher()
-  def failTyping = new TyperFailMatcher()
-  def failTypingWith(expectedFinding: Finding) = new TyperFailMatcher(expectedFinding)
-  def succeedNaming() = new NamerSuccessMatcher()
+  def succeedTyping = new AnalysisPhaseSuccessMatcher[Typer]()
+  def failTypingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Typer](expectedFinding)
+  def succeedNaming() = new AnalysisPhaseSuccessMatcher[Namer]()
+  def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
 }
 
 object CompilerTestMatchers extends CompilerTestMatchers

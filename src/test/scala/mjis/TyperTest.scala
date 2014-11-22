@@ -1,50 +1,35 @@
 package mjis
 
+import mjis.CompilerTestHelper._
 import mjis.CompilerTestMatchers._
 import mjis.Typer._
-import mjis.ast._
 import mjis.Builtins._
 import org.scalatest._
 
 class TyperTest extends FlatSpec with Matchers with Inspectors {
 
-  def compile(prog: String): Program = {
-    val lexer = new Lexer(prog)
-    val parser = new Parser(lexer.result)
-    parser.result
-    // The lexer result is only traversable once, so evaluate it only after the parser has finished.
-    lexer.result
-    lexer should succeedLexing()
-    parser should succeedParsing()
-    parser.result.orNull
-  }
-
-  def stmts(text: String): Program = compile(s"class Test { public void test() { $text } }")
-
-  def method(text: String): Program = compile(s"class Test { $text }")
-
   "The typer" should "type literals correctly" in {
-    stmts("true;") should succeedTyping
-    stmts("false;") should succeedTyping
-    stmts("42;") should succeedTyping
-    stmts("null;") should succeedTyping
+    fromStatements("true;") should succeedTyping
+    fromStatements("false;") should succeedTyping
+    fromStatements("42;") should succeedTyping
+    fromStatements("null;") should succeedTyping
   }
 
   it should "type NewArrayExpressions correctly" in {
-    stmts("new int[1];") should succeedTyping
-    stmts("new boolean[2][][];") should succeedTyping
+    fromStatements("new int[1];") should succeedTyping
+    fromStatements("new boolean[2][][];") should succeedTyping
   }
 
   it should "check that the dimensions in NewArrayExpressions are Integers" in {
-    stmts("new int[true][];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
-    stmts("new boolean[null][];") should failTypingWith(InvalidTypeError(IntType, NullType))
+    fromStatements("new int[true][];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    fromStatements("new boolean[null][];") should failTypingWith(InvalidTypeError(IntType, NullType))
   }
 
   it should "disallow void everywhere but in method declarations" in {
-    stmts("void x;") shouldNot succeedTyping
-    compile("class Test { public void field; }") shouldNot succeedTyping
-    compile("class Test { public int method(void foo) {} }") shouldNot succeedTyping
-    stmts("new void[42];") shouldNot succeedTyping
+    fromStatements("void x;") shouldNot succeedTyping
+    "class Test { public void field; }" shouldNot succeedTyping
+    "class Test { public int fromMethod(void foo) {} }" shouldNot succeedTyping
+    fromStatements("new void[42];") shouldNot succeedTyping
   }
 
   it should "check for a correct return type" in {
@@ -52,50 +37,50 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
       for ((retVal, retValIdx) <- List("", "42", "true", "new int[42]", "new boolean[42][]").zipWithIndex) {
         val prog = s"public $retType test() { return $retVal; }"
         withClue(prog) {
-          if (retTypeIdx == retValIdx) method(prog) should succeedTyping
-          else method(prog) shouldNot succeedTyping
+          if (retTypeIdx == retValIdx) fromMethod(prog) should succeedTyping
+          else fromMethod(prog) shouldNot succeedTyping
         }
       }
     }
   }
 
   it should "type empty statements correctly" in {
-    stmts(";") should succeedTyping
+    fromStatements(";") should succeedTyping
   }
 
   it should "check whether the condition of an If statement is a Boolean expression" in {
-    stmts("if (true);") should succeedTyping
-    stmts("if (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
-    stmts("if (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    fromStatements("if (true);") should succeedTyping
+    fromStatements("if (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
+    fromStatements("if (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
   }
 
   it should "check whether the condition of a While statement is a Boolean expression" in {
-    stmts("while (true);") should succeedTyping
-    stmts("while (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
-    stmts("while (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    fromStatements("while (true);") should succeedTyping
+    fromStatements("while (null);") should failTypingWith(InvalidTypeError(BooleanType, NullType))
+    fromStatements("while (42);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
   }
 
   it should "type check initializers of local variables" in {
-    stmts("int foo = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    fromStatements("int foo = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
     // stmt("int foo = true + 2;") should failTypingWith(InvalidTypeError(IntType, BooleanType)) // needs namer
   }
 
   it should "allow assigning 'null' to references only" in {
-    stmts("int x = null;") should failTypingWith(InvalidTypeError(IntType, NullType))
-    stmts("boolean x = null;") should failTypingWith(InvalidTypeError(BooleanType, NullType))
-    stmts("Test x = null;") should succeedTyping
+    fromStatements("int x = null;") should failTypingWith(InvalidTypeError(IntType, NullType))
+    fromStatements("boolean x = null;") should failTypingWith(InvalidTypeError(BooleanType, NullType))
+    fromStatements("Test x = null;") should succeedTyping
   }
 
   it should "check that a non-void function reaches a return statement on every code path" in {
-    method("public void foo() { } ") should succeedTyping
-    method("public int foo() { { { { return 0; } } } 42; } ") should succeedTyping
-    method("public int foo() { { if (true) return 0; else return 1; } 42; }") should succeedTyping
-    method("public int foo() { { if (true) { return 0; } else { return 1; } } 42; }") should succeedTyping
+    fromMethod("public void foo() { } ") should succeedTyping
+    fromMethod("public int foo() { { { { return 0; } } } 42; } ") should succeedTyping
+    fromMethod("public int foo() { { if (true) return 0; else return 1; } 42; }") should succeedTyping
+    fromMethod("public int foo() { { if (true) { return 0; } else { return 1; } } 42; }") should succeedTyping
 
-    method("public int foo() { 42; }") should failTypingWith(MissingReturnStatementError())
-    method("public int foo() { { while (true) return 0; } 42; }") should failTypingWith(MissingReturnStatementError())
-    method("public int foo() { if (true) return 0; else; 42; }") should failTypingWith(MissingReturnStatementError())
-    method("public int foo() { if (true) { if (false) return 0; else; } else return 1; 42; }") should
+    fromMethod("public int foo() { 42; }") should failTypingWith(MissingReturnStatementError())
+    fromMethod("public int foo() { { while (true) return 0; } 42; }") should failTypingWith(MissingReturnStatementError())
+    fromMethod("public int foo() { if (true) return 0; else; 42; }") should failTypingWith(MissingReturnStatementError())
+    fromMethod("public int foo() { if (true) { if (false) return 0; else; } else return 1; 42; }") should
       failTypingWith(MissingReturnStatementError())
   }
 

@@ -20,7 +20,7 @@ object Parser {
   }
 }
 
-class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Program]] {
+class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
   import Parser._
 
   private case class UnexpectedTokenException(error: UnexpectedTokenError) extends Exception
@@ -30,14 +30,9 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
   private def atEOF = currentToken.data == EOF
   override def findings: List[Finding] = _findings.toList
 
-  protected override def getResult(): Option[Program] = parseProgram()
+  protected override def getResult(): Program = parseProgram()
 
-  override def dumpResult(out: BufferedWriter) = {
-    getResult() match {
-      case Some(program) => (new mjis.util.PrettyPrinter(out)).print(program)
-      case None => ()
-    }
-  }
+  override def dumpResult(out: BufferedWriter) = new mjis.util.PrettyPrinter(out).print(result)
 
   private def consume() = tokens.next()
 
@@ -63,18 +58,18 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Option[Prog
     expect[Unit](t => if (t == symbol) Some(Unit) else None, symbol.literal)
   }
 
-  private def parseProgram(): Option[Program] = {
+  private def parseProgram(): Program = {
     val classes = ListBuffer.empty[ClassDecl]
     try {
       while (!atEOF) {
         classes += parseClassDeclaration()
       }
-      Some(Program(classes.toList))
+      Program(classes.toList)
 
     } catch {
       case UnexpectedTokenException(error) =>
         _findings += error
-        None
+        null
     }
   }
 
