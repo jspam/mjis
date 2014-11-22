@@ -15,6 +15,10 @@ object Typer {
     override def msg: String = s"'void' is only valid as a method return type"
   }
 
+  case class AssignmentToNonLvalueError() extends SyntaxTreeError {
+    override def msg: String = s"Assignment is only possible to a parameter, variable, field or array element"
+  }
+
   case class ArrayAccessOnNonArrayError(actual: TypeDef) extends SyntaxTreeError {
     override def msg: String = s"Invalid type: expected an array type, got $actual"
   }
@@ -91,6 +95,21 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
   }
 
+  private def isLvalue(expr: Expression) = expr match {
+    case a: Apply => a.decl match {
+      case Some(decl) => decl == ArrayAccessDecl
+      case None => throw new TypecheckException(UnresolvedReferenceError())
+    }
+    case r: Ref[Decl] => r.decl match {
+      case Some(decl) => decl match {
+        case _: Parameter | _: FieldDecl | _: LocalVarDeclStatement => true
+        case _ => false
+      }
+      case None => throw new TypecheckException(UnresolvedReferenceError())
+    }
+    case _ => false
+  }
+
   private def typecheckProgram(p: Program) = {
     try {
       p.classes.foreach(typecheckClassDecl)
@@ -164,6 +183,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   private def typecheckExpression(e: Expression): TailRec[Unit] = {
     e match {
       case Assignment(lhs, rhs) =>
+        if (!isLvalue(lhs)) throw new TypecheckException(AssignmentToNonLvalueError())
         tailcall(typecheckExpression(lhs)).flatMap(_ => {
           tailcall(typecheckExpression(rhs)).flatMap(_ => {
             assertConvertible(getType(rhs), getType(lhs))

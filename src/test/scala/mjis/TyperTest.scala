@@ -113,6 +113,21 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("Test x = null;") should succeedTyping
   }
 
+  it should "allow assignment to lvalues only" in {
+    fromStatements("int i; i = 42;") should succeedTyping
+    fromStatements("int[] i; i[3] = 42;") should succeedTyping
+    "class Test { public int i; public void test() { i = 42; } }" should succeedTyping
+    "class Test { public int i; public void test() { this.i = 42; } }" should succeedTyping
+    "class Test { public void test(int i) { i = 42; } }" should succeedTyping
+
+    fromStatements("int i; i + 3 = 42;") should failTypingWith(AssignmentToNonLvalueError())
+    fromStatements("new int[42] = 42;") should failTypingWith(AssignmentToNonLvalueError())
+    fromStatements("new Test() = 42;") should failTypingWith(AssignmentToNonLvalueError())
+    fromStatements("int i; (i = 42) = 42;") should failTypingWith(AssignmentToNonLvalueError())
+    "class Test { public int i() { i() = 42; } }" should failTypingWith(AssignmentToNonLvalueError())
+    "class Test { public int i() { this.i() = 42; } }" should failTypingWith(AssignmentToNonLvalueError())
+  }
+
   it should "check that a non-void function reaches a return statement on every code path" in {
     fromMethod("public void foo() { } ") should succeedTyping
     fromMethod("public int foo() { { { { return 0; } } } 42; } ") should succeedTyping
