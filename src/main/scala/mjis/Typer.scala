@@ -134,6 +134,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
         typecheckExpression(cond)
         assertConvertible(getType(cond), BooleanType)
         tailcall(typecheckStatement(body, m))
+        done(false)
       case ExpressionStatement(expr) =>
         tailcall(typecheckExpression(expr)).flatMap(_ => done(false))
       case ReturnStatement(Some(expr)) =>

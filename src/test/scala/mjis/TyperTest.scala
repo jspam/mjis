@@ -89,12 +89,11 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   it should "check that a non-void function reaches a return statement on every code path" in {
     method("public void foo() { } ") should succeedTyping
     method("public int foo() { { { { return 0; } } } 42; } ") should succeedTyping
-    method("public int foo() { { while (true) return 0; } 42; }") should succeedTyping
-    method("public int foo() { { while (true) { return 0; } 42; } }") should succeedTyping
     method("public int foo() { { if (true) return 0; else return 1; } 42; }") should succeedTyping
     method("public int foo() { { if (true) { return 0; } else { return 1; } } 42; }") should succeedTyping
 
     method("public int foo() { 42; }") should failTypingWith(MissingReturnStatementError())
+    method("public int foo() { { while (true) return 0; } 42; }") should failTypingWith(MissingReturnStatementError())
     method("public int foo() { if (true) return 0; else; 42; }") should failTypingWith(MissingReturnStatementError())
     method("public int foo() { if (true) { if (false) return 0; else; } else return 1; 42; }") should
       failTypingWith(MissingReturnStatementError())
