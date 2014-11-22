@@ -49,14 +49,18 @@ object Typer {
       case Assignment(_, rhs) => tailcall(getTypeRec(rhs))
       case NewObject(typ) => done(typ)
       case NewArray(typ, _, additionalDims) => done(TypeArray(typ, additionalDims + 1))
-      case r: Ref[TypedDecl] => r.decl match { /* ThisLiteral, Ident, Select, Apply */
+      case a: Apply => a.decl match {
         case None => throw new TypecheckException(new UnresolvedReferenceError)
-        case Some(ArrayAccessDecl) => /* can only happen when r is an Apply */
-          tailcall(getTypeRec(r.asInstanceOf[Apply].arguments(0))).flatMap {
+        case Some(ArrayAccessDecl) =>
+          tailcall(getTypeRec(a.arguments(0))).flatMap {
             case TypeArray(basicType, numDimensions) =>
               done(if (numDimensions == 1) basicType else TypeArray(basicType, numDimensions - 1))
             case otherType => throw new TypecheckException(new ArrayAccessOnNonArrayError(otherType))
           }
+        case Some(decl) => done(decl.typ)
+      }
+      case r: Ref[TypedDecl] => r.decl match { /* ThisLiteral, Ident, Select */
+        case None => throw new TypecheckException(new UnresolvedReferenceError)
         case Some(decl) => done(decl.typ)
       }
       case NullLiteral => done(NullType)
