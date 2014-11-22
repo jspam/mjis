@@ -205,7 +205,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
             if (decl == EqualsDecl || decl == UnequalDecl) {
               val typeLeft = getType(a.arguments(0))
               val typeRight = getType(a.arguments(1))
-              if (!(isConvertible(typeLeft, typeRight) || isConvertible(typeRight, typeLeft))) {
+              if (!isConvertible(typeLeft, typeRight) && !isConvertible(typeRight, typeLeft)) {
                 throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight))
               }
               done(Unit)
