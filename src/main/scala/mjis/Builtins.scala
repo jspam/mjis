@@ -37,9 +37,14 @@ object Builtins {
   val NullType = TypeBasic("null")
 
   // untypeable operators
-  val EqualsDecl = MethodDecl("==", null, null, null)
-  val UnequalDecl = MethodDecl("!=", null, null, null)
-  val ArrayAccessDecl = MethodDecl("[]", null, null, null)
+  val EqualsDecl = MethodDecl("==",
+    List(Parameter("", /* untypeable */ null), Parameter("", /* untypeable */ null)),
+    BooleanType, null)
+  val UnequalDecl = MethodDecl("!=",
+    List(Parameter("", /* untypeable */ null), Parameter("", /* untypeable */ null)),
+    BooleanType, null)
+  val ArrayAccessDecl = MethodDecl("[]", List(Parameter("", /* untypeable */ null), Parameter("", IntType)),
+    /* untypeable */ null, null)
 
   val Operators = IntDecl.methods ++ BooleanDecl.methods ++ List(EqualsDecl, UnequalDecl, ArrayAccessDecl)
 
