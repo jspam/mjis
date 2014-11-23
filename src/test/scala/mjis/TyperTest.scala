@@ -168,6 +168,7 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("new int[42] = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("new Test() = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("int i; (i = 42) = 42;") should failTypingWith(AssignmentToNonLValueError())
+    fromStatements("this = new Test();") should failTypingWith(AssignmentToNonLValueError())
     fromMembers("public int i() { i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
     fromMembers("public int i() { this.i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
   }
