@@ -139,6 +139,12 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("while (true || 2);") should failTypingWith(InvalidTypeError(BooleanType, IntType))
   }
 
+  it should "typecheck nested statements" in {
+    fromStatements("{true; true || 2;}") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    fromStatements("if (true) true || 2;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    fromStatements("while (true) true || 2;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+  }
+
   it should "type check initializers of local variables" in {
     fromStatements("int foo = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
 
