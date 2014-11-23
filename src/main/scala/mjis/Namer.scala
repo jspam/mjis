@@ -2,7 +2,7 @@ package mjis
 
 import java.io.BufferedWriter
 
-import mjis.Namer.{DefNotFoundError, DuplicateDefinitionError}
+import mjis.Namer.{InvalidMainMethodNameError, DefNotFoundError, DuplicateDefinitionError}
 import mjis.ast._
 
 import scala.collection.mutable
@@ -11,6 +11,10 @@ object Namer {
 
   case class DuplicateDefinitionError(firstDecl: Decl, secondDecl: Decl) extends SyntaxTreeError {
     def msg = s"${secondDecl.name} already defined" // TODO: "at ${firstDecl.pos}"
+  }
+
+  case class InvalidMainMethodNameError() extends SyntaxTreeError {
+    def msg = s"'main' is the only name allowed for static methods"
   }
 
   case class DefNotFoundError(ident: String, defType: String) extends SyntaxTreeError {
@@ -45,9 +49,15 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     override def visit(method: MethodDecl): Unit = {
       values.enterScope()
       method.parameters.foreach(values.insert)
-      if (method.isStatic)
+      if (method.isStatic) {
+        if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError())
+        input.mainMethodDecl match {
+          case Some(existingMain) =>
+            if (!(existingMain eq method)) throw new ResolveException(DuplicateDefinitionError(existingMain, method))
+          case None => input.mainMethodDecl = Some(method)
+        }
         visit(method.body) // do not visit the arguments since 'String' is not defined in general
-      else
+      } else
         super.visit(method)
       values.leaveScope()
     }

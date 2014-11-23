@@ -2,7 +2,7 @@ package mjis
 
 import mjis.CompilerTestHelper._
 import mjis.CompilerTestMatchers._
-import mjis.Namer.DefNotFoundError
+import mjis.Namer._
 import mjis.ast._
 import mjis.Builtins._
 import org.scalatest._
@@ -37,7 +37,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow accessing the 'this' pointer in a static method" in {
-    "class Test{ public static void foo(String[] fooArgs) { this; } }" should failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public static void main(String[] args) { this; } }" should failNamingWith(DefNotFoundError("this", "value"))
   }
 
   it should "recognize built-in methods" in {
@@ -82,5 +82,17 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("System;") should failNamingWith(DefNotFoundError("System", "value"))
     fromStatements("System == System;") should failNamingWith(DefNotFoundError("System", "value"))
     fromStatements("new System();") should failNamingWith(DefNotFoundError("System", "type"))
+  }
+
+  it should "disallow static methods not called main" in {
+    assertExecFailure[Namer]("class Test { public static void mine(String[] foo) {} } ").
+      head shouldBe a [InvalidMainMethodNameError]
+  }
+
+  it should "disallow more than one main method" in {
+    assertExecFailure[Namer]("class Test { public static void main(String[] args) {} " +
+      "public static void main(String[] args) {} }").head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer]("class Test { public static void main(String[] args) {} } " +
+      "class Test2 { public static void main(String[] args) {} }").head shouldBe a [DuplicateDefinitionError]
   }
 }

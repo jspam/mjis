@@ -24,6 +24,7 @@ sealed trait Ref[D <: Decl] extends SyntaxTree {
 }
 
 final case class Program(classes: List[ClassDecl]) extends SyntaxTree {
+  var mainMethodDecl: Option[MethodDecl] = None
   override def accept[A](visitor: SyntaxTreeVisitor[A]): A = visitor.visit(this)
 }
 
