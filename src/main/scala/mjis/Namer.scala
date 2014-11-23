@@ -2,7 +2,7 @@ package mjis
 
 import java.io.BufferedWriter
 
-import mjis.Namer.{NoMainMethodError, InvalidMainMethodNameError, DefNotFoundError, DuplicateDefinitionError}
+import mjis.Namer._
 import mjis.ast._
 
 import scala.collection.mutable
