@@ -56,86 +56,164 @@ class NullVisitor extends SyntaxTreeVisitor[Unit] {
   def visitThisLiteral(): Unit = {}
 }
 
-class PostOrderVisitor(inner: SyntaxTreeVisitor[Unit]) extends SyntaxTreeVisitor[Unit] {
+class RecursiveVisitor() extends SyntaxTreeVisitor[Unit] {
+
+  def preVisit(program: Program): Unit = {}
+  def postVisit(program: Program): Unit = {}
   def visit(program: Program): Unit = {
+    preVisit(program)
     program.classes.foreach(visit)
-    inner.visit(program)
+    postVisit(program)
   }
+
+  def preVisit(cls: ClassDecl): Unit = {}
+  def postVisit(cls: ClassDecl): Unit = {}
   def visit(cls: ClassDecl): Unit = {
+    preVisit(cls)
     cls.fields.foreach(visit)
     cls.methods.foreach(visit)
-    inner.visit(cls)
+    postVisit(cls)
   }
+
+  def preVisit(method: MethodDecl): Unit = {}
+  def postVisit(method: MethodDecl): Unit = {}
   def visit(method: MethodDecl): Unit = {
+    preVisit(method)
     method.parameters.foreach(visit)
     visit(method.body)
-    inner.visit(method)
+    postVisit(method)
   }
-  def visit(field: FieldDecl): Unit = inner.visit(field)
+
+  def preVisit(field: FieldDecl): Unit = {}
+  def postVisit(field: FieldDecl): Unit = {}
+  def visit(field: FieldDecl): Unit = {
+    preVisit(field)
+    field.typ.accept(this)
+    postVisit(field)
+  }
+
+  def preVisit(param: Parameter): Unit = {}
+  def postVisit(param: Parameter): Unit = {}
   def visit(param: Parameter): Unit = {
+    preVisit(param)
     param.typ.accept(this)
-    inner.visit(param)
+    postVisit(param)
   }
-  def visit(typ: TypeBasic): Unit = inner.visit(typ)
+
+  def visit(typ: TypeBasic): Unit = {}
+
+  def preVisit(typ: TypeArray): Unit = {}
+  def postVisit(typ: TypeArray): Unit = {}
   def visit(typ: TypeArray): Unit = {
+    preVisit(typ)
     visit(typ.elementType)
-    inner.visit(typ)
+    postVisit(typ)
   }
+
+  def preVisit(stmt: Block): Unit = {}
+  def postVisit(stmt: Block): Unit = {}
   def visit(stmt: Block): Unit = {
+    preVisit(stmt)
     stmt.statements.foreach(_.accept(this))
-    inner.visit(stmt)
+    postVisit(stmt)
   }
-  def visit(stmt: EmptyStatement.type): Unit = inner.visit(stmt)
+
+  def visit(stmt: EmptyStatement.type): Unit = {}
+
+  def preVisit(stmt: If): Unit = {}
+  def postVisit(stmt: If): Unit = {}
   def visit(stmt: If): Unit = {
+    preVisit(stmt)
     stmt.condition.accept(this)
     stmt.ifFalse.accept(this)
     stmt.ifTrue.accept(this)
-    inner.visit(stmt)
+    postVisit(stmt)
   }
+
+  def preVisit(stmt: While): Unit = {}
+  def postVisit(stmt: While): Unit = {}
   def visit(stmt: While): Unit = {
+    preVisit(stmt)
     stmt.condition.accept(this)
     stmt.body.accept(this)
-    inner.visit(stmt)
+    postVisit(stmt)
   }
+
+  def preVisit(stmt: LocalVarDeclStatement): Unit = {}
+  def postVisit(stmt: LocalVarDeclStatement): Unit = {}
   def visit(stmt: LocalVarDeclStatement): Unit = {
+    preVisit(stmt)
     stmt.initializer.foreach(_.accept(this))
-    inner.visit(stmt)
+    postVisit(stmt)
   }
+
+  def preVisit(stmt: ReturnStatement): Unit = {}
+  def postVisit(stmt: ReturnStatement): Unit = {}
   def visit(stmt: ReturnStatement): Unit = {
+    preVisit(stmt)
     stmt.returnValue.foreach(_.accept(this))
-    inner.visit(stmt)
+    postVisit(stmt)
   }
+
+  def preVisit(stmt: ExpressionStatement): Unit = {}
+  def postVisit(stmt: ExpressionStatement): Unit = {}
   def visit(stmt: ExpressionStatement): Unit = {
+    preVisit(stmt)
     stmt.expr.accept(this)
-    inner.visit(stmt)
+    postVisit(stmt)
   }
+
+  def preVisit(expr: Apply): Unit = {}
+  def postVisit(expr: Apply): Unit = {}
   def visit(expr: Apply): Unit = {
+    preVisit(expr)
     expr.arguments.foreach(_.accept(this))
-    inner.visit(expr)
+    postVisit(expr)
   }
+
+  def preVisit(expr: Assignment): Unit = {}
+  def postVisit(expr: Assignment): Unit = {}
   def visit(expr: Assignment): Unit = {
+    preVisit(expr)
     expr.lhs.accept(this)
     expr.rhs.accept(this)
-    inner.visit(expr)
+    postVisit(expr)
   }
-  def visit(expr: BooleanLiteral): Unit = inner.visit(expr)
-  def visit(expr: Ident): Unit = inner.visit(expr)
-  def visit(expr: IntLiteral): Unit = inner.visit(expr)
-  def visit(stmt: NullLiteral.type): Unit = inner.visit(stmt)
+
+  def visit(expr: BooleanLiteral): Unit = {}
+
+  def visit(expr: Ident): Unit = {}
+
+  def visit(expr: IntLiteral): Unit = {}
+
+  def visit(stmt: NullLiteral.type): Unit = {}
+
+  def preVisit(expr: NewArray): Unit = {}
+  def postVisit(expr: NewArray): Unit = {}
   def visit(expr: NewArray): Unit = {
+    preVisit(expr)
     expr.typ.accept(this)
     expr.firstDimSize.accept(this)
-    inner.visit(expr)
+    postVisit(expr)
   }
+
+  def preVisit(expr: NewObject): Unit = {}
+  def postVisit(expr: NewObject): Unit = {}
   def visit(expr: NewObject): Unit = {
+    preVisit(expr)
     expr.typ.accept(this)
-    inner.visit(expr)
+    postVisit(expr)
   }
+
+  def preVisit(expr: Select): Unit = {}
+  def postVisit(expr: Select): Unit = {}
   def visit(expr: Select): Unit = {
+    preVisit(expr)
     expr.qualifier.accept(this)
-    inner.visit(expr)
+    postVisit(expr)
   }
-  def visit(expr: ThisLiteral): Unit = inner.visit(expr)
+
+  def visit(expr: ThisLiteral): Unit = {}
 }
 
 // class TailRecPostOrderVisitor(inner: SyntaxTreeVisitor[Unit]) extends SyntaxTreeVisitor[TailRec[Unit]] {
