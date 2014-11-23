@@ -46,7 +46,7 @@ object Typer {
   def getType(t: Expression) = getTypeRec(t).result
   def getTypeRec(t: Expression): TailRec[TypeDef] = {
     t match {
-      case Assignment(_, rhs) => tailcall(getTypeRec(rhs))
+      case Assignment(lhs, _) => tailcall(getTypeRec(lhs))
       case NewObject(typ) => done(typ)
       case NewArray(typ, _, additionalDims) => done(TypeArray(typ, additionalDims + 1))
       case a: Apply => a.decl match {

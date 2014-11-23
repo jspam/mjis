@@ -174,6 +174,14 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
       failTypingWith(MissingReturnStatementError())
   }
 
+  it should "type check the assignment operator" in {
+    fromStatements("Test test; Test test2; Test test3 = test2 = test;") should succeedTyping
+    fromStatements("Test test; Test test2; Test test3 = test2 = test = null;") should succeedTyping
+
+    "class Test2{} class Test{ public void test() { Test test; Test2 test2 = test = null; }}" should
+      failTypingWith(InvalidTypeError(TypeBasic("Test2"), TypeBasic("Test")))
+  }
+
   it should "type check the equality and inequality operator" in {
     for (op <- List("==", "!=")) withClue(op) {
       fromStatements(s"null $op null;") should succeedTyping
