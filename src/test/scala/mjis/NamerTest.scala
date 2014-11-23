@@ -117,14 +117,14 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow two classes, methods, fields or variables with the same name" in {
-    assertExecFailureWith[DuplicateDefinitionError,Namer]("class Test{ public static void main(String[] args) {} } class Test{}")
-    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x; public boolean x;"))
-    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x(){}; public int x(){};"))
-    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x(int y){}; public int x(boolean y){};"))
-    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x(){}; public boolean x(){};"))
-    assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; int x; } }"))
-    assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; boolean x; } }"))
-    assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; int[] x; } }"))
+    assertExecFailure[Namer]("class Test{ public static void main(String[] args) {} } class Test{}").head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMethod("public int x; public boolean x;")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMethod("public int x(){} public int x(){}")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMethod("public int x(int y){} public int x(boolean y){}")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMethod("public int x(){} public boolean x(){}")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromStatements("{ { int x; int x; } }")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromStatements("{ { int x; boolean x; } }")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromStatements("{ { int x; int[] x; } }")).head shouldBe a [DuplicateDefinitionError]
   }
 
   it should "allow the same name in different scopes" in {

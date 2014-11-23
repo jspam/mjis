@@ -25,11 +25,4 @@ object CompilerTestHelper {
     case Left(phase) => Assertions.fail(s"Compilation up to ${classTag[P].runtimeClass.getName} succeeded, expected it to fail.")
     case Right(findings) => findings
   }
-  def assertExecFailureWith[F <: Finding: ClassTag, P <: Phase[_]: ClassTag](input: String) = {
-    val findings = assertExecFailure[P](input)
-    if (!findings.head.isInstanceOf[F]) {
-      Assertions.fail(s"Wrong type of finding, expected a ${classTag[F].runtimeClass.getName}, " +
-        s"got a ${findings.head.getClass}: ${findings.head}")
-    }
-  }
 }
