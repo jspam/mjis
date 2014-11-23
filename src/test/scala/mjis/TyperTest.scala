@@ -239,6 +239,7 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("Test test; int[] x; x[test];") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
 
     fromStatements("int[] x; x[true + 42];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    fromStatements("int[][] x; x[true + 42][2];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
   }
 
   it should "type check the other operators" in {

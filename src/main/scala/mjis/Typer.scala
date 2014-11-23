@@ -214,16 +214,14 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
                 args.headOption match {
                   case None => done(Unit)
                   case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => {
-                    if (!isConvertible(getType(argument), params.head.typ)) {
+                    val paramType = params.head.typ // might be null => untypeable, do not check for convertability
+                    if (paramType != null && !isConvertible(getType(argument), params.head.typ)) {
                       throw new TypecheckException(InvalidTypeError(params.head.typ, getType(argument)))
                     }
                     remainder(args.tail, params.tail)
                   })
               }
-              if (decl == ArrayAccessDecl)
-                remainder(a.arguments.tail, decl.parameters.tail)
-              else
-                remainder(a.arguments, decl.parameters)
+              remainder(a.arguments, decl.parameters)
             }
         }
       case NewArray(typ, firstDimSize, _) =>
