@@ -2,7 +2,7 @@ package mjis
 
 import mjis.CompilerTestHelper._
 import mjis.CompilerTestMatchers._
-import mjis.Namer.DefNotFoundError
+import mjis.Namer._
 import mjis.ast._
 import mjis.Builtins._
 import org.scalatest._
@@ -37,7 +37,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow accessing the 'this' pointer in a static method" in {
-    "class Test{ public static void foo(String[] fooArgs) { this; } }" should failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public static void main(String[] args) { this; } }" should failNamingWith(DefNotFoundError("this", "value"))
   }
 
   it should "recognize built-in methods" in {
@@ -56,14 +56,15 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "recognize the built-in System.out.println function when a System class is defined" in {
-    val program = assertExec[Namer]("class Test { public void test() { System.out.println(42); } } " +
+    val program = assertExec[Namer]("class Test { public static void main(String[] args) { System.out.println(42); } } " +
       "class Out { public void println(int x) {} } class System { public Out out; }").result
     val statements = program.classes(0).methods(0).body.statements
     getRefDecl(statements(0)) shouldBe SystemOutPrintlnDecl
   }
 
   it should "recognize a user-defined System.out.println function" in {
-    val program = assertExec[Namer]("class Test { public void test() { System.out.println(42); } public _System System; } " +
+    val program = assertExec[Namer]("class Test { public void test() { System.out.println(42); } " +
+      "public _System System; public static void main(String[] args){} } " +
       "class _Out { public void println(int x) {} } class _System { public _Out out; }").result
     val statements = program.classes(0).methods(0).body.statements
     getRefDecl(statements(0)) shouldBe program.classes(1).methods(0)
@@ -82,5 +83,30 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("System;") should failNamingWith(DefNotFoundError("System", "value"))
     fromStatements("System == System;") should failNamingWith(DefNotFoundError("System", "value"))
     fromStatements("new System();") should failNamingWith(DefNotFoundError("System", "type"))
+  }
+
+  it should "disallow static methods not called main" in {
+    "class Test { public static void mine(String[] foo) {} } " should failNamingWith(InvalidMainMethodNameError())
+  }
+
+  it should "disallow programs without a main method" in {
+    "class Test { public void main() {} } " should failNamingWith(NoMainMethodError())
+  }
+
+  it should "disallow more than one main method" in {
+    assertExecFailure[Namer]("class Test { public static void main(String[] args) {} " +
+      "public static void main(String[] args) {} }").head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer]("class Test { public static void main(String[] args) {} } " +
+      "class Test2 { public static void main(String[] args) {} }").head shouldBe a [DuplicateDefinitionError]
+  }
+
+  it should "disallow calling the main method" in {
+    "class String{} class Test{ public static void main(String[] args) { main(new String[42]); } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
+  }
+
+  it should "disallow accessing the main method's parameter" in {
+    "class String{} class Test{ public static void main(String[] arguments) { arguments; } }" should
+      failNamingWith(DefNotFoundError("arguments", "value"))
   }
 }

@@ -2,7 +2,7 @@ package mjis
 
 import java.io.BufferedWriter
 
-import mjis.Namer.{DefNotFoundError, DuplicateDefinitionError}
+import mjis.Namer._
 import mjis.ast._
 
 import scala.collection.mutable
@@ -11,6 +11,14 @@ object Namer {
 
   case class DuplicateDefinitionError(firstDecl: Decl, secondDecl: Decl) extends SyntaxTreeError {
     def msg = s"${secondDecl.name} already defined" // TODO: "at ${firstDecl.pos}"
+  }
+
+  case class InvalidMainMethodNameError() extends SyntaxTreeError {
+    def msg = s"'main' is the only name allowed for static methods"
+  }
+
+  case class NoMainMethodError() extends SyntaxTreeError {
+    def msg = "No main method found"
   }
 
   case class DefNotFoundError(ident: String, defType: String) extends SyntaxTreeError {
@@ -35,6 +43,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       case tb: TypeBasic => tb
     }
 
+    override def visit(prog: Program): Unit = {
+      super.visit(prog)
+      if (prog.mainMethodDecl.isEmpty) throw new ResolveException(NoMainMethodError())
+    }
+
     override def visit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
     override def visit(cls: ClassDecl): Unit = {
       values.enterScope()
@@ -44,11 +57,19 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     }
     override def visit(method: MethodDecl): Unit = {
       values.enterScope()
-      method.parameters.foreach(values.insert)
-      if (method.isStatic)
+      if (method.isStatic) {
+        // Do not insert the parameter as it may not be accessed.
+        if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError())
+        input.mainMethodDecl match {
+          case Some(existingMain) =>
+            if (!(existingMain eq method)) throw new ResolveException(DuplicateDefinitionError(existingMain, method))
+          case None => input.mainMethodDecl = Some(method)
+        }
         visit(method.body) // do not visit the arguments since 'String' is not defined in general
-      else
+      } else {
+        method.parameters.foreach(values.insert)
         super.visit(method)
+      }
       values.leaveScope()
     }
     override def visit(stmt: Block): Unit = {

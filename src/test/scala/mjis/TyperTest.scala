@@ -47,14 +47,18 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow void everywhere but in method declarations" in {
-    fromStatements("void x;") shouldNot succeedTyping
-    "class Test { public void field; }" shouldNot succeedTyping
-    "class Test { public int fromMethod(void foo) {} }" shouldNot succeedTyping
-    fromStatements("new void[42];") shouldNot succeedTyping
+    fromStatements("void x;") should failTypingWith(VoidUsageError())
+    fromMethod("public void test() { void x = test(); }") should failTypingWith(VoidUsageError())
+    fromMethod("public void field;") should failTypingWith(VoidUsageError())
+    fromMethod("public int test(void foo) {}") should failTypingWith(VoidUsageError())
+    fromStatements("new void[42];") should failTypingWith(VoidUsageError())
+
+    fromMethod("public void test() { int x = test(); }") should failTypingWith(InvalidTypeError(IntType, VoidType))
+    fromMethod("public int x; public void test() { this.x = test(); }") should failTypingWith(InvalidTypeError(IntType, VoidType))
   }
 
   it should "typecheck return statements" in {
-    "class Test { public int test() { return true + 42; } }" should
+    fromMethod("public int test() { return true + 42; }") should
       failTypingWith(InvalidTypeError(IntType, BooleanType))
   }
 
@@ -80,7 +84,8 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
   it should "typecheck method calls" in {
     def testProg(stmt: String) = "class Test2 {}" +
-      s"class Test { public void main() { $stmt } " +
+      "class Test { public static void main(String[] args) {} " +
+      s"public void test() { $stmt } " +
       "public void noParams() {} " +
       "public void oneIntParam(int x) {} " +
       "public void twoIntParams(int x, int y) {} " +
@@ -149,16 +154,16 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   it should "allow assignment to lvalues only" in {
     fromStatements("int i; i = 42;") should succeedTyping
     fromStatements("int[] i; i[3] = 42;") should succeedTyping
-    "class Test { public int i; public void test() { i = 42; } }" should succeedTyping
-    "class Test { public int i; public void test() { this.i = 42; } }" should succeedTyping
-    "class Test { public void test(int i) { i = 42; } }" should succeedTyping
+    fromMethod("public int i; public void test() { i = 42; }") should succeedTyping
+    fromMethod("public int i; public void test() { this.i = 42; }") should succeedTyping
+    fromMethod("public void test(int i) { i = 42; }") should succeedTyping
     
     fromStatements("int i; i + 3 = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("new int[42] = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("new Test() = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("int i; (i = 42) = 42;") should failTypingWith(AssignmentToNonLValueError())
-    "class Test { public int i() { i() = 42; } }" should failTypingWith(AssignmentToNonLValueError())
-    "class Test { public int i() { this.i() = 42; } }" should failTypingWith(AssignmentToNonLValueError())
+    fromMethod("public int i() { i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
+    fromMethod("public int i() { this.i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
   }
 
   it should "check that a non-void function reaches a return statement on every code path" in {
@@ -178,8 +183,16 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("Test test; Test test2; Test test3 = test2 = test;") should succeedTyping
     fromStatements("Test test; Test test2; Test test3 = test2 = test = null;") should succeedTyping
 
-    "class Test2{} class Test{ public void test() { Test test; Test2 test2 = test = null; }}" should
+    "class Test2{} class Test{ public static void main(String[] args) { Test test; Test2 test2 = test = null; }}" should
       failTypingWith(InvalidTypeError(TypeBasic("Test2"), TypeBasic("Test")))
+
+    fromStatements("int x; x = 42;") should succeedTyping
+    fromStatements("int x; x = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+
+    fromStatements("int[][][][] x; x[0][1] = 2;") should failTypingWith(InvalidTypeError(TypeArray(IntType, 2), IntType))
+    fromStatements("int[][][][] x; x[0][1] = new int[2];") should failTypingWith(InvalidTypeError(TypeArray(IntType, 2), TypeArray(IntType, 1)))
+    fromStatements("int[][][][] x; x[0][1] = new int[2][];") should succeedTyping
+    fromStatements("int[][][][] x; x[0][1] = new int[2][][];") should failTypingWith(InvalidTypeError(TypeArray(IntType, 2), TypeArray(IntType, 3)))
   }
 
   it should "type check the equality and inequality operator" in {
@@ -226,6 +239,64 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("Test test; int[] x; x[test];") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
 
     fromStatements("int[] x; x[true + 42];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    fromStatements("int[][] x; x[true + 42][2];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
   }
 
+  it should "type check the other operators" in {
+    val intOpsReturningBool = List("<", "<=", ">", ">=")
+    val intOpsReturningInt = List("+", "-", "*", "/", "%")
+    val intOps = intOpsReturningBool ++ intOpsReturningInt
+    val boolOps = List("&&", "||")
+
+    intOps.foreach(op => withClue(op) {
+      fromStatements(s"42 $op 43;") should succeedTyping
+      fromStatements(s"42 $op true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"true $op 42;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"true $op false;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"new Test() $op 42;") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
+      fromStatements(s"42 $op new Test();") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
+      fromStatements(s"new int[2][][0] $op 42;") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 1)))
+      fromStatements(s"42 $op new int[2][][0];") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 1)))
+    })
+    intOpsReturningInt.foreach(op => withClue(op) {
+      fromStatements(s"int x = 42 $op 43;") should succeedTyping
+      fromStatements(s"boolean x = 42 $op 43;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    })
+    intOpsReturningBool.foreach(op => withClue(op) {
+      fromStatements(s"int x = 42 $op 43;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"boolean x = 42 $op 43;") should succeedTyping
+    })
+    boolOps.foreach(op => withClue(op) {
+      fromStatements(s"42 $op 43;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+      fromStatements(s"42 $op true;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+      fromStatements(s"true $op 42;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+      fromStatements(s"true $op false;") should succeedTyping
+      fromStatements(s"new Test() $op true;") should failTypingWith(InvalidTypeError(BooleanType, TypeBasic("Test")))
+      fromStatements(s"true $op new Test();") should failTypingWith(InvalidTypeError(BooleanType, TypeBasic("Test")))
+      fromStatements(s"new boolean[2][][0] $op true;") should failTypingWith(InvalidTypeError(BooleanType, TypeArray(BooleanType, 1)))
+      fromStatements(s"true $op new boolean[2][][0];") should failTypingWith(InvalidTypeError(BooleanType, TypeArray(BooleanType, 1)))
+    })
+
+    fromStatements("-42;") should succeedTyping
+    fromStatements("-true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    fromStatements("-new Test();") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
+    fromStatements("-new int[42][];") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 2)))
+
+    fromStatements("!true;") should succeedTyping
+    fromStatements("!42;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    fromStatements("!new Test();") should failTypingWith(InvalidTypeError(BooleanType, TypeBasic("Test")))
+    fromStatements("!new boolean[42][];") should failTypingWith(InvalidTypeError(BooleanType, TypeArray(BooleanType, 2)))
+  }
+
+  it should "typecheck field accesses" in {
+    def testProg(stmts: String) = fromMethod(s"public Test t; public int x; public Test getTest() { return new Test(); } public void test() { $stmts }")
+    testProg("this.t = new Test();") should succeedTyping
+    testProg("this.t = this.t;") should succeedTyping
+    testProg("this.x = 42;") should succeedTyping
+    testProg("this.t.x = 42;") should succeedTyping
+    testProg("new Test().x = 42;") should succeedTyping
+    testProg("getTest().x = 42;") should succeedTyping
+    testProg("this.t.getTest().x = 42;") should succeedTyping
+    testProg("(new Test[42])[0].x = 42;") should succeedTyping
+  }
 }

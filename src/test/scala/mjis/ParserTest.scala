@@ -13,6 +13,9 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     ClassDecl("Test", List(
       MethodDecl("test", List(Parameter("this", TypeBasic("Test"))), Builtins.VoidType,
         Block(innerAST.toList)
+      ),
+      MethodDecl("main", List(Parameter("args", TypeArray(TypeBasic("String"), 1))), Builtins.VoidType,
+        Block(List()), isStatic = true
       )
     ), List())
   ))
@@ -328,7 +331,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   it should "reject invalid 'new' expressions" in {
     val tests = List("new 3;", "new a[][6];", "new;", "new class()", "new MyClass;", "new MyClass(3);")
-    all(tests.map(fromStatements)) shouldNot succeedParsing()
+    all(tests.map(fromStatements(_))) shouldNot succeedParsing()
   }
 
   it should "reject invalid field declarations" in {

@@ -7,8 +7,10 @@ import org.scalatest._
 import scala.reflect._
 
 object CompilerTestHelper {
-  def fromMethod(method: String): String = s"class Test {$n$method$n}"
-  def fromStatements(statements: String): String = fromMethod(s"public void test() {$n$statements$n}")
+  def fromMethod(method: String, mainMethod: Boolean = true): String = s"class Test {$n$method$n" +
+    (if (mainMethod) s"public static void main(String[] args){}}" else "}")
+  def fromStatements(statements: String, mainMethod: Boolean = true): String =
+    fromMethod(s"public void test() {$n$statements$n}", mainMethod)
 
   def assertExec[P <: Phase[_]: ClassTag](input: String): P = Compiler.exec(new StringReader(input)) match {
     case Left(phase) => phase
