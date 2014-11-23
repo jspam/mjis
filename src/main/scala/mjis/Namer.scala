@@ -33,6 +33,21 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
 
   private class NamerVisitor extends PostOrderVisitor(new NullVisitor()) {
 
+    // mind the order: local classes may shadow builtin classes
+    private val classes: Map[String, ClassLookup] = mkPackageLookup(Builtins.PublicTypeDecls) ++
+      mkPackageLookup(input.classes)
+    private val values = new SymbolTable()
+    private val operators = mkDeclLookup(Builtins.Operators)
+
+    private def mkPackageLookup(classes: List[ClassDecl]): Map[String, ClassLookup] = mkDeclLookup(classes) map {
+      case (name, cls) => name -> new ClassLookup(cls, mkDeclLookup(cls.fields), mkDeclLookup(cls.methods))
+    }
+
+    private def mkDeclLookup[D <: Decl](xs: List[D]): Map[String, D] = xs groupBy (_.name) map {
+      case (name, List(decl)) => name -> decl
+      case (_, firstDecl :: secondDecl :: _) => throw ResolveException(DuplicateDefinitionError(firstDecl, secondDecl))
+    }
+
     private def setDecl[A <: Decl](ref: Ref[A], value: Option[A], refType: String): Unit = value match {
       case None => throw ResolveException(DefNotFoundError(ref.name, refType))
       case Some(value) => ref.decl = value
@@ -127,28 +142,8 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
   private val _findings = mutable.ListBuffer.empty[Finding]
   override def findings: List[Finding] = _findings.toList
 
-  // mind the order: local classes may shadow builtin classes
-  private lazy val classes: Map[String, ClassLookup] = mkPackageLookup(Builtins.PublicTypeDecls) ++
-    mkPackageLookup(input.classes)
-  private val values = new SymbolTable()
-  private val operators = mkDeclLookup(Builtins.Operators)
-
-  private def mkPackageLookup(classes: List[ClassDecl]): Map[String, ClassLookup] = mkDeclLookup(classes) mapValues (cls =>
-    new ClassLookup(cls, mkDeclLookup(cls.fields), mkDeclLookup(cls.methods))
-  )
-
-  private def mkDeclLookup[D <: Decl](xs: List[D]): Map[String, D] = xs groupBy (_.name) mapValues {
-    case List(decl) => decl
-    case firstDecl :: secondDecl :: _ => throw ResolveException(DuplicateDefinitionError(firstDecl, secondDecl))
-  }
-
   private def resolve(): Unit = {
     try {
-      // Force the class lookup to be fully built and evaluated, detecting duplicate class/method/field definitions
-      classes.values.foreach(cls => {
-        cls.fields.toSeq
-        cls.methods.toSeq
-      })
       input.accept(new NamerVisitor())
     } catch {
       case ResolveException(finding) => _findings += finding
