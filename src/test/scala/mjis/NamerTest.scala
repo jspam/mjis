@@ -120,4 +120,18 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; boolean x; } }"))
     assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; int[] x; } }"))
   }
+
+  it should "allow the same name in different scopes" in {
+    fromMethod("public int x; public int x() { x; x(); }") should succeedNaming
+    fromMethod("public int x; public boolean x() { x; x(); }") should succeedNaming
+    "class foo { public static void main(String[] args) {} public int foo; public boolean foo() { foo foo; } }" should succeedNaming
+
+    val program = assertExec[Namer](fromMethod("public int x; public int y() { boolean x; x = this.x; }")).result
+    val methodBody = program.classes(0).methods(0).body
+    val fieldDecl = program.classes(0).fields(0)
+    val localVarDecl = methodBody.statements(0)
+    val statement = methodBody.statements(1).asInstanceOf[ExpressionStatement].expr.asInstanceOf[Assignment]
+    statement.lhs.asInstanceOf[Ref[Decl]].decl.get shouldBe localVarDecl
+    statement.rhs.asInstanceOf[Ref[Decl]].decl.get shouldBe fieldDecl
+  }
 }
