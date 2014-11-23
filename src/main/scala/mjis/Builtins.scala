@@ -35,7 +35,6 @@ object Builtins {
     List(Parameter("this", TypeBasic("$System.out")), Parameter("", IntType)), VoidType, null)
   val SystemOutFieldDecl = FieldDecl("out", TypeBasic("$System.out"))
   val SystemDecl = ClassDecl("$System", List(), List(SystemOutFieldDecl))
-  val SystemOutDecl = ClassDecl("$System.out", List(SystemOutPrintlnDecl), List())
 
   val PublicTypes = ValueTypes :+ VoidType
   val PublicTypeDecls = ValueTypeDecls :+ VoidDecl
