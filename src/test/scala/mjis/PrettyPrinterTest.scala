@@ -141,4 +141,64 @@ class PrettyPrinterTest extends FlatSpec with Matchers with Inspectors {
       |}
       |""".stripMargin)
   }
+
+  it should "pretty-print While statements" in {
+    "class C { public void test() { while(((1 + 2 + 3))) { ; } } }" should succeedPrettyPrintingWith(
+      """class C {
+        |  public void test() {
+        |    while ((1 + 2) + 3) { }
+        |  }
+        |}
+        |""".stripMargin.replace("  ", "\t"))
+  }
+
+  it should "pretty-print if-else statements" in {
+    "class C { public void test() { if(true) { } else { int i; } } }" should succeedPrettyPrintingWith(
+      """class C {
+        |  public void test() {
+        |    if (true) { } else {
+        |      int i;
+        |    }
+        |  }
+        |}
+        |""".stripMargin.replace("  ", "\t"))
+    "class C { public void test() { if(true); else { int i; } } }" should succeedPrettyPrintingWith(
+      """class C {
+        |  public void test() {
+        |    if (true)
+        |      ;
+        |    else {
+        |      int i;
+        |    }
+        |  }
+        |}
+        |""".stripMargin.replace("  ", "\t"))
+    "class C { public void test() { if(true) { } else { test(); } } }" should succeedPrettyPrintingWith(
+      """class C {
+        |  public void test() {
+        |    if (true) { } else {
+        |      test();
+        |    }
+        |  }
+        |}
+        |""".stripMargin.replace("  ", "\t"))
+    "class C { public void test() { if(true) { } else test(); } }" should succeedPrettyPrintingWith(
+      """class C {
+        |  public void test() {
+        |    if (true) { } else
+        |      test();
+        |  }
+        |}
+        |""".stripMargin.replace("  ", "\t"))
+  }
+
+  it should "pretty-print NewArrayExpressions" in {
+    "class C { public void test() { new int[42+(3||4)][][][]; } }" should succeedPrettyPrintingWith(
+      """class C {
+        |  public void test() {
+        |    new int[42 + (3 || 4)][][][];
+        |  }
+        |}
+        |""".stripMargin.replace("  ", "\t"))
+  }
 }

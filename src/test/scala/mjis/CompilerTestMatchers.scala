@@ -47,7 +47,7 @@ trait CompilerTestMatchers {
       val out = new StringWriter()
       parser.dumpResult(new BufferedWriter(out))
       if (out.toString != expectedString)
-        Some(s"Expected: $expectedString${n}Computed: ${out.toString}")
+        Some(s"Expected:$n'$expectedString'${n}Computed:$n'${out.toString}'")
       else {
         // second pass to make sure round-tripping works and pretty printer is idempotent
         Compiler.exec[Parser](new StringReader(out.toString)) match {
