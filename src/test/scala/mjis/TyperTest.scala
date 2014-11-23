@@ -218,6 +218,9 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
       fromStatements(s"boolean b = 42 $op 42;") should succeedTyping
       fromStatements(s"int i = 42 $op 42;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+
+      fromStatements(s"(1+2) $op 1;") should succeedTyping
+      fromStatements(s"(1+null) $op 1;") should failTypingWith(InvalidTypeError(IntType, NullType))
     }
   }
 
@@ -230,6 +233,8 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("int x = new int[1][][1][2];") should succeedTyping
     fromStatements("int x; int[][] xs = new int[1][]; x = xs[1][2][3];") should
       failTypingWith(ArrayAccessOnNonArrayError(IntType))
+    fromStatements("Test xs; xs[1];") should
+      failTypingWith(ArrayAccessOnNonArrayError(TypeBasic("Test")))
 
     fromStatements("int[] x; x[42];") should succeedTyping
     fromStatements("int[] x; x[x[1]];") should succeedTyping
