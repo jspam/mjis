@@ -94,6 +94,8 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
             expr.arguments(0) == Select(Ident("System"), "out") &&
             values.lookup("System") == None) {
             expr.decl = Builtins.SystemOutPrintlnDecl
+            expr.arguments(0).asInstanceOf[Select].qualifier.asInstanceOf[Ident].decl = Builtins.SystemDecl
+            expr.arguments(0).asInstanceOf[Select].decl = Builtins.SystemOutFieldDecl
             // do _not_ visit arguments(0)
             expr.arguments.tail.foreach(_.accept(this))
           } else {

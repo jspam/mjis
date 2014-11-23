@@ -110,6 +110,12 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
       failNamingWith(DefNotFoundError("arguments", "value"))
   }
 
+  it should "check field accesses" in {
+    fromStatements("int x; x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field"))
+    fromStatements("boolean x; x.isFalse = true;") should failNamingWith(DefNotFoundError("isFalse", "field"))
+    fromStatements("int[] x; x.length;")  should failNamingWith(DefNotFoundError("length", "field"))
+  }
+
   it should "disallow two classes, methods, fields or variables with the same name" in {
     assertExecFailureWith[DuplicateDefinitionError,Namer]("class Test{ public static void main(String[] args) {} } class Test{}")
     assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x; public boolean x;"))
