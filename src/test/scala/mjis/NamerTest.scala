@@ -56,14 +56,15 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "recognize the built-in System.out.println function when a System class is defined" in {
-    val program = assertExec[Namer]("class Test { public void test() { System.out.println(42); } } " +
+    val program = assertExec[Namer]("class Test { public static void main(String[] args) { System.out.println(42); } } " +
       "class Out { public void println(int x) {} } class System { public Out out; }").result
     val statements = program.classes(0).methods(0).body.statements
     getRefDecl(statements(0)) shouldBe SystemOutPrintlnDecl
   }
 
   it should "recognize a user-defined System.out.println function" in {
-    val program = assertExec[Namer]("class Test { public void test() { System.out.println(42); } public _System System; } " +
+    val program = assertExec[Namer]("class Test { public void test() { System.out.println(42); } " +
+      "public _System System; public static void main(String[] args){} } " +
       "class _Out { public void println(int x) {} } class _System { public _Out out; }").result
     val statements = program.classes(0).methods(0).body.statements
     getRefDecl(statements(0)) shouldBe program.classes(1).methods(0)
@@ -87,6 +88,11 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   it should "disallow static methods not called main" in {
     assertExecFailure[Namer]("class Test { public static void mine(String[] foo) {} } ").
       head shouldBe a [InvalidMainMethodNameError]
+  }
+
+  it should "disallow programs without a main method" in {
+    assertExecFailure[Namer]("class Test { public void main() {} } ").
+      head shouldBe a [NoMainMethodError]
   }
 
   it should "disallow more than one main method" in {

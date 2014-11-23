@@ -2,7 +2,7 @@ package mjis
 
 import java.io.BufferedWriter
 
-import mjis.Namer.{InvalidMainMethodNameError, DefNotFoundError, DuplicateDefinitionError}
+import mjis.Namer.{NoMainMethodError, InvalidMainMethodNameError, DefNotFoundError, DuplicateDefinitionError}
 import mjis.ast._
 
 import scala.collection.mutable
@@ -15,6 +15,10 @@ object Namer {
 
   case class InvalidMainMethodNameError() extends SyntaxTreeError {
     def msg = s"'main' is the only name allowed for static methods"
+  }
+
+  case class NoMainMethodError() extends SyntaxTreeError {
+    def msg = "No main method found"
   }
 
   case class DefNotFoundError(ident: String, defType: String) extends SyntaxTreeError {
@@ -37,6 +41,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     private def resolveType(expr: Expression): TypeBasic = Typer.getType(expr) match {
       case ta: TypeArray => ta.elementType // let Typer worry about this
       case tb: TypeBasic => tb
+    }
+
+    override def visit(prog: Program): Unit = {
+      super.visit(prog)
+      if (prog.mainMethodDecl.isEmpty) throw new ResolveException(NoMainMethodError())
     }
 
     override def visit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
