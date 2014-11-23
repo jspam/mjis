@@ -106,7 +106,8 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
     case r: Ref[Decl] => r.decl match {
       case Some(decl) => decl match {
-        case _: Parameter | _: FieldDecl | _: LocalVarDeclStatement => true
+        case p: Parameter => p.name != "this"
+        case _: FieldDecl | _: LocalVarDeclStatement => true
         case _ => false
       }
       case None => throw new TypecheckException(UnresolvedReferenceError())
