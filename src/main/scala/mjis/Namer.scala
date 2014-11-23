@@ -93,10 +93,20 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       values.leaveScope()
     }
     override def visit(stmt: LocalVarDeclStatement): Unit = {
-      super.visit(stmt)
-      if (values.inCurrentScope(stmt.name))
-        throw new ResolveException(DuplicateDefinitionError(values.lookup(stmt.name).get, stmt))
+      // LocalVarDecls may shadow field declarations, but not other LocalVarDecls or parameters
+      values.lookup(stmt.name) match {
+        case None | Some(FieldDecl(_, _)) =>
+        case _ => throw new ResolveException(DuplicateDefinitionError(values.lookup(stmt.name).get, stmt))
+      }
+
       values.insert(stmt)
+      // Visit the initializer *after* the value has been inserted -- it must be visible there.
+      //   JLS 14.4.2: "The scope of a local variable declaration in a block (§14.2)
+      //   is the rest of the block in which the declaration appears,
+      //   starting with its own initializer (§14.4) [...]"
+      // 'int x = x;' is only invalid Java because of definite assignment rules, which do not
+      // apply to MiniJava.
+      super.visit(stmt)
     }
     override def visit(expr: Apply): Unit = {
       val name = if (expr.name == "-" && expr.arguments.length == 1) "- (unary)" else expr.name

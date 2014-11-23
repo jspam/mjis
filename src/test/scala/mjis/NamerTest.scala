@@ -22,9 +22,10 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     getRefDecl(statements(1)) shouldBe statements(0)
   }
 
-  it should "recognize shadowing variable references" in {
-    val statements = getStatements("int x; { boolean x; x; }")
-    getRefDecl(statements(2)) shouldBe statements(1)
+  it should "disallow shadowing variable references" in {
+    assertExecFailure[Namer](fromStatements("int x; { boolean x; x; }")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMethod("public void test(int x) { int x; }")).head shouldBe a [DuplicateDefinitionError]
+    fromStatements("{ int x; } { int x; }") should succeedNaming
   }
 
   it should "recognize method references" in {
@@ -127,7 +128,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     assertExecFailure[Namer](fromStatements("{ { int x; int[] x; } }")).head shouldBe a [DuplicateDefinitionError]
   }
 
-  it should "allow the same name in different scopes" in {
+  it should "allow the same name in different types of scopes" in {
     fromMethod("public int x; public int x() { x; x(); }") should succeedNaming
     fromMethod("public int x; public boolean x() { x; x(); }") should succeedNaming
     "class foo { public static void main(String[] args) {} public int foo; public boolean foo() { foo foo; } }" should succeedNaming
@@ -139,5 +140,9 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     val statement = methodBody.statements(1).asInstanceOf[ExpressionStatement].expr.asInstanceOf[Assignment]
     statement.lhs.asInstanceOf[Ref[Decl]].decl.get shouldBe localVarDecl
     statement.rhs.asInstanceOf[Ref[Decl]].decl.get shouldBe fieldDecl
+  }
+
+  it should "allow(!) accessing a local variable in its initializer" in {
+    fromStatements("int x = x;") should succeedNaming
   }
 }
