@@ -185,7 +185,8 @@ class PrettyPrinterTest extends FlatSpec with Matchers with Inspectors {
     "class C { public void test() { if(true) { } else test(); } }" should succeedPrettyPrintingWith(
       """class C {
         |  public void test() {
-        |    if (true) { } else test();
+        |    if (true) { } else
+        |      test();
         |  }
         |}
         |""".stripMargin.replace("  ", "\t"))

@@ -62,8 +62,16 @@ class PrettyPrinter(writer: Writer) {
         printConditionalBody(ifTrue)
         if (ifFalse != EmptyStatement) {
           if (ifTrue.isInstanceOf[Block]) emit(" ") else newLine()
-          emit("else ")
-          printStatement(ifFalse)
+          emit("else")
+          if (ifFalse.isInstanceOf[Block] || ifFalse.isInstanceOf[If] || ifFalse.isInstanceOf[While]) {
+            emit(" ")
+            printStatement(ifFalse)
+          } else {
+            indent()
+            newLine()
+            printStatement(ifFalse)
+            unindent()
+          }
         }
       case While(condition, body) =>
         emit("while (")
