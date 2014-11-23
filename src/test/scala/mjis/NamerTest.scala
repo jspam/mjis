@@ -112,9 +112,23 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "check field accesses" in {
+    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field"))
     fromStatements("int x; x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field"))
     fromStatements("boolean x; x.isFalse = true;") should failNamingWith(DefNotFoundError("isFalse", "field"))
     fromStatements("int[] x; x.length;")  should failNamingWith(DefNotFoundError("length", "field"))
+    fromStatements("null.foo;")  should failNamingWith(DefNotFoundError("foo", "field"))
+  }
+
+  it should "check method accesses" in {
+    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method"))
+    fromStatements("int x; x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method"))
+    fromStatements("boolean x; x.isFalse();") should failNamingWith(DefNotFoundError("isFalse", "method"))
+    fromStatements("int[] x; x.length();")  should failNamingWith(DefNotFoundError("length", "method"))
+    fromStatements("null.foo();")  should failNamingWith(DefNotFoundError("foo", "method"))
+  }
+
+  it should "disallow null as type name" in {
+    assertExecFailure[Namer](fromMembers("public null x;", true)).head shouldBe a [Parser.UnexpectedTokenError]
   }
 
   it should "disallow two classes, methods, fields or variables with the same name" in {
