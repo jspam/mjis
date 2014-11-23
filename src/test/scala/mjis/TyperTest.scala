@@ -47,10 +47,14 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow void everywhere but in method declarations" in {
-    fromStatements("void x;") shouldNot succeedTyping
-    "class Test { public void field; }" shouldNot succeedTyping
-    "class Test { public int fromMethod(void foo) {} }" shouldNot succeedTyping
-    fromStatements("new void[42];") shouldNot succeedTyping
+    fromStatements("void x;") should failTypingWith(VoidUsageError())
+    "class Test { public void test() { void x = test(); } }" should failTypingWith(VoidUsageError())
+    "class Test { public void field; }" should failTypingWith(VoidUsageError())
+    "class Test { public int fromMethod(void foo) {} }" should failTypingWith(VoidUsageError())
+    fromStatements("new void[42];") should failTypingWith(VoidUsageError())
+
+    "class Test { public void test() { int x = test(); } }" should failTypingWith(InvalidTypeError(IntType, VoidType))
+    "class Test { public int x; public void test() { this.x = test(); } }" should failTypingWith(InvalidTypeError(IntType, VoidType))
   }
 
   it should "typecheck return statements" in {
@@ -180,6 +184,14 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
     "class Test2{} class Test{ public void test() { Test test; Test2 test2 = test = null; }}" should
       failTypingWith(InvalidTypeError(TypeBasic("Test2"), TypeBasic("Test")))
+
+    fromStatements("int x; x = 42;") should succeedTyping
+    fromStatements("int x; x = true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+
+    fromStatements("int[][][][] x; x[0][1] = 2;") should failTypingWith(InvalidTypeError(TypeArray(IntType, 2), IntType))
+    fromStatements("int[][][][] x; x[0][1] = new int[2];") should failTypingWith(InvalidTypeError(TypeArray(IntType, 2), TypeArray(IntType, 1)))
+    fromStatements("int[][][][] x; x[0][1] = new int[2][];") should succeedTyping
+    fromStatements("int[][][][] x; x[0][1] = new int[2][][];") should failTypingWith(InvalidTypeError(TypeArray(IntType, 2), TypeArray(IntType, 3)))
   }
 
   it should "type check the equality and inequality operator" in {
@@ -228,4 +240,61 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("int[] x; x[true + 42];") should failTypingWith(InvalidTypeError(IntType, BooleanType))
   }
 
+  it should "type check the other operators" in {
+    val intOpsReturningBool = List("<", "<=", ">", ">=")
+    val intOpsReturningInt = List("+", "-", "*", "/", "%")
+    val intOps = intOpsReturningBool ++ intOpsReturningInt
+    val boolOps = List("&&", "||")
+
+    intOps.foreach(op => withClue(op) {
+      fromStatements(s"42 $op 43;") should succeedTyping
+      fromStatements(s"42 $op true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"true $op 42;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"true $op false;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"new Test() $op 42;") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
+      fromStatements(s"42 $op new Test();") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
+      fromStatements(s"new int[2][][0] $op 42;") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 1)))
+      fromStatements(s"42 $op new int[2][][0];") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 1)))
+    })
+    intOpsReturningInt.foreach(op => withClue(op) {
+      fromStatements(s"int x = 42 $op 43;") should succeedTyping
+      fromStatements(s"boolean x = 42 $op 43;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    })
+    intOpsReturningBool.foreach(op => withClue(op) {
+      fromStatements(s"int x = 42 $op 43;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+      fromStatements(s"boolean x = 42 $op 43;") should succeedTyping
+    })
+    boolOps.foreach(op => withClue(op) {
+      fromStatements(s"42 $op 43;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+      fromStatements(s"42 $op true;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+      fromStatements(s"true $op 42;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+      fromStatements(s"true $op false;") should succeedTyping
+      fromStatements(s"new Test() $op true;") should failTypingWith(InvalidTypeError(BooleanType, TypeBasic("Test")))
+      fromStatements(s"true $op new Test();") should failTypingWith(InvalidTypeError(BooleanType, TypeBasic("Test")))
+      fromStatements(s"new boolean[2][][0] $op true;") should failTypingWith(InvalidTypeError(BooleanType, TypeArray(BooleanType, 1)))
+      fromStatements(s"true $op new boolean[2][][0];") should failTypingWith(InvalidTypeError(BooleanType, TypeArray(BooleanType, 1)))
+    })
+
+    fromStatements("-42;") should succeedTyping
+    fromStatements("-true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    fromStatements("-new Test();") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
+    fromStatements("-new int[42][];") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 2)))
+
+    fromStatements("!true;") should succeedTyping
+    fromStatements("!42;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
+    fromStatements("!new Test();") should failTypingWith(InvalidTypeError(BooleanType, TypeBasic("Test")))
+    fromStatements("!new boolean[42][];") should failTypingWith(InvalidTypeError(BooleanType, TypeArray(BooleanType, 2)))
+  }
+
+  it should "typecheck field accesses" in {
+    def testProg(stmts: String) = s"class Test { public Test t; public int x; public Test getTest() { return new Test(); } public void test() { $stmts } }"
+    testProg("this.t = new Test();") should succeedTyping
+    testProg("this.t = this.t;") should succeedTyping
+    testProg("this.x = 42;") should succeedTyping
+    testProg("this.t.x = 42;") should succeedTyping
+    testProg("new Test().x = 42;") should succeedTyping
+    testProg("getTest().x = 42;") should succeedTyping
+    testProg("this.t.getTest().x = 42;") should succeedTyping
+    testProg("(new Test[42])[0].x = 42;") should succeedTyping
+  }
 }
