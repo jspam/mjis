@@ -214,8 +214,8 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
                 args.headOption match {
                   case None => done(Unit)
                   case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => {
-                    val paramType = params.head.typ // might be null => untypeable, do not check for convertability
-                    if (paramType != null && !isConvertible(getType(argument), params.head.typ)) {
+                    val paramType = params.head.typ // might be null, meaning that the parameter is untypeable
+                    if (paramType != null && !isConvertible(getType(argument), paramType)) {
                       throw new TypecheckException(InvalidTypeError(params.head.typ, getType(argument)))
                     }
                     remainder(args.tail, params.tail)

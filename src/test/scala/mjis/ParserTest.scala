@@ -331,7 +331,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   it should "reject invalid 'new' expressions" in {
     val tests = List("new 3;", "new a[][6];", "new;", "new class()", "new MyClass;", "new MyClass(3);")
-    all(tests.map(t => fromStatements(t))) shouldNot succeedParsing()
+    all(tests.map(fromStatements(_))) shouldNot succeedParsing()
   }
 
   it should "reject invalid field declarations" in {

@@ -86,13 +86,11 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow static methods not called main" in {
-    assertExecFailure[Namer]("class Test { public static void mine(String[] foo) {} } ").
-      head shouldBe a [InvalidMainMethodNameError]
+    "class Test { public static void mine(String[] foo) {} } " should failNamingWith(InvalidMainMethodNameError())
   }
 
   it should "disallow programs without a main method" in {
-    assertExecFailure[Namer]("class Test { public void main() {} } ").
-      head shouldBe a [NoMainMethodError]
+    "class Test { public void main() {} } " should failNamingWith(NoMainMethodError())
   }
 
   it should "disallow more than one main method" in {
@@ -103,7 +101,8 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow calling the main method" in {
-    assertExecFailure[Namer]("class String{} class Test{ public static void main(String[] args) { main(new String[]); } }")
+    "class String{} class Test{ public static void main(String[] args) { main(new String[42]); } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
   }
 
   it should "disallow accessing the main method's parameter" in {
