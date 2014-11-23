@@ -1,6 +1,5 @@
 package mjis
 
-import scala.collection.AbstractIterator
 import scala.collection.mutable.{ListBuffer, Queue, Map => MutableMap}
 import java.io.BufferedWriter
 
@@ -236,6 +235,7 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
 
 
   protected override def getResult(): LookaheadIterator[Token] = new TokenIterator()
+  override def forceResult(): Unit = result.length
 
   override def findings: List[Finding] = _findings.toList
 
@@ -250,10 +250,6 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
       writer.newLine()
     }
 
-    if (!this.success) {
-      writer.write("error")
-      writer.newLine()
-    }
     writer.flush()
   }
 }
