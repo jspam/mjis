@@ -101,4 +101,13 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     assertExecFailure[Namer]("class Test { public static void main(String[] args) {} } " +
       "class Test2 { public static void main(String[] args) {} }").head shouldBe a [DuplicateDefinitionError]
   }
+
+  it should "disallow calling the main method" in {
+    assertExecFailure[Namer]("class String{} class Test{ public static void main(String[] args) { main(new String[]); } }")
+  }
+
+  it should "disallow accessing the main method's parameter" in {
+    "class String{} class Test{ public static void main(String[] arguments) { arguments; } }" should
+      failNamingWith(DefNotFoundError("arguments", "value"))
+  }
 }

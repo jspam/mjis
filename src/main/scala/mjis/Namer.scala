@@ -57,8 +57,8 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     }
     override def visit(method: MethodDecl): Unit = {
       values.enterScope()
-      method.parameters.foreach(values.insert)
       if (method.isStatic) {
+        // Do not insert the parameter as it may not be accessed.
         if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError())
         input.mainMethodDecl match {
           case Some(existingMain) =>
@@ -66,8 +66,10 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
           case None => input.mainMethodDecl = Some(method)
         }
         visit(method.body) // do not visit the arguments since 'String' is not defined in general
-      } else
+      } else {
+        method.parameters.foreach(values.insert)
         super.visit(method)
+      }
       values.leaveScope()
     }
     override def visit(stmt: Block): Unit = {
