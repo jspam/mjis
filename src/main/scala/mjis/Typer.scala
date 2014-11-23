@@ -170,13 +170,14 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       case While(cond, body) =>
         typecheckExpression(cond).result
         assertConvertible(getType(cond), BooleanType)
-        tailcall(typecheckStatement(body, m))
-        done(false)
+        tailcall(typecheckStatement(body, m)).map(_ => false)
       case ExpressionStatement(expr) =>
-        tailcall(typecheckExpression(expr)).flatMap(_ => done(false))
+        typecheckExpression(expr).result
+        done(false)
       case ReturnStatement(Some(expr)) =>
         assertConvertible(getType(expr), m.typ)
-        tailcall(typecheckExpression(expr)).flatMap(_ => done(true))
+        typecheckExpression(expr).result
+        done(true)
       case ReturnStatement(None) =>
         assertConvertible(VoidType, m.typ)
         done(true)
@@ -201,28 +202,33 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
             if (a.arguments.size != decl.parameters.size) {
               throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size - 1, a.arguments.size - 1))
             }
-            // Special case == and !=
-            if (decl == EqualsDecl || decl == UnequalDecl) {
-              val typeLeft = getType(a.arguments(0))
-              val typeRight = getType(a.arguments(1))
-              if (!isConvertible(typeLeft, typeRight) && !isConvertible(typeRight, typeLeft)) {
-                throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight))
-              }
-              done(Unit)
-            } else {
-              def remainder(args: Seq[Expression], params: Seq[Parameter]): TailRec[Unit] =
-                args.headOption match {
-                  case None => done(Unit)
-                  case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => {
-                    val paramType = params.head.typ // might be null, meaning that the parameter is untypeable
-                    if (paramType != null && !isConvertible(getType(argument), paramType)) {
-                      throw new TypecheckException(InvalidTypeError(params.head.typ, getType(argument)))
-                    }
-                    remainder(args.tail, params.tail)
-                  })
-              }
-              remainder(a.arguments, decl.parameters)
+            // check untypeable parameters
+            decl match {
+              case EqualsDecl | UnequalDecl =>
+                val typeLeft = getType(a.arguments(0))
+                val typeRight = getType(a.arguments(1))
+                if (!isConvertible(typeLeft, typeRight) && !isConvertible(typeRight, typeLeft)) {
+                  throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight))
+                }
+              case ArrayAccessDecl =>
+                val arrayType = getType(a.arguments(0))
+                if (!arrayType.isInstanceOf[TypeArray])
+                  throw new TypecheckException(new ArrayAccessOnNonArrayError(arrayType))
+              case _ =>
             }
+            def remainder(args: Seq[Expression], params: Seq[Parameter]): TailRec[Unit] =
+              args.headOption match {
+                case None => done(Unit)
+                case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => {
+                  // might be null, meaning that the parameter is untypeable and has already been checked above
+                  val paramType = params.head.typ
+                  if (paramType != null && !isConvertible(getType(argument), paramType)) {
+                    throw new TypecheckException(InvalidTypeError(params.head.typ, getType(argument)))
+                  }
+                  remainder(args.tail, params.tail)
+                })
+            }
+            remainder(a.arguments, decl.parameters)
         }
       case NewArray(typ, firstDimSize, _) =>
         assertNotVoid(typ)
