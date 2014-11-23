@@ -15,7 +15,7 @@ object Typer {
     override def msg: String = s"'void' is only valid as a method return type"
   }
 
-  case class AssignmentToNonLvalueError() extends SyntaxTreeError {
+  case class AssignmentToNonLValueError() extends SyntaxTreeError {
     override def msg: String = s"Assignment is only possible to a parameter, variable, field or array element"
   }
 
@@ -99,7 +99,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
   }
 
-  private def isLvalue(expr: Expression) = expr match {
+  private def isLValue(expr: Expression) = expr match {
     case a: Apply => a.decl match {
       case Some(decl) => decl == ArrayAccessDecl
       case None => throw new TypecheckException(UnresolvedReferenceError())
@@ -187,7 +187,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   private def typecheckExpression(e: Expression): TailRec[Unit] = {
     e match {
       case Assignment(lhs, rhs) =>
-        if (!isLvalue(lhs)) throw new TypecheckException(AssignmentToNonLvalueError())
+        if (!isLValue(lhs)) throw new TypecheckException(AssignmentToNonLValueError())
         tailcall(typecheckExpression(lhs)).flatMap(_ => {
           tailcall(typecheckExpression(rhs)).flatMap(_ => {
             assertConvertible(getType(rhs), getType(lhs))
