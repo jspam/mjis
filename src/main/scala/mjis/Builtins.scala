@@ -36,10 +36,10 @@ object Builtins {
   val SystemOutFieldDecl = FieldDecl("out", TypeBasic("$System.out"))
   val SystemDecl = ClassDecl("$System", List(), List(SystemOutFieldDecl))
 
-  val PublicTypes = ValueTypes :+ VoidType
-  val PublicTypeDecls = ValueTypeDecls :+ VoidDecl
-
   val NullType = TypeBasic("null")
+  val NullDecl = ClassDecl("null", List.empty, List.empty)
+
+  val PublicTypeDecls = ValueTypeDecls ++ List(VoidDecl, NullDecl)
 
   // untypeable operators
   val EqualsDecl = MethodDecl("==",

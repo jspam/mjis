@@ -48,17 +48,17 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
   it should "disallow void everywhere but in method declarations" in {
     fromStatements("void x;") should failTypingWith(VoidUsageError())
-    fromMethod("public void test() { void x = test(); }") should failTypingWith(VoidUsageError())
-    fromMethod("public void field;") should failTypingWith(VoidUsageError())
-    fromMethod("public int test(void foo) {}") should failTypingWith(VoidUsageError())
+    fromMembers("public void test() { void x = test(); }") should failTypingWith(VoidUsageError())
+    fromMembers("public void field;") should failTypingWith(VoidUsageError())
+    fromMembers("public int test(void foo) {}") should failTypingWith(VoidUsageError())
     fromStatements("new void[42];") should failTypingWith(VoidUsageError())
 
-    fromMethod("public void test() { int x = test(); }") should failTypingWith(InvalidTypeError(IntType, VoidType))
-    fromMethod("public int x; public void test() { this.x = test(); }") should failTypingWith(InvalidTypeError(IntType, VoidType))
+    fromMembers("public void test() { int x = test(); }") should failTypingWith(InvalidTypeError(IntType, VoidType))
+    fromMembers("public int x; public void test() { this.x = test(); }") should failTypingWith(InvalidTypeError(IntType, VoidType))
   }
 
   it should "typecheck return statements" in {
-    fromMethod("public int test() { return true + 42; }") should
+    fromMembers("public int test() { return true + 42; }") should
       failTypingWith(InvalidTypeError(IntType, BooleanType))
   }
 
@@ -67,8 +67,8 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
       for ((retVal, retValIdx) <- List("", "42", "true", "new int[42]", "new boolean[42][]").zipWithIndex) {
         val prog = s"public $retType test() { return $retVal; }"
         withClue(prog) {
-          if (retTypeIdx == retValIdx) fromMethod(prog) should succeedTyping
-          else fromMethod(prog) shouldNot succeedTyping
+          if (retTypeIdx == retValIdx) fromMembers(prog) should succeedTyping
+          else fromMembers(prog) shouldNot succeedTyping
         }
       }
     }
@@ -160,28 +160,28 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   it should "allow assignment to lvalues only" in {
     fromStatements("int i; i = 42;") should succeedTyping
     fromStatements("int[] i; i[3] = 42;") should succeedTyping
-    fromMethod("public int i; public void test() { i = 42; }") should succeedTyping
-    fromMethod("public int i; public void test() { this.i = 42; }") should succeedTyping
-    fromMethod("public void test(int i) { i = 42; }") should succeedTyping
+    fromMembers("public int i; public void test() { i = 42; }") should succeedTyping
+    fromMembers("public int i; public void test() { this.i = 42; }") should succeedTyping
+    fromMembers("public void test(int i) { i = 42; }") should succeedTyping
     
     fromStatements("int i; i + 3 = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("new int[42] = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("new Test() = 42;") should failTypingWith(AssignmentToNonLValueError())
     fromStatements("int i; (i = 42) = 42;") should failTypingWith(AssignmentToNonLValueError())
-    fromMethod("public int i() { i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
-    fromMethod("public int i() { this.i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
+    fromMembers("public int i() { i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
+    fromMembers("public int i() { this.i() = 42; }") should failTypingWith(AssignmentToNonLValueError())
   }
 
   it should "check that a non-void function reaches a return statement on every code path" in {
-    fromMethod("public void foo() { } ") should succeedTyping
-    fromMethod("public int foo() { { { { return 0; } } } 42; } ") should succeedTyping
-    fromMethod("public int foo() { { if (true) return 0; else return 1; } 42; }") should succeedTyping
-    fromMethod("public int foo() { { if (true) { return 0; } else { return 1; } } 42; }") should succeedTyping
+    fromMembers("public void foo() { } ") should succeedTyping
+    fromMembers("public int foo() { { { { return 0; } } } 42; } ") should succeedTyping
+    fromMembers("public int foo() { { if (true) return 0; else return 1; } 42; }") should succeedTyping
+    fromMembers("public int foo() { { if (true) { return 0; } else { return 1; } } 42; }") should succeedTyping
 
-    fromMethod("public int foo() { 42; }") should failTypingWith(MissingReturnStatementError())
-    fromMethod("public int foo() { { while (true) return 0; } 42; }") should failTypingWith(MissingReturnStatementError())
-    fromMethod("public int foo() { if (true) return 0; else; 42; }") should failTypingWith(MissingReturnStatementError())
-    fromMethod("public int foo() { if (true) { if (false) return 0; else; } else return 1; 42; }") should
+    fromMembers("public int foo() { 42; }") should failTypingWith(MissingReturnStatementError())
+    fromMembers("public int foo() { { while (true) return 0; } 42; }") should failTypingWith(MissingReturnStatementError())
+    fromMembers("public int foo() { if (true) return 0; else; 42; }") should failTypingWith(MissingReturnStatementError())
+    fromMembers("public int foo() { if (true) { if (false) return 0; else; } else return 1; 42; }") should
       failTypingWith(MissingReturnStatementError())
   }
 
@@ -300,7 +300,7 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "typecheck field accesses" in {
-    def testProg(stmts: String) = fromMethod(s"public Test t; public int x; public Test getTest() { return new Test(); } public void test() { $stmts }")
+    def testProg(stmts: String) = fromMembers(s"public Test t; public int x; public Test getTest() { return new Test(); } public void test() { $stmts }")
     testProg("this.t = new Test();") should succeedTyping
     testProg("this.t = this.t;") should succeedTyping
     testProg("this.x = 42;") should succeedTyping

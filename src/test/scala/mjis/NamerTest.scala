@@ -24,7 +24,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
 
   it should "disallow shadowing variable references" in {
     assertExecFailure[Namer](fromStatements("int x; { boolean x; x; }")).head shouldBe a [DuplicateDefinitionError]
-    assertExecFailure[Namer](fromMethod("public void test(int x) { int x; }")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMembers("public void test(int x) { int x; }")).head shouldBe a [DuplicateDefinitionError]
     fromStatements("{ int x; } { int x; }") should succeedNaming
   }
 
@@ -112,28 +112,42 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "check field accesses" in {
+    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field"))
     fromStatements("int x; x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field"))
     fromStatements("boolean x; x.isFalse = true;") should failNamingWith(DefNotFoundError("isFalse", "field"))
     fromStatements("int[] x; x.length;")  should failNamingWith(DefNotFoundError("length", "field"))
+    fromStatements("null.foo;")  should failNamingWith(DefNotFoundError("foo", "field"))
+  }
+
+  it should "check method accesses" in {
+    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method"))
+    fromStatements("int x; x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method"))
+    fromStatements("boolean x; x.isFalse();") should failNamingWith(DefNotFoundError("isFalse", "method"))
+    fromStatements("int[] x; x.length();")  should failNamingWith(DefNotFoundError("length", "method"))
+    fromStatements("null.foo();")  should failNamingWith(DefNotFoundError("foo", "method"))
+  }
+
+  it should "disallow null as type name" in {
+    assertExecFailure[Namer](fromMembers("public null x;", true)).head shouldBe a [Parser.UnexpectedTokenError]
   }
 
   it should "disallow two classes, methods, fields or variables with the same name" in {
     assertExecFailure[Namer]("class Test{ public static void main(String[] args) {} } class Test{}").head shouldBe a [DuplicateDefinitionError]
-    assertExecFailure[Namer](fromMethod("public int x; public boolean x;")).head shouldBe a [DuplicateDefinitionError]
-    assertExecFailure[Namer](fromMethod("public int x(){} public int x(){}")).head shouldBe a [DuplicateDefinitionError]
-    assertExecFailure[Namer](fromMethod("public int x(int y){} public int x(boolean y){}")).head shouldBe a [DuplicateDefinitionError]
-    assertExecFailure[Namer](fromMethod("public int x(){} public boolean x(){}")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMembers("public int x; public boolean x;")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMembers("public int x(){} public int x(){}")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMembers("public int x(int y){} public int x(boolean y){}")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMembers("public int x(){} public boolean x(){}")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromStatements("{ { int x; int x; } }")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromStatements("{ { int x; boolean x; } }")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromStatements("{ { int x; int[] x; } }")).head shouldBe a [DuplicateDefinitionError]
   }
 
   it should "allow the same name in different types of scopes" in {
-    fromMethod("public int x; public int x() { x; x(); }") should succeedNaming
-    fromMethod("public int x; public boolean x() { x; x(); }") should succeedNaming
+    fromMembers("public int x; public int x() { x; x(); }") should succeedNaming
+    fromMembers("public int x; public boolean x() { x; x(); }") should succeedNaming
     "class foo { public static void main(String[] args) {} public int foo; public boolean foo() { foo foo; } }" should succeedNaming
 
-    val program = assertExec[Namer](fromMethod("public int x; public int y() { boolean x; x = this.x; }")).result
+    val program = assertExec[Namer](fromMembers("public int x; public int y() { boolean x; x = this.x; }")).result
     val methodBody = program.classes(0).methods(0).body
     val fieldDecl = program.classes(0).fields(0)
     val localVarDecl = methodBody.statements(0)
