@@ -137,7 +137,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
   }
 
   override protected def getResult(): Program = { resolve(); input }
-  override def dumpResult(writer: BufferedWriter): Unit = ???
+  override def dumpResult(writer: BufferedWriter): Unit = {} // no stdout output, just the error code
 
   private val _findings = mutable.ListBuffer.empty[Finding]
   override def findings: List[Finding] = _findings.toList
