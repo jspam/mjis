@@ -94,6 +94,8 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
             expr.arguments(0) == Select(Ident("System"), "out") &&
             values.lookup("System") == None) {
             expr.decl = Builtins.SystemOutPrintlnDecl
+            expr.arguments(0).asInstanceOf[Select].qualifier.asInstanceOf[Ident].decl = Builtins.SystemDecl
+            expr.arguments(0).asInstanceOf[Select].decl = Builtins.SystemOutFieldDecl
             // do _not_ visit arguments(0)
             expr.arguments.tail.foreach(_.accept(this))
           } else {
@@ -142,6 +144,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
 
   private def resolve(): Unit = {
     try {
+      // Force the class lookup to be fully built and evaluated, detecting duplicate class/method/field definitions
+      classes.values.foreach(cls => {
+        cls.fields.toSeq
+        cls.methods.toSeq
+      })
       input.accept(new NamerVisitor())
     } catch {
       case ResolveException(finding) => _findings += finding

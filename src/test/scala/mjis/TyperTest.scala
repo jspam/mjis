@@ -310,4 +310,11 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     testProg("this.t.getTest().x = 42;") should succeedTyping
     testProg("(new Test[42])[0].x = 42;") should succeedTyping
   }
+
+  it should "typecheck the builtin System.out.println function" in {
+    fromStatements("System.out.println();") should failTypingWith(WrongNumberOfParametersError(1, 0))
+    fromStatements("System.out.println(-42);") should succeedTyping
+    fromStatements("System.out.println(false);") should failTypingWith(InvalidTypeError(IntType, BooleanType))
+    fromStatements("System.out.println(new int[2]);") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 1)))
+  }
 }

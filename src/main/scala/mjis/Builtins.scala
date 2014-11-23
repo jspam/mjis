@@ -31,6 +31,11 @@ object Builtins {
   val VoidType = TypeBasic("void")
   val VoidDecl = ClassDecl("void", List.empty, List.empty)
 
+  val SystemOutPrintlnDecl = MethodDecl("System.out.println",
+    List(Parameter("this", TypeBasic("$System.out")), Parameter("", IntType)), VoidType, null)
+  val SystemOutFieldDecl = FieldDecl("out", TypeBasic("$System.out"))
+  val SystemDecl = ClassDecl("$System", List(), List(SystemOutFieldDecl))
+
   val PublicTypes = ValueTypes :+ VoidType
   val PublicTypeDecls = ValueTypeDecls :+ VoidDecl
 
@@ -47,6 +52,4 @@ object Builtins {
     /* untypeable */ null, null)
 
   val Operators = IntDecl.methods ++ BooleanDecl.methods ++ List(EqualsDecl, UnequalDecl, ArrayAccessDecl)
-
-  val SystemOutPrintlnDecl = MethodDecl("System.out.println", List(Parameter("", IntType)), VoidType, null)
 }
