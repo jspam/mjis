@@ -142,6 +142,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
 
   private def resolve(): Unit = {
     try {
+      // Force the class lookup to be fully built and evaluated, detecting duplicate class/method/field definitions
+      classes.values.foreach(cls => {
+        cls.fields.toSeq
+        cls.methods.toSeq
+      })
       input.accept(new NamerVisitor())
     } catch {
       case ResolveException(finding) => _findings += finding

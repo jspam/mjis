@@ -109,4 +109,15 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     "class String{} class Test{ public static void main(String[] arguments) { arguments; } }" should
       failNamingWith(DefNotFoundError("arguments", "value"))
   }
+
+  it should "disallow two classes, methods, fields or variables with the same name" in {
+    assertExecFailureWith[DuplicateDefinitionError,Namer]("class Test{ public static void main(String[] args) {} } class Test{}")
+    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x; public boolean x;"))
+    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x(){}; public int x(){};"))
+    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x(int y){}; public int x(boolean y){};"))
+    assertExecFailureWith[DuplicateDefinitionError,Namer](fromMethod("public int x(){}; public boolean x(){};"))
+    assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; int x; } }"))
+    assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; boolean x; } }"))
+    assertExecFailureWith[DuplicateDefinitionError,Namer](fromStatements("{ { int x; int[] x; } }"))
+  }
 }
