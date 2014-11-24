@@ -294,9 +294,9 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     })
 
     fromStatements("-42;") should succeedTyping
-    fromStatements("-true;") should failTypingWith(InvalidTypeError(IntType, BooleanType))
-    fromStatements("-new Test();") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test")))
-    fromStatements("-new int[42][];") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 2)))
+    fromStatements("-true;") should failTypingWith(InvalidTypeError(ExtendedIntType, BooleanType))
+    fromStatements("-new Test();") should failTypingWith(InvalidTypeError(ExtendedIntType, TypeBasic("Test")))
+    fromStatements("-new int[42][];") should failTypingWith(InvalidTypeError(ExtendedIntType, TypeArray(IntType, 2)))
 
     fromStatements("!true;") should succeedTyping
     fromStatements("!42;") should failTypingWith(InvalidTypeError(BooleanType, IntType))
@@ -321,5 +321,24 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements("System.out.println(-42);") should succeedTyping
     fromStatements("System.out.println(false);") should failTypingWith(InvalidTypeError(IntType, BooleanType))
     fromStatements("System.out.println(new int[2]);") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 1)))
+  }
+
+  it should "disallow big Integer literals" in {
+    var value = "13456712834576298365798347569834756234523864759486734857320854032543252342342344"
+    fromStatements(s"int x = $value;") should failTypingWith(IntLiteralOutOfRangeError(value))
+    fromStatements(s"int x = -$value;") should failTypingWith(IntLiteralOutOfRangeError(value))
+
+    value = "2147483649"
+    fromStatements(s"int x = $value;") should failTypingWith(IntLiteralOutOfRangeError(value))
+    fromStatements(s"int x = -$value;") should failTypingWith(IntLiteralOutOfRangeError(value))
+
+    value = "2147483648"
+    fromStatements(s"int x = $value;") shouldNot succeedTyping
+    fromStatements(s"int x = -$value;") should succeedTyping
+    fromStatements(s"int x = -(-$value);") should succeedTyping
+
+    value = "2147483647"
+    fromStatements(s"int x = $value;") should succeedTyping
+    fromStatements(s"int x = -$value;") should succeedTyping
   }
 }

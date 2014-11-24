@@ -31,6 +31,10 @@ object Typer {
     override def msg: String = s"Incomparable types: $type1 and $type2"
   }
 
+  case class IntLiteralOutOfRangeError(value: String) extends SyntaxTreeError {
+    override def msg: String = s"Integer literal out of range: $value"
+  }
+
   case class InvalidTypeError(expected: TypeDef, actual: TypeDef) extends SyntaxTreeError {
     override def msg: String = s"Invalid type: expected $expected, got $actual"
   }
@@ -69,7 +73,16 @@ object Typer {
       }
       case r: Ref[TypedDecl] => done(getTypeForRef(r))
       case NullLiteral => done(NullType)
-      case _: IntLiteral => done(IntType)
+      case IntLiteral(value) =>
+        val MaxInt = 2147483648L
+        if (value.length > MaxInt.toString.length) {
+          throw new TypecheckException(new IntLiteralOutOfRangeError(value))
+        } else {
+          val valueAsLong = value.toLong
+          if (valueAsLong < MaxInt) done(IntType)
+          else if (valueAsLong == MaxInt) done(ExtendedIntType)
+          else throw new TypecheckException(new IntLiteralOutOfRangeError(value))
+        }
       case _: BooleanLiteral => done(BooleanType)
     }
   }
@@ -85,13 +98,14 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   override def dumpResult(writer: BufferedWriter): Unit = {} // no stdout output, just the error code
 
   private def isConvertible(from: TypeDef, to: TypeDef) = {
-    if (from == NullType) {
+    if (from == NullType)
       // null is convertible to every reference type
       to != VoidType && !ValueTypes.contains(to)
-    } else {
-      // we don't have any subtype relations
+    else if (from == IntType && to == ExtendedIntType)
+      true
+    else
+      // we don't have any other subtype relations
       from == to
-    }
   }
   private def assertConvertible(from: TypeDef, to: TypeDef) = {
     if (!isConvertible(from, to))

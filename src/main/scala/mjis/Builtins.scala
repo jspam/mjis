@@ -3,7 +3,8 @@ package mjis
 import mjis.ast._
 
 object Builtins {
-  val IntType = TypeBasic("int")
+  val IntType = TypeBasic("int") /* A normal 32-bit signed integer */
+  val ExtendedIntType = TypeBasic("int (including 2^31)") /* An integer that can additionally take the value 2147483648 = 2^31. */
   val BooleanType = TypeBasic("boolean")
 
   val IntDecl = ClassDecl("int", List(
@@ -15,8 +16,11 @@ object Builtins {
     MethodDecl("<", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
     MethodDecl("<=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
     MethodDecl(">", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
-    MethodDecl(">=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
-    MethodDecl("- (unary)", List(Parameter("", IntType)), IntType, null)
+    MethodDecl(">=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null)
+  ), List.empty)
+
+  val ExtendedIntDecl = ClassDecl("int (including 2^31)", List(
+    MethodDecl("- (unary)", List(Parameter("", ExtendedIntType)), IntType, null)
   ), List.empty)
 
   val BooleanDecl = ClassDecl("boolean", List(
@@ -25,8 +29,8 @@ object Builtins {
     MethodDecl("!", List(Parameter("", BooleanType)), BooleanType, null)
   ), List.empty)
 
-  val ValueTypes = List(IntType, BooleanType)
-  val ValueTypeDecls = List(IntDecl, BooleanDecl)
+  val ValueTypes = List(IntType, ExtendedIntType, BooleanType)
+  val ValueTypeDecls = List(IntDecl, ExtendedIntDecl, BooleanDecl)
 
   val VoidType = TypeBasic("void")
   val VoidDecl = ClassDecl("void", List.empty, List.empty)
@@ -51,5 +55,5 @@ object Builtins {
   val ArrayAccessDecl = MethodDecl("[]", List(Parameter("", /* untypeable */ null), Parameter("", IntType)),
     /* untypeable */ null, null)
 
-  val Operators = IntDecl.methods ++ BooleanDecl.methods ++ List(EqualsDecl, UnequalDecl, ArrayAccessDecl)
+  val Operators = IntDecl.methods ++ ExtendedIntDecl.methods ++ BooleanDecl.methods ++ List(EqualsDecl, UnequalDecl, ArrayAccessDecl)
 }

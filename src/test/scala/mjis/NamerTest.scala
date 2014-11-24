@@ -57,7 +57,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
       getMethod(IntDecl, "/"), getMethod(IntDecl, "%"), getMethod(IntDecl, "<="),
       getMethod(IntDecl, "<"), EqualsDecl, UnequalDecl, getMethod(IntDecl, ">"),
       getMethod(IntDecl, ">="), getMethod(BooleanDecl, "||"), getMethod(BooleanDecl, "&&"),
-      getMethod(IntDecl, "- (unary)"), getMethod(BooleanDecl, "!"))
+      getMethod(ExtendedIntDecl, "- (unary)"), getMethod(BooleanDecl, "!"))
     for ((expected, idx) <- expected.zipWithIndex) getRefDecl(statements(idx)) shouldBe expected
   }
 
@@ -204,5 +204,16 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
 
   it should "allow(!) accessing a local variable in its initializer" in {
     fromStatements("int x = x;") should succeedNaming
+  }
+
+  it should "disallow accessing fields/methods of Literals" in {
+    fromStatements(s"int x = 2147483648.x;") should failNamingWith(DefNotFoundError("x", "field"))
+    fromStatements(s"int x = 2147483648.x();") should failNamingWith(DefNotFoundError("x", "method"))
+
+    fromStatements(s"int x = 42.x;") should failNamingWith(DefNotFoundError("x", "field"))
+    fromStatements(s"int x = 42.x();") should failNamingWith(DefNotFoundError("x", "method"))
+
+    fromStatements(s"int x = true.x;") should failNamingWith(DefNotFoundError("x", "field"))
+    fromStatements(s"int x = true.x();") should failNamingWith(DefNotFoundError("x", "method"))
   }
 }
