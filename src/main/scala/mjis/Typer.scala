@@ -117,126 +117,93 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
 
   private def typecheckProgram(p: Program) = {
     try {
-      p.classes.foreach(typecheckClassDecl)
+      new TyperVisitor().visit(p)
     } catch {
       case TypecheckException(error) => _findings += error
     }
   }
 
-  private def typecheckClassDecl(c: ClassDecl) = {
-    c.fields.foreach(typecheckFieldDecl)
-    c.methods.foreach(typecheckMethodDecl)
-  }
+  private class TyperVisitor extends PlainRecursiveVisitor[Unit, Boolean, Unit]((), false, ()) {
 
-  private def typecheckFieldDecl(f: FieldDecl) = {
-    assertNotVoid(f.typ)
-  }
+    private var currentMethod: MethodDecl = null
 
-  private def typecheckMethodDecl(m: MethodDecl) = {
-    m.parameters.foreach(p => assertNotVoid(p.typ))
-    val hasReturnStatement = typecheckStatement(m.body, m).result
-    if (!hasReturnStatement && m.typ != VoidType) {
-      throw new TypecheckException(MissingReturnStatementError())
+    override def postVisit(f: FieldDecl, _1: Unit) = assertNotVoid(f.typ)
+
+    override def preVisit(m: MethodDecl) = currentMethod = m
+
+    override def postVisit(m: MethodDecl, _1: Unit, hasReturnStatement: Boolean) = {
+      currentMethod = null
+      if (!hasReturnStatement && m.typ != VoidType) {
+        throw new TypecheckException(MissingReturnStatementError())
+      }
+    }
+
+    override def postVisit(param: Parameter, _1: Unit) = assertNotVoid(param.typ)
+
+    override def postVisit(stmt: LocalVarDeclStatement, _1: Unit, _2: Option[Unit]): Boolean = {
+      assertNotVoid(stmt.typ)
+      stmt.initializer match {
+        case Some(expr) => assertConvertible(getType(expr), stmt.typ)
+        case _ =>
+      }
+      false
+    }
+
+    override def postVisit(stmt: Block, haveReturnStatements: List[Boolean]): Boolean = haveReturnStatements.exists(x => x)
+
+    override def postVisit(stmt: If, _1: Unit, ifTrueHasReturnStatement: Boolean, ifFalseHasReturnStatement: Boolean): Boolean = {
+      assertConvertible(getType(stmt.condition), BooleanType)
+      ifTrueHasReturnStatement && ifFalseHasReturnStatement
+    }
+
+    override def postVisit(stmt: While, _1: Unit, bodyHasReturnStatement: Boolean) = {
+      assertConvertible(getType(stmt.condition), BooleanType)
+      false
+    }
+
+    override def postVisit(stmt: ReturnStatement, _1: Option[Unit]) = {
+      assertConvertible(stmt.returnValue.map(getType).getOrElse(VoidType), currentMethod.typ);
+      true
+    }
+
+    override def postVisit(expr: Assignment, _1: Unit, _2: Unit) = {
+      if (!isLValue(expr.lhs)) throw new TypecheckException(AssignmentToNonLValueError())
+      assertConvertible(getType(expr.rhs), getType(expr.lhs))
+    }
+
+    override def postVisit(expr: Apply, _1: List[Unit]) = {
+      expr.decl match {
+        case None => throw new TypecheckException(new UnresolvedReferenceError)
+        case Some(decl) =>
+          if (expr.arguments.size != decl.parameters.size) {
+            throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size - 1, expr.arguments.size - 1))
+          }
+          // check untypeable parameters
+          decl match {
+            case EqualsDecl | UnequalDecl =>
+              val typeLeft = getType(expr.arguments(0))
+              val typeRight = getType(expr.arguments(1))
+              if (!isConvertible(typeLeft, typeRight) && !isConvertible(typeRight, typeLeft)) {
+                throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight))
+              }
+            case ArrayAccessDecl =>
+              val arrayType = getType(expr.arguments(0))
+              if (!arrayType.isInstanceOf[TypeArray])
+                throw new TypecheckException(new ArrayAccessOnNonArrayError(arrayType))
+            case _ =>
+          }
+          for ((arg, param) <- expr.arguments.zip(decl.parameters)) {
+            // might be null, meaning that the parameter is untypeable and has already been checked above
+            if (param.typ != null && !isConvertible(getType(arg), param.typ)) {
+              throw new TypecheckException(InvalidTypeError(param.typ, getType(arg)))
+            }
+          }
+      }
+    }
+
+    override def postVisit(expr: NewArray, _1: Unit, _2: Unit): Unit = {
+      assertNotVoid(expr.typ)
+      assertConvertible(getType(expr.firstDimSize), IntType)
     }
   }
-
-  /** @param m The surrounding method declaration of the statement
-    * @return whether this statement or all of its children is/contains a ReturnStatement */
-  private def typecheckStatement(s: Statement, m: MethodDecl): TailRec[Boolean] = {
-    s match {
-      case LocalVarDeclStatement(_, typ, initializer) =>
-        assertNotVoid(typ)
-        initializer match {
-          case Some(expr) =>
-            typecheckExpression(expr).result
-            assertConvertible(getType(expr), typ)
-            done(false)
-          case None => done(false)
-        }
-      case Block(statements) =>
-        def remainder(stmts: List[Statement], hasReturnStatement: Boolean): TailRec[Boolean] = stmts.headOption match {
-          case None => done(hasReturnStatement)
-          case Some(stmt) => tailcall(typecheckStatement(stmt, m)).
-            flatMap(nextStatementHasReturn => remainder(stmts.tail, hasReturnStatement || nextStatementHasReturn))
-        }
-        remainder(statements, hasReturnStatement = false)
-      case If(cond, ifTrue, ifFalse) =>
-        typecheckExpression(cond).result
-        assertConvertible(getType(cond), BooleanType)
-        tailcall(typecheckStatement(ifTrue, m)).flatMap(ifTrueHasReturn => {
-          tailcall(typecheckStatement(ifFalse, m)).flatMap(ifFalseHasReturn => {
-            done(ifTrueHasReturn && ifFalseHasReturn)
-          })
-        })
-      case While(cond, body) =>
-        typecheckExpression(cond).result
-        assertConvertible(getType(cond), BooleanType)
-        tailcall(typecheckStatement(body, m)).map(_ => false)
-      case ExpressionStatement(expr) =>
-        typecheckExpression(expr).result
-        done(false)
-      case ReturnStatement(Some(expr)) =>
-        assertConvertible(getType(expr), m.typ)
-        typecheckExpression(expr).result
-        done(true)
-      case ReturnStatement(None) =>
-        assertConvertible(VoidType, m.typ)
-        done(true)
-      case _ => done(false)
-    }
-  }
-
-  private def typecheckExpression(e: Expression): TailRec[Unit] = {
-    e match {
-      case Assignment(lhs, rhs) =>
-        if (!isLValue(lhs)) throw new TypecheckException(AssignmentToNonLValueError())
-        tailcall(typecheckExpression(lhs)).flatMap(_ => {
-          tailcall(typecheckExpression(rhs)).flatMap(_ => {
-            assertConvertible(getType(rhs), getType(lhs))
-            done(Unit)
-          })
-        })
-      case a: Apply =>
-        a.decl match {
-          case None => throw new TypecheckException(new UnresolvedReferenceError)
-          case Some(decl) =>
-            if (a.arguments.size != decl.parameters.size) {
-              throw new TypecheckException(new WrongNumberOfParametersError(decl.parameters.size - 1, a.arguments.size - 1))
-            }
-            // check untypeable parameters
-            decl match {
-              case EqualsDecl | UnequalDecl =>
-                val typeLeft = getType(a.arguments(0))
-                val typeRight = getType(a.arguments(1))
-                if (!isConvertible(typeLeft, typeRight) && !isConvertible(typeRight, typeLeft)) {
-                  throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight))
-                }
-              case ArrayAccessDecl =>
-                val arrayType = getType(a.arguments(0))
-                if (!arrayType.isInstanceOf[TypeArray])
-                  throw new TypecheckException(new ArrayAccessOnNonArrayError(arrayType))
-              case _ =>
-            }
-            def remainder(args: Seq[Expression], params: Seq[Parameter]): TailRec[Unit] =
-              args.headOption match {
-                case None => done(Unit)
-                case Some(argument) => tailcall(typecheckExpression(argument)).flatMap(_ => {
-                  // might be null, meaning that the parameter is untypeable and has already been checked above
-                  val paramType = params.head.typ
-                  if (paramType != null && !isConvertible(getType(argument), paramType)) {
-                    throw new TypecheckException(InvalidTypeError(params.head.typ, getType(argument)))
-                  }
-                  remainder(args.tail, params.tail)
-                })
-            }
-            remainder(a.arguments, decl.parameters)
-        }
-      case NewArray(typ, firstDimSize, _) =>
-        assertNotVoid(typ)
-        assertConvertible(getType(firstDimSize), IntType)
-        tailcall(typecheckExpression(firstDimSize)).flatMap(_ => done(Unit))
-      case _ => done(Unit)
-    }
-  }
-
 }

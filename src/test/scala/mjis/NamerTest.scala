@@ -22,9 +22,19 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     getRefDecl(statements(1)) shouldBe statements(0)
   }
 
+  it should "recognize type references" in {
+    val cls = assertExecClass[Namer]("class Test { public static void main(String[] args) { int x; Test y; boolean b; } }")
+    val types = cls.methods(0).body.statements.map(_.asInstanceOf[LocalVarDeclStatement].typ.asInstanceOf[TypeBasic].decl.get)
+    types shouldBe List(Builtins.IntDecl, cls, Builtins.BooleanDecl)
+  }
+
+  it should "not recognize undefined types" in {
+    fromStatements("unknown x;") should failNamingWith(DefNotFoundError("unknown", "type"))
+  }
+
   it should "disallow shadowing variable references" in {
-    assertExecFailure[Namer](fromStatements("int x; { boolean x; x; }")).head shouldBe a [DuplicateDefinitionError]
-    assertExecFailure[Namer](fromMembers("public void test(int x) { int x; }")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromStatements("int x; { boolean x; x; }")).head shouldBe a[DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMembers("public void test(int x) { int x; }")).head shouldBe a[DuplicateDefinitionError]
     fromStatements("{ int x; } { int x; }") should succeedNaming
   }
 

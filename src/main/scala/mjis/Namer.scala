@@ -31,7 +31,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
   private case class ResolveException(finding: Finding) extends Exception
   private class ClassLookup(val cls: ClassDecl, val fields: Map[String, FieldDecl], val methods: Map[String, MethodDecl])
 
-  private class NamerVisitor extends PostOrderVisitor(new NullVisitor()) {
+  private class NamerVisitor extends PlainRecursiveVisitor[Unit, Unit, Unit]((), (), ()) {
 
     // mind the order: local classes may shadow builtin classes
     private val classes: Map[String, ClassLookup] = mkPackageLookup(Builtins.PublicTypeDecls) ++
@@ -58,18 +58,16 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       case tb: TypeBasic => tb
     }
 
-    override def visit(prog: Program): Unit = {
-      super.visit(prog)
+    override def postVisit(prog: Program): Unit =
       if (prog.mainMethodDecl.isEmpty) throw new ResolveException(NoMainMethodError())
-    }
 
     override def visit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
-    override def visit(cls: ClassDecl): Unit = {
+
+    override def preVisit(cls: ClassDecl): Unit = {
       values.enterScope()
       cls.fields.foreach(values.insert)
-      super.visit(cls)
-      values.leaveScope()
     }
+
     override def visit(method: MethodDecl): Unit = {
       values.enterScope()
       if (method.isStatic) {
@@ -87,12 +85,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       }
       values.leaveScope()
     }
-    override def visit(stmt: Block): Unit = {
-      values.enterScope()
-      super.visit(stmt)
-      values.leaveScope()
-    }
-    override def visit(stmt: LocalVarDeclStatement): Unit = {
+
+    override def preVisit(stmt: Block): Unit = values.enterScope()
+    override def postVisit(stmt: Block, _1: List[Unit]): Unit = values.leaveScope()
+
+    override def preVisit(stmt: LocalVarDeclStatement): Unit = {
       // LocalVarDecls may shadow field declarations, but not other LocalVarDecls or parameters
       values.lookup(stmt.name) match {
         case None | Some(FieldDecl(_, _)) =>
@@ -106,8 +103,8 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       //   starting with its own initializer (§14.4) [...]"
       // 'int x = x;' is only invalid Java because of definite assignment rules, which do not
       // apply to MiniJava.
-      super.visit(stmt)
     }
+
     override def visit(expr: Apply): Unit = {
       val name = if (expr.name == "-" && expr.arguments.length == 1) "- (unary)" else expr.name
       operators.get(name) match {
@@ -130,17 +127,15 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
           }
       }
     }
-    override def visit(expr: Select): Unit = {
-      super.visit(expr)
+
+    override def postVisit(expr: Select, _1: Unit): Unit = {
       val thisType = resolveType(expr.qualifier)
       setDecl(expr, classes(thisType.name).fields.get(expr.name), "field")
     }
-    override def visit(expr: Ident): Unit = {
-      super.visit(expr)
-      setDecl(expr, values.lookup(expr.name), "value")
-    }
+
+    override def visit(expr: Ident): Unit = setDecl(expr, values.lookup(expr.name), "value")
+
     override def visit(expr: ThisLiteral): Unit = {
-      super.visit(expr)
       // lookup can only be None (for static methods) or the this parameter
       setDecl(expr, values.lookup("this").map(_.asInstanceOf[Parameter]), "value")
     }
