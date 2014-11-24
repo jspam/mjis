@@ -43,6 +43,10 @@ object Typer {
     override def msg: String = s"Control flow may reach end of non-void function"
   }
 
+  case class MissingReturnValueError() extends SyntaxTreeError {
+    override def msg: String = s"Non-void function must return a value"
+  }
+
   def getTypeForRef(r: Ref[TypedDecl]) = r.decl match {
     case None => throw new TypecheckException(new UnresolvedReferenceError)
     case Some(decl) => decl.typ
@@ -139,6 +143,8 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       }
     }
 
+    override def postVisit(t: TypeArray, _1: Unit) = assertNotVoid(t.elementType)
+
     override def postVisit(param: Parameter, _1: Unit) = assertNotVoid(param.typ)
 
     override def postVisit(stmt: LocalVarDeclStatement, _1: Unit, _2: Option[Unit]): Boolean = {
@@ -163,7 +169,14 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     override def postVisit(stmt: ReturnStatement, _1: Option[Unit]) = {
-      assertConvertible(stmt.returnValue.map(getType).getOrElse(VoidType), currentMethod.typ);
+      stmt.returnValue match {
+        case Some(expr) =>
+          assertNotVoid(getType(expr))
+          assertConvertible(getType(expr), currentMethod.typ)
+        case None =>
+          if (currentMethod.typ != VoidType)
+            throw new TypecheckException(MissingReturnValueError())
+      }
       true
     }
 

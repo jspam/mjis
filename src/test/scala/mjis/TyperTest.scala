@@ -48,9 +48,13 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
   it should "disallow void everywhere but in method declarations" in {
     fromStatements("void x;") should failTypingWith(VoidUsageError())
+    fromStatements("void[] x;") should failTypingWith(VoidUsageError())
     fromMembers("public void test() { void x = test(); }") should failTypingWith(VoidUsageError())
+    fromMembers("public void[] test() { }") should failTypingWith(VoidUsageError())
     fromMembers("public void field;") should failTypingWith(VoidUsageError())
+    fromMembers("public void[] field;") should failTypingWith(VoidUsageError())
     fromMembers("public int test(void foo) {}") should failTypingWith(VoidUsageError())
+    fromMembers("public int test(void[] foo) {}") should failTypingWith(VoidUsageError())
     fromStatements("new void[42];") should failTypingWith(VoidUsageError())
 
     fromMembers("public void test() { int x = test(); }") should failTypingWith(InvalidTypeError(IntType, VoidType))
@@ -64,8 +68,8 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
   it should "check for a correct return type" in {
     for ((retType, retTypeIdx) <- List("void", "int", "boolean", "int[]", "boolean[][]").zipWithIndex) {
-      for ((retVal, retValIdx) <- List("", "42", "true", "new int[42]", "new boolean[42][]").zipWithIndex) {
-        val prog = s"public $retType test() { return $retVal; }"
+      for ((retVal, retValIdx) <- List("", "42", "true", "new int[42]", "new boolean[42][]", "returnsVoid()").zipWithIndex) {
+        val prog = s"public void returnsVoid() {} public $retType test() { return $retVal; }"
         withClue(prog) {
           if (retTypeIdx == retValIdx) fromMembers(prog) should succeedTyping
           else fromMembers(prog) shouldNot succeedTyping
