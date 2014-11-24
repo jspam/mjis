@@ -11,11 +11,12 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
 
   def statementsAST(innerAST: Statement*) = Program(List(
     ClassDecl("Test", List(
-      MethodDecl("test", List(Parameter("this", TypeBasic("Test"))), Builtins.VoidType,
+      MethodDecl("test", List(Parameter("this", TypeBasic("Test"), isWritable = false)), Builtins.VoidType,
         Block(innerAST.toList)
       ),
-      MethodDecl("main", List(Parameter("args", TypeArray(TypeBasic("String"), 1))), Builtins.VoidType,
-        Block(List()), isStatic = true
+      MethodDecl("main",
+        List(Parameter("args", TypeArray(TypeBasic("String"), 1), isReadable = false, isWritable = false)),
+        Builtins.VoidType, Block(List()), isStatic = true
       )
     ), List())
   ))
@@ -57,7 +58,9 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   it should "accept main methods with any name" in {
     "class C { public static void foobar(String[] args) {} }" should succeedParsingWith(Program(List(
       ClassDecl("C", List(
-        MethodDecl("foobar", List(Parameter("args", TypeArray(TypeBasic("String")))), Builtins.VoidType, Block(List()), isStatic=true)
+        MethodDecl("foobar",
+          List(Parameter("args", TypeArray(TypeBasic("String")), isReadable = false, isWritable = false)),
+          Builtins.VoidType, Block(List()), isStatic=true)
       ), List())
     )))
   }
@@ -106,7 +109,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     // this is interesting because it's a spot where the grammar isn't SLL(1)
     "class a { public void foo ( ) { a [ 2 ] ; } }" should succeedParsingWith(Program(List(
       ClassDecl("a", List(
-        MethodDecl("foo", List(Parameter("this", TypeBasic("a"))), Builtins.VoidType, Block(List(
+        MethodDecl("foo", List(Parameter("this", TypeBasic("a"), isWritable = false)), Builtins.VoidType, Block(List(
           ExpressionStatement(Apply("[]", List(Ident("a"), IntLiteral("2")), isOperator=true))
         )))
       ), List())

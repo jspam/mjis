@@ -43,6 +43,10 @@ object Typer {
     override def msg: String = s"Control flow may reach end of non-void function"
   }
 
+  def getTypeForRef(r: Ref[TypedDecl]) = r.decl match {
+    case None => throw new TypecheckException(new UnresolvedReferenceError)
+    case Some(decl) => decl.typ
+  }
   def getType(t: Expression) = getTypeRec(t).result
   def getTypeRec(t: Expression): TailRec[TypeDef] = {
     t match {
@@ -59,10 +63,7 @@ object Typer {
           }
         case Some(decl) => done(decl.typ)
       }
-      case r: Ref[TypedDecl] => r.decl match { /* ThisLiteral, Ident, Select */
-        case None => throw new TypecheckException(new UnresolvedReferenceError)
-        case Some(decl) => done(decl.typ)
-      }
+      case r: Ref[TypedDecl] => done(getTypeForRef(r))
       case NullLiteral => done(NullType)
       case _: IntLiteral => done(IntType)
       case _: BooleanLiteral => done(BooleanType)

@@ -82,7 +82,10 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "fail to recognize System.out.println when a System class member is defined" in {
-    "class Test { public void test() { System.out.println(42); } public _System System; } " +
+    "class Test { " +
+      "public static void main(String[] args) {} " +
+      "public void test() { System.out.println(42); }" +
+      "public _System System; } " +
       "class _System {}" should failNamingWith(DefNotFoundError("out", "field"))
   }
 
@@ -112,13 +115,45 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow calling the main method" in {
+    assertExecFailure[Namer](
+      "class String{} class Test{ public static void main(String[] args) {} public void test() { main(new String[42]); } }").
+      head shouldBe a [InaccessibleDeclError]
+  }
+
+  it should "disallow accessing methods/fields of the enclosing class in the main method" in {
+    "class Test{ public void test() {} public static void main(String[] args) { this.test(); } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public void test() {} public static void main(String[] args) { test(); } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public void test(int x) {} public static void main(String[] args) { this.test(42); } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public void test(int x) {} public static void main(String[] args) { test(42); } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public int test; public static void main(String[] args) { int x = this.test; } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public int test; public static void main(String[] args) { int x = test; } }" should
+      failNamingWith(DefNotFoundError("test", "value"))
+    "class Test{ public int test; public static void main(String[] args) { this.test = 42; } }" should
+      failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public int test; public static void main(String[] args) { test = 42; } }" should
+      failNamingWith(DefNotFoundError("test", "value"))
     "class String{} class Test{ public static void main(String[] args) { main(new String[42]); } }" should
       failNamingWith(DefNotFoundError("this", "value"))
   }
 
-  it should "disallow accessing the main method's parameter" in {
-    "class String{} class Test{ public static void main(String[] arguments) { arguments; } }" should
-      failNamingWith(DefNotFoundError("arguments", "value"))
+  it should "disallow accessing or shadowing the main method's parameter" in {
+    assertExecFailure[Namer](
+      "class String{} class Test{ public static void main(String[] arguments) { String[] s = arguments; } }").
+      head shouldBe a [InaccessibleDeclError]
+    assertExecFailure[Namer](
+      "class String{} class Test{ public static void main(String[] arguments) { arguments = new String[1]; } }").
+      head shouldBe a [InaccessibleDeclError]
+    assertExecFailure[Namer](
+      "class String{} class Test{ public int args; public static void main(String[] args) { System.out.println(args); } }").
+      head shouldBe a [InaccessibleDeclError]
+    assertExecFailure[Namer](
+      "class Test{ public static void main(String[] args) { int args; } }").
+      head shouldBe a [DuplicateDefinitionError]
   }
 
   it should "check field accesses" in {
@@ -141,12 +176,13 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     assertExecFailure[Namer](fromMembers("public null x;", true)).head shouldBe a [Parser.UnexpectedTokenError]
   }
 
-  it should "disallow two classes, methods, fields or variables with the same name" in {
+  it should "disallow two classes, methods, fields, parameters or variables with the same name" in {
     assertExecFailure[Namer]("class Test{ public static void main(String[] args) {} } class Test{}").head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromMembers("public int x; public boolean x;")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromMembers("public int x(){} public int x(){}")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromMembers("public int x(int y){} public int x(boolean y){}")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromMembers("public int x(){} public boolean x(){}")).head shouldBe a [DuplicateDefinitionError]
+    assertExecFailure[Namer](fromMembers("public void foo(int x, int y, int z, int x) { }")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromStatements("{ { int x; int x; } }")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromStatements("{ { int x; boolean x; } }")).head shouldBe a [DuplicateDefinitionError]
     assertExecFailure[Namer](fromStatements("{ { int x; int[] x; } }")).head shouldBe a [DuplicateDefinitionError]

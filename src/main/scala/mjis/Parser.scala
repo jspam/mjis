@@ -106,7 +106,8 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
       val paramName = expectIdentifier()
       expectSymbol(ParenClosed)
       val block = parseBlock().result
-      MethodDecl(mainName, List(Parameter(paramName, TypeArray(TypeBasic("String")))), Builtins.VoidType, block, isStatic=true)
+      val param = Parameter(paramName, TypeArray(TypeBasic("String")), isReadable = false, isWritable = false)
+      MethodDecl(mainName, List(param), Builtins.VoidType, block, isStatic=true)
     } else {
       val typ = parseType()
       val ident = expectIdentifier()
@@ -118,7 +119,8 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
         case ParenOpen =>
           // found method
           consume()
-          var params = List(Parameter("this", cls))
+          val thisParameter = Parameter("this", cls, isWritable = false)
+          var params = List(thisParameter)
           if (currentToken.data != ParenClosed) params ++= parseParameters()
           expectSymbol(ParenClosed)
           val body = parseBlock().result
