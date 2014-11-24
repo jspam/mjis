@@ -31,6 +31,10 @@ object Typer {
     override def msg: String = s"Incomparable types: $type1 and $type2"
   }
 
+  case class IntLiteralOutOfRangeError(value: String) extends SyntaxTreeError {
+    override def msg: String = s"Integer literal out of range: $value"
+  }
+
   case class InvalidTypeError(expected: TypeDef, actual: TypeDef) extends SyntaxTreeError {
     override def msg: String = s"Invalid type: expected $expected, got $actual"
   }
@@ -43,6 +47,14 @@ object Typer {
     override def msg: String = s"Control flow may reach end of non-void function"
   }
 
+  case class MissingReturnValueError() extends SyntaxTreeError {
+    override def msg: String = s"Non-void function must return a value"
+  }
+
+  def getTypeForRef(r: Ref[TypedDecl]) = r.decl match {
+    case None => throw new TypecheckException(new UnresolvedReferenceError)
+    case Some(decl) => decl.typ
+  }
   def getType(t: Expression) = getTypeRec(t).result
   def getTypeRec(t: Expression): TailRec[TypeDef] = {
     t match {
@@ -59,12 +71,18 @@ object Typer {
           }
         case Some(decl) => done(decl.typ)
       }
-      case r: Ref[TypedDecl] => r.decl match { /* ThisLiteral, Ident, Select */
-        case None => throw new TypecheckException(new UnresolvedReferenceError)
-        case Some(decl) => done(decl.typ)
-      }
+      case r: Ref[TypedDecl] => done(getTypeForRef(r))
       case NullLiteral => done(NullType)
-      case _: IntLiteral => done(IntType)
+      case IntLiteral(value) =>
+        val MaxInt = 2147483648L
+        if (value.length > MaxInt.toString.length) {
+          throw new TypecheckException(new IntLiteralOutOfRangeError(value))
+        } else {
+          val valueAsLong = value.toLong
+          if (valueAsLong < MaxInt) done(IntType)
+          else if (valueAsLong == MaxInt) done(ExtendedIntType)
+          else throw new TypecheckException(new IntLiteralOutOfRangeError(value))
+        }
       case _: BooleanLiteral => done(BooleanType)
     }
   }
@@ -80,13 +98,14 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   override def dumpResult(writer: BufferedWriter): Unit = {} // no stdout output, just the error code
 
   private def isConvertible(from: TypeDef, to: TypeDef) = {
-    if (from == NullType) {
+    if (from == NullType)
       // null is convertible to every reference type
       to != VoidType && !ValueTypes.contains(to)
-    } else {
-      // we don't have any subtype relations
+    else if (from == IntType && to == ExtendedIntType)
+      true
+    else
+      // we don't have any other subtype relations
       from == to
-    }
   }
   private def assertConvertible(from: TypeDef, to: TypeDef) = {
     if (!isConvertible(from, to))
@@ -105,11 +124,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       case None => throw new TypecheckException(UnresolvedReferenceError())
     }
     case r: Ref[Decl] => r.decl match {
-      case Some(decl) => decl match {
-        case p: Parameter => p.name != "this"
-        case _: FieldDecl | _: LocalVarDeclStatement => true
-        case _ => false
-      }
+      case Some(decl) => decl.isWritable
       case None => throw new TypecheckException(UnresolvedReferenceError())
     }
     case _ => false
@@ -138,6 +153,8 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       }
     }
 
+    override def postVisit(t: TypeArray, _1: Unit) = assertNotVoid(t.elementType)
+
     override def postVisit(param: Parameter, _1: Unit) = assertNotVoid(param.typ)
 
     override def postVisit(stmt: LocalVarDeclStatement, _1: Unit, _2: Option[Unit]): Boolean = {
@@ -162,7 +179,14 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     override def postVisit(stmt: ReturnStatement, _1: Option[Unit]) = {
-      assertConvertible(stmt.returnValue.map(getType).getOrElse(VoidType), currentMethod.typ);
+      stmt.returnValue match {
+        case Some(expr) =>
+          assertNotVoid(getType(expr))
+          assertConvertible(getType(expr), currentMethod.typ)
+        case None =>
+          if (currentMethod.typ != VoidType)
+            throw new TypecheckException(MissingReturnValueError())
+      }
       true
     }
 

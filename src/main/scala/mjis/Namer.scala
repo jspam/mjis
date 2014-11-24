@@ -21,6 +21,10 @@ object Namer {
     def msg = "No main method found"
   }
 
+  case class InaccessibleDeclError(decl: Decl) extends SyntaxTreeError {
+    def msg = s"'$decl' is not accessible from here"
+  }
+
   case class DefNotFoundError(ident: String, defType: String) extends SyntaxTreeError {
     def msg = s"Not found: $defType $ident"
   }
@@ -36,7 +40,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     // mind the order: local classes may shadow builtin classes
     private val classes: Map[String, ClassLookup] = mkPackageLookup(Builtins.PublicTypeDecls) ++
       mkPackageLookup(input.classes)
-    private val values = new SymbolTable()
+    private val localVars = new SymbolTable()
     private val operators = mkDeclLookup(Builtins.Operators)
 
     private def mkPackageLookup(classes: List[ClassDecl]): Map[String, ClassLookup] = mkDeclLookup(classes) map {
@@ -50,7 +54,9 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
 
     private def setDecl[A <: Decl](ref: Ref[A], value: Option[A], refType: String): Unit = value match {
       case None => throw ResolveException(DefNotFoundError(ref.name, refType))
-      case Some(value) => ref.decl = value
+      case Some(decl) =>
+        if (!decl.isReadable) throw new ResolveException(InaccessibleDeclError(decl))
+        else ref.decl = decl
     }
 
     private def resolveType(expr: Expression): TypeBasic = Typer.getType(expr) match {
@@ -58,20 +64,33 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       case tb: TypeBasic => tb
     }
 
+    /** Looks up x in the 'localVars' map; if that fails, looks up this.x */
+    private def valueLookup(name: String): Option[Decl] = localVars.lookup(name) match {
+      case Some(decl) => Some(decl)
+      case None => localVars.lookup("this") match {
+        case Some(Parameter(_, TypeBasic(className), _, _)) => classes(className).fields.get(name)
+        case None => None
+      }
+    }
+
+    def addLocalVarDecl(decl: Decl) {
+      localVars.lookup(decl.name) match {
+        case Some(existingDecl) => throw new ResolveException(DuplicateDefinitionError(existingDecl, decl))
+        case None =>
+      }
+
+      localVars.insert(decl)
+    }
+
     override def postVisit(prog: Program): Unit =
       if (prog.mainMethodDecl.isEmpty) throw new ResolveException(NoMainMethodError())
 
     override def visit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
 
-    override def preVisit(cls: ClassDecl): Unit = {
-      values.enterScope()
-      cls.fields.foreach(values.insert)
-    }
-
     override def visit(method: MethodDecl): Unit = {
-      values.enterScope()
+      localVars.enterScope()
+      method.parameters.foreach(addLocalVarDecl)
       if (method.isStatic) {
-        // Do not insert the parameter as it may not be accessed.
         if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError())
         input.mainMethodDecl match {
           case Some(existingMain) =>
@@ -80,30 +99,21 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
         }
         visit(method.body) // do not visit the arguments since 'String' is not defined in general
       } else {
-        method.parameters.foreach(values.insert)
         super.visit(method)
       }
-      values.leaveScope()
+      localVars.leaveScope()
     }
 
-    override def preVisit(stmt: Block): Unit = values.enterScope()
-    override def postVisit(stmt: Block, _1: List[Unit]): Unit = values.leaveScope()
+    override def preVisit(stmt: Block): Unit = localVars.enterScope()
+    override def postVisit(stmt: Block, _1: List[Unit]): Unit = localVars.leaveScope()
 
-    override def preVisit(stmt: LocalVarDeclStatement): Unit = {
-      // LocalVarDecls may shadow field declarations, but not other LocalVarDecls or parameters
-      values.lookup(stmt.name) match {
-        case None | Some(FieldDecl(_, _)) =>
-        case _ => throw new ResolveException(DuplicateDefinitionError(values.lookup(stmt.name).get, stmt))
-      }
-
-      values.insert(stmt)
-      // Visit the initializer *after* the value has been inserted -- it must be visible there.
-      //   JLS 14.4.2: "The scope of a local variable declaration in a block (§14.2)
-      //   is the rest of the block in which the declaration appears,
-      //   starting with its own initializer (§14.4) [...]"
-      // 'int x = x;' is only invalid Java because of definite assignment rules, which do not
-      // apply to MiniJava.
-    }
+    /* Visit the initializer *after* the value has been inserted -- it must be visible there.
+     *   JLS 14.4.2: "The scope of a local variable declaration in a block (§14.2)
+     *   is the rest of the block in which the declaration appears,
+     *   starting with its own initializer (§14.4) [...]"
+     * 'int x = x;' is only invalid Java because of definite assignment rules, which do not
+     * apply to MiniJava. 'int x = (x = 2) * 2' is valid Java and MiniJava. */
+    override def preVisit(stmt: LocalVarDeclStatement): Unit = addLocalVarDecl(stmt)
 
     override def visit(expr: Apply): Unit = {
       val name = if (expr.name == "-" && expr.arguments.length == 1) "- (unary)" else expr.name
@@ -114,8 +124,8 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
         case None =>
           if (expr.name == "println" &&
             expr.arguments(0) == Select(Ident("System"), "out") &&
-            values.lookup("System") == None) {
-            expr.decl = Builtins.SystemOutPrintlnDecl
+            valueLookup("System") == None) {
+            setDecl(expr, Some(Builtins.SystemOutPrintlnDecl), "method")
             expr.arguments(0).asInstanceOf[Select].qualifier.asInstanceOf[Ident].decl = Builtins.SystemDecl
             expr.arguments(0).asInstanceOf[Select].decl = Builtins.SystemOutFieldDecl
             // do _not_ visit arguments(0)
@@ -133,11 +143,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       setDecl(expr, classes(thisType.name).fields.get(expr.name), "field")
     }
 
-    override def visit(expr: Ident): Unit = setDecl(expr, values.lookup(expr.name), "value")
+    override def visit(expr: Ident): Unit = setDecl(expr, valueLookup(expr.name), "value")
 
     override def visit(expr: ThisLiteral): Unit = {
       // lookup can only be None (for static methods) or the this parameter
-      setDecl(expr, values.lookup("this").map(_.asInstanceOf[Parameter]), "value")
+      setDecl(expr, valueLookup("this").map(_.asInstanceOf[Parameter]), "value")
     }
   }
 

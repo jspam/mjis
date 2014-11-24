@@ -28,6 +28,8 @@ final case class Program(classes: List[ClassDecl]) extends SyntaxTree {
 
 sealed trait Decl extends SyntaxTree {
   def name: String
+  def isReadable = true
+  def isWritable = false
 }
 
 /* class `name` {
@@ -53,6 +55,7 @@ final case class FieldDecl(
   override val typ: TypeDef) extends TypedDecl {
 
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
+  override def isWritable = true
 }
 
 /* `typ` `name`(`parameters`) { `body` } */
@@ -64,10 +67,13 @@ final case class MethodDecl(
   isStatic: Boolean = false) extends TypedDecl {
 
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
+  override def isReadable = !isStatic /* for methods, isReadable == isCallable */
 }
 
 /* `typ` `name` */
-final case class Parameter(name: String, override val typ: TypeDef) extends TypedDecl {
+final case class Parameter(name: String, override val typ: TypeDef,
+  override val isReadable: Boolean = true, override val isWritable: Boolean = true) extends TypedDecl {
+
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
 }
 
@@ -89,6 +95,7 @@ sealed trait Statement extends SyntaxTree {
 /* `typ` `name` ( = `body`) */
 final case class LocalVarDeclStatement(name: String, override val typ: TypeDef, initializer: Option[Expression]) extends Statement with TypedDecl {
   override def accept[S](visitor: StatementVisitor[S]): S = visitor.visit(this)
+  override def isWritable = true
 }
 final case class Block(statements: List[Statement]) extends Statement {
   override def accept[S](visitor: StatementVisitor[S]): S = visitor.visit(this)
