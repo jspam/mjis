@@ -55,6 +55,7 @@ final case class FieldDecl(
   override val typ: TypeDef) extends TypedDecl {
 
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
+  override def isWritable = true
 }
 
 /* `typ` `name`(`parameters`) { `body` } */
@@ -66,7 +67,7 @@ final case class MethodDecl(
   isStatic: Boolean = false) extends TypedDecl {
 
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
-  override def isReadable = !isStatic
+  override def isReadable = !isStatic /* for methods, isReadable == isCallable */
 }
 
 /* `typ` `name` */
