@@ -31,7 +31,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
   private case class ResolveException(finding: Finding) extends Exception
   private class ClassLookup(val cls: ClassDecl, val fields: Map[String, FieldDecl], val methods: Map[String, MethodDecl])
 
-  private class NamerVisitor extends RecursiveVisitor() {
+  private class NamerVisitor extends PlainRecursiveVisitor[Unit, Unit, Unit]((), (), ()) {
 
     // mind the order: local classes may shadow builtin classes
     private val classes: Map[String, ClassLookup] = mkPackageLookup(Builtins.PublicTypeDecls) ++
@@ -87,7 +87,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     override def preVisit(stmt: Block): Unit = values.enterScope()
-    override def postVisit(stmt: Block): Unit = values.leaveScope()
+    override def postVisit(stmt: Block, _1: List[Unit]): Unit = values.leaveScope()
 
     override def preVisit(stmt: LocalVarDeclStatement): Unit = {
       // LocalVarDecls may shadow field declarations, but not other LocalVarDecls or parameters
@@ -128,7 +128,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       }
     }
 
-    override def postVisit(expr: Select): Unit = {
+    override def postVisit(expr: Select, _1: Unit): Unit = {
       val thisType = resolveType(expr.qualifier)
       setDecl(expr, classes(thisType.name).fields.get(expr.name), "field")
     }
