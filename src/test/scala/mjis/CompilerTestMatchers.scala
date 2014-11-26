@@ -1,5 +1,6 @@
 package mjis
 
+import firm.Graph
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
 import System.{ lineSeparator => n }
@@ -62,6 +63,16 @@ trait CompilerTestMatchers {
     }
   }
 
+  class FirmGraphIsomorphismMatcher(expectedGraph: Graph) extends Matcher[Graph] {
+    override def apply(left: Graph): MatchResult = {
+      val result = FirmGraphTestHelper.isIsomorphic(left, expectedGraph)
+      MatchResult(
+        result.isEmpty,
+        s"Expected the graphs to be isomorphic, but they weren't: $result",
+        "Expected the graphs to be not isomorphic, but they were")
+    }
+  }
+
   def succeedLexing() = new AnalysisPhaseSuccessMatcher[Lexer]()
   def succeedParsing() = new AnalysisPhaseSuccessMatcher[Parser]()
   def succeedParsingWith(expectedAST: Program) = new AnalysisPhaseSuccessWithMatcher[Program, Parser](expectedAST)
@@ -71,6 +82,7 @@ trait CompilerTestMatchers {
   def failTypingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Typer](expectedFinding)
   def succeedNaming() = new AnalysisPhaseSuccessMatcher[Namer]()
   def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
+  def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
 }
 
 object CompilerTestMatchers extends CompilerTestMatchers
