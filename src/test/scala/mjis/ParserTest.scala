@@ -8,6 +8,8 @@ import java.nio.file.Paths
 
 class ParserTest extends FlatSpec with Matchers with Inspectors {
 
+  implicit val pos: Position = Position(-123, -123, "no interesting position")
+
   def repeat(str: String, count: Integer) = Seq.fill(count)(str).mkString("")
 
   def statementsAST(innerAST: Statement*) = Program(List(
@@ -21,7 +23,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
       )
     ), List())
   ))
-  def expressionsAST(innerAST: Expression*) = statementsAST(innerAST.map(ExpressionStatement): _*)
+  def expressionsAST(innerAST: Expression*) = statementsAST(innerAST.map(exprSttmt => ExpressionStatement(exprSttmt)): _*)
 
   /* class declarations */
 
@@ -134,14 +136,14 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
         |new myType[3+x][][];
         |new int[3+x][][];
       """.stripMargin) should succeedParsingWith(expressionsAST(
-      NullLiteral,
-      FalseLiteral,
-      TrueLiteral,
+      NullLiteral(),
+      FalseLiteral(),
+      TrueLiteral(),
       IntLiteral("1337"),
       Ident("myVar"),
       Apply("myFunc", List(ThisLiteral())),
       ThisLiteral(),
-      NullLiteral,
+      NullLiteral(),
       NewObject(TypeBasic("myType")),
       NewArray(TypeBasic("myType"), Apply("+", List(IntLiteral("3"), Ident("x")), isOperator=true), 2),
       NewArray(Builtins.IntType, Apply("+", List(IntLiteral("3"), Ident("x")), isOperator=true), 2)

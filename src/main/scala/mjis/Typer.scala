@@ -71,8 +71,8 @@ object Typer {
           }
         case Some(decl) => done(decl.typ)
       }
-      case r: Ref[TypedDecl] => done(getTypeForRef(r))
-      case NullLiteral => done(NullType)
+      case r: Ref[_] => done(getTypeForRef(r.asInstanceOf[Ref[TypedDecl]]))
+      case NullLiteral() => done(NullType)
       case IntLiteral(value) =>
         val MaxInt = 2147483648L
         if (value.length > MaxInt.toString.length) {
@@ -123,7 +123,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       case Some(decl) => decl == ArrayAccessDecl
       case None => throw new TypecheckException(UnresolvedReferenceError())
     }
-    case r: Ref[Decl] => r.decl match {
+    case r: Ref[_] => r.decl match {
       case Some(decl) => decl.isWritable
       case None => throw new TypecheckException(UnresolvedReferenceError())
     }

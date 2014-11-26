@@ -10,7 +10,7 @@ import scala.collection.mutable
 object Namer {
 
   case class DuplicateDefinitionError(firstDecl: Decl, secondDecl: Decl) extends SyntaxTreeError {
-    def msg = s"${secondDecl.name} already defined" // TODO: "at ${firstDecl.pos}"
+    def msg = s"${secondDecl.name} already defined at ${firstDecl.pos}"
   }
 
   case class InvalidMainMethodNameError() extends SyntaxTreeError {
@@ -48,7 +48,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     private def mkDeclLookup[D <: Decl](xs: List[D]): Map[String, D] = xs groupBy (_.name) map {
-      case (name, List(decl)) => name -> decl
+      case (name, List(decl))                => name -> decl
       case (_, firstDecl :: secondDecl :: _) => throw ResolveException(DuplicateDefinitionError(firstDecl, secondDecl))
     }
 
@@ -69,14 +69,14 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       case Some(decl) => Some(decl)
       case None => localVars.lookup("this") match {
         case Some(Parameter(_, TypeBasic(className), _, _)) => classes(className).fields.get(name)
-        case None => None
+        case _ => None
       }
     }
 
-    def addLocalVarDecl(decl: Decl) {
+    def addLocalVarDecl(decl: Decl): Unit = {
       localVars.lookup(decl.name) match {
         case Some(existingDecl) => throw new ResolveException(DuplicateDefinitionError(existingDecl, decl))
-        case None =>
+        case None               =>
       }
 
       localVars.insert(decl)

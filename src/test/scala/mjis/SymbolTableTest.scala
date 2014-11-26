@@ -4,6 +4,9 @@ import mjis.ast.{TypeBasic, LocalVarDeclStatement}
 import org.scalatest._
 
 class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
+
+  implicit val pos: Position = Position(-123, -123, "no interesting position")
+
   val foo = LocalVarDeclStatement("foo", TypeBasic("Foo"), None)
   val foo2 = LocalVarDeclStatement("foo", TypeBasic("Foo"), None)
   val bar = LocalVarDeclStatement("bar", TypeBasic("Bar"), None)

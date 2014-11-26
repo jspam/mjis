@@ -41,8 +41,10 @@ object CLIMain extends App {
     if (config.file == null) {
       parser.reportError("Must specify at least one file or --from-stdin")
       parser.showUsage
+      System.exit(1)
+    } else {
+      System.exit(if (Compiler.compile(config)) 0 else 2)
     }
-    System.exit(if (Compiler.compile(config)) 0 else 2)
   } getOrElse {
     System.exit(1)
   }
