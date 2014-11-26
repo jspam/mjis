@@ -1,10 +1,12 @@
 package mjis
 
 import firm.Graph
+import org.scalatest.Assertions
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
 import System.{ lineSeparator => n }
 import java.io.{StringReader, StringWriter, BufferedWriter}
+import scala.collection.JavaConversions._
 
 import scala.reflect.ClassTag
 
@@ -63,6 +65,49 @@ trait CompilerTestMatchers {
     }
   }
 
+  class FirmConstructorSuccessMatcher(expectedGraphs: List[Graph]) extends Matcher[String] {
+    def apply(input: String) = {
+      val expectedPrefix = "__expected_"
+      val expectedGraphsMap = (expectedGraphs map { g => {
+        assert(g.getEntity.getName.startsWith(expectedPrefix), s"Expected graph names must start with '$expectedPrefix'")
+        g.getEntity.getName.drop(expectedPrefix.length) -> g
+      }}).toMap
+
+      var success = true
+      var failureMessage: String = ""
+
+      val analysisResult = Compiler.exec[Typer](new StringReader(input))
+      if (analysisResult.isRight)
+        Assertions.fail(s"Analysis failed, expected to succeed. Findings:$n${analysisResult.right.get.mkString(n)}")
+
+      new FirmConstructor(analysisResult.left.get.result).result
+      val actualGraphsMap = firm.Program.getGraphs.
+        filter(g => !g.getEntity.getName.startsWith(expectedPrefix)).
+        map(g => g.getEntity.getName -> g).toMap
+      if (actualGraphsMap.size != expectedGraphsMap.size) {
+        success = false
+        failureMessage = s"Expected ${expectedGraphsMap.size} graph(s), got ${actualGraphsMap.size}"
+      } else {
+        expectedGraphsMap.foreach { case (name, expected) => actualGraphsMap.get(name) match {
+          case None =>
+            success = false
+            failureMessage = s"Missing graph $name"
+          case Some(actual) =>
+            val error = FirmGraphTestHelper.isIsomorphic(expected, actual)
+            if (!error.isEmpty) {
+              success = false
+              failureMessage = s"Graphs ${expected.getEntity.getName} and ${actual.getEntity.getName} " +
+                s"were not isomorphic: $error"
+            }
+        }}
+      }
+
+      MatchResult(
+        success, failureMessage, "Expected FIRM construction to fail, but it succeeded"
+      )
+    }
+  }
+
   class FirmGraphIsomorphismMatcher(expectedGraph: Graph) extends Matcher[Graph] {
     override def apply(left: Graph): MatchResult = {
       val result = FirmGraphTestHelper.isIsomorphic(left, expectedGraph)
@@ -82,6 +127,8 @@ trait CompilerTestMatchers {
   def failTypingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Typer](expectedFinding)
   def succeedNaming() = new AnalysisPhaseSuccessMatcher[Namer]()
   def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
+  def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
+
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
 }
 
