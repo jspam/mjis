@@ -4,9 +4,8 @@ import System.{ lineSeparator => n }
 import mjis.util.LineReader
 
 object Position {
-  def apply(line: Int, column: Int, nameMe: String = "") = new Position((line.toLong << 32) + column)
-  val NoPosition = Position(-1, -1, "NO POSITION")
-  val SyntheticPosition = Position(-1, -1, "Synthetic Position for builtins ")
+  def apply(line: Int, column: Int) = new Position((line.toLong << 32) + column)
+  val NoPosition = Position(0, -1)
 }
 class Position(val __value: Long) extends AnyVal with Ordered[Position] {
   def line: Int = (__value >> 32).toInt

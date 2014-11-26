@@ -37,7 +37,7 @@ trait CompilerTestMatchers {
       val failureMessage = result match {
         case Right(findings) =>
           if (expectedFinding == findings.head) None
-          else Some(s"Expected ${expectedFinding}, got ${findings.head}")
+          else Some(s"Expected ${expectedFinding},$n     got ${findings.head}")
         case _ => Some(s"Succeeded, expected to fail.")
       }
 

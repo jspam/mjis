@@ -5,6 +5,7 @@ import mjis.CompilerTestMatchers._
 import mjis.Namer._
 import mjis.ast._
 import mjis.Builtins._
+import mjis.Position.NoPosition
 import org.scalatest._
 
 class NamerTest extends FlatSpec with Matchers with Inspectors {
@@ -29,7 +30,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "not recognize undefined types" in {
-    fromStatements("unknown x;") should failNamingWith(DefNotFoundError("unknown", "type"))
+    fromStatements("unknown x;") should failNamingWith(DefNotFoundError("unknown", "type", Position(3,9)))
   }
 
   it should "disallow shadowing variable references" in {
@@ -48,7 +49,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow accessing the 'this' pointer in a static method" in {
-    "class Test{ public static void main(String[] args) { this; } }" should failNamingWith(DefNotFoundError("this", "value"))
+    "class Test{ public static void main(String[] args) { this; } }" should failNamingWith(DefNotFoundError("this", "value", Position(1, 58)))
   }
 
   it should "recognize built-in methods" in {
@@ -86,25 +87,25 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
       "public static void main(String[] args) {} " +
       "public void test() { System.out.println(42); }" +
       "public _System System; } " +
-      "class _System {}" should failNamingWith(DefNotFoundError("out", "field"))
+      "class _System {}" should failNamingWith(DefNotFoundError("out", "field", Position(1,87)))
   }
 
   it should "fail to recognize System.out.println when a System variable is defined" in {
-    fromStatements("int System; System.out.println(42);") should failNamingWith(DefNotFoundError("out", "field"))
+    fromStatements("int System; System.out.println(42);") should failNamingWith(DefNotFoundError("out", "field", Position(3,23)))
   }
 
   it should "fail to recognize the built-in System in other contexts than System.out.println()" in {
-    fromStatements("System;") should failNamingWith(DefNotFoundError("System", "value"))
-    fromStatements("System == System;") should failNamingWith(DefNotFoundError("System", "value"))
-    fromStatements("new System();") should failNamingWith(DefNotFoundError("System", "type"))
+    fromStatements("System;") should failNamingWith(DefNotFoundError("System", "value", Position(3,7)))
+    fromStatements("System == System;") should failNamingWith(DefNotFoundError("System", "value", Position(3,8)))
+    fromStatements("new System();") should failNamingWith(DefNotFoundError("System", "type", Position(3,13)))
   }
 
   it should "disallow static methods not called main" in {
-    "class Test { public static void mine(String[] foo) {} } " should failNamingWith(InvalidMainMethodNameError())
+    "class Test { public static void mine(String[] foo) {} } " should failNamingWith(InvalidMainMethodNameError(Position(1,55)))
   }
 
   it should "disallow programs without a main method" in {
-    "class Test { public void main() {} } " should failNamingWith(NoMainMethodError())
+    "class Test { public void main() {} } " should failNamingWith(NoMainMethodError(Position(1,38)))
   }
 
   it should "disallow more than one main method" in {
@@ -122,23 +123,23 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
 
   it should "disallow accessing methods/fields of the enclosing class in the main method" in {
     "class Test{ public void test() {} public static void main(String[] args) { this.test(); } }" should
-      failNamingWith(DefNotFoundError("this", "value"))
+      failNamingWith(DefNotFoundError("this", "value", Position(1,80)))
     "class Test{ public void test() {} public static void main(String[] args) { test(); } }" should
-      failNamingWith(DefNotFoundError("this", "value"))
+      failNamingWith(DefNotFoundError("this", "value", Position(1,82)))
     "class Test{ public void test(int x) {} public static void main(String[] args) { this.test(42); } }" should
-      failNamingWith(DefNotFoundError("this", "value"))
+      failNamingWith(DefNotFoundError("this", "value", Position(1,85)))
     "class Test{ public void test(int x) {} public static void main(String[] args) { test(42); } }" should
-      failNamingWith(DefNotFoundError("this", "value"))
+      failNamingWith(DefNotFoundError("this", "value", Position(1,89)))
     "class Test{ public int test; public static void main(String[] args) { int x = this.test; } }" should
-      failNamingWith(DefNotFoundError("this", "value"))
+      failNamingWith(DefNotFoundError("this", "value", Position(1,83)))
     "class Test{ public int test; public static void main(String[] args) { int x = test; } }" should
-      failNamingWith(DefNotFoundError("test", "value"))
+      failNamingWith(DefNotFoundError("test", "value", Position(1,83)))
     "class Test{ public int test; public static void main(String[] args) { this.test = 42; } }" should
-      failNamingWith(DefNotFoundError("this", "value"))
+      failNamingWith(DefNotFoundError("this", "value", Position(1,75)))
     "class Test{ public int test; public static void main(String[] args) { test = 42; } }" should
-      failNamingWith(DefNotFoundError("test", "value"))
+      failNamingWith(DefNotFoundError("test", "value", Position(1,76)))
     "class String{} class Test{ public static void main(String[] args) { main(new String[42]); } }" should
-      failNamingWith(DefNotFoundError("this", "value"))
+      failNamingWith(DefNotFoundError("this", "value", Position(1,89)))
   }
 
   it should "disallow accessing or shadowing the main method's parameter" in {
@@ -157,19 +158,19 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "check field accesses" in {
-    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field"))
-    fromStatements("int x; x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field"))
-    fromStatements("boolean x; x.isFalse = true;") should failNamingWith(DefNotFoundError("isFalse", "field"))
-    fromStatements("int[] x; x.length;")  should failNamingWith(DefNotFoundError("length", "field"))
-    fromStatements("null.foo;")  should failNamingWith(DefNotFoundError("foo", "field"))
+    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field", Position(3,30)))
+    fromStatements("int x; x.isAwesome = true;") should failNamingWith(DefNotFoundError("isAwesome", "field", Position(3,20)))
+    fromStatements("boolean x; x.isFalse = true;") should failNamingWith(DefNotFoundError("isFalse", "field", Position(3,22)))
+    fromStatements("int[] x; x.length;")  should failNamingWith(DefNotFoundError("length", "field", Position(3,18)))
+    fromStatements("null.foo;")  should failNamingWith(DefNotFoundError("foo", "field", Position(3,9)))
   }
 
   it should "check method accesses" in {
-    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method"))
-    fromStatements("int x; x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method"))
-    fromStatements("boolean x; x.isFalse();") should failNamingWith(DefNotFoundError("isFalse", "method"))
-    fromStatements("int[] x; x.length();")  should failNamingWith(DefNotFoundError("length", "method"))
-    fromStatements("null.foo();")  should failNamingWith(DefNotFoundError("foo", "method"))
+    "class _A {}" + fromStatements("_A x = new _A(); x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method", Position(3,31)))
+    fromStatements("int x; x.isAwesome();") should failNamingWith(DefNotFoundError("isAwesome", "method", Position(3,21)))
+    fromStatements("boolean x; x.isFalse();") should failNamingWith(DefNotFoundError("isFalse", "method", Position(3,23)))
+    fromStatements("int[] x; x.length();")  should failNamingWith(DefNotFoundError("length", "method", Position(3,20)))
+    fromStatements("null.foo();")  should failNamingWith(DefNotFoundError("foo", "method", Position(3,11)))
   }
 
   it should "disallow null as type name" in {
@@ -207,13 +208,13 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow accessing fields/methods of Literals" in {
-    fromStatements(s"int x = 2147483648.x;") should failNamingWith(DefNotFoundError("x", "field"))
-    fromStatements(s"int x = 2147483648.x();") should failNamingWith(DefNotFoundError("x", "method"))
+    fromStatements(s"int x = 2147483648.x;") should failNamingWith(DefNotFoundError("x", "field", Position(3,21)))
+    fromStatements(s"int x = 2147483648.x();") should failNamingWith(DefNotFoundError("x", "method", Position(3,23)))
 
-    fromStatements(s"int x = 42.x;") should failNamingWith(DefNotFoundError("x", "field"))
-    fromStatements(s"int x = 42.x();") should failNamingWith(DefNotFoundError("x", "method"))
+    fromStatements(s"int x = 42.x;") should failNamingWith(DefNotFoundError("x", "field", Position(3,13)))
+    fromStatements(s"int x = 42.x();") should failNamingWith(DefNotFoundError("x", "method", Position(3,15)))
 
-    fromStatements(s"int x = true.x;") should failNamingWith(DefNotFoundError("x", "field"))
-    fromStatements(s"int x = true.x();") should failNamingWith(DefNotFoundError("x", "method"))
+    fromStatements(s"int x = true.x;") should failNamingWith(DefNotFoundError("x", "field", Position(3,15)))
+    fromStatements(s"int x = true.x();") should failNamingWith(DefNotFoundError("x", "method", Position(3,17)))
   }
 }

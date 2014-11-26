@@ -5,7 +5,7 @@ import org.scalatest._
 
 class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
 
-  implicit val pos: Position = Position(-123, -123, "no interesting position")
+  implicit val pos: Position = Position.NoPosition
 
   val foo = LocalVarDeclStatement("foo", TypeBasic("Foo"), None)
   val foo2 = LocalVarDeclStatement("foo", TypeBasic("Foo"), None)

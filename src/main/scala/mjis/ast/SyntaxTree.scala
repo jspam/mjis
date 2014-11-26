@@ -7,9 +7,8 @@ sealed trait SyntaxTree {
   def pos: Position
 }
 
-abstract class SyntaxTreeError( /* element: SyntaxTree */ ) extends Finding {
+abstract class SyntaxTreeError extends Finding {
   def severity = Severity.ERROR
-  override def pos: Position = Position(0, 0, "") // TODO: element.position
 }
 
 /** A syntax tree element that has a reference to a Decl. */

@@ -8,7 +8,7 @@ import java.nio.file.Paths
 
 class ParserTest extends FlatSpec with Matchers with Inspectors {
 
-  implicit val pos: Position = Position(-123, -123, "no interesting position")
+  implicit val pos: Position = Position.NoPosition
 
   def repeat(str: String, count: Integer) = Seq.fill(count)(str).mkString("")
 
@@ -23,7 +23,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
       )
     ), List())
   ))
-  def expressionsAST(innerAST: Expression*) = statementsAST(innerAST.map(exprSttmt => ExpressionStatement(exprSttmt)): _*)
+  def expressionsAST(innerAST: Expression*) = statementsAST(innerAST.map(exprStmt => ExpressionStatement(exprStmt)): _*)
 
   /* class declarations */
 
@@ -54,7 +54,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
   it should "accept many fields, main methods and methods" in {
     "class C {" + repeat("""|public int x;
                     |public static void main(String[] args) {}
-                    |public int z(int j, A b) {}""".stripMargin, 
+                    |public int z(int j, A b) {}""".stripMargin,
                     10000) + "}" should succeedParsing()
   }
 
@@ -103,7 +103,7 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     fromStatements(repeat("while(0) {", 10000) + repeat("}", 10000)
         + repeat("while(0);", 10000)) should succeedParsing()
   }
-  
+
   it should "accept a program with many return statements" in {
     fromStatements(repeat("return 0;", 10000)) should succeedParsing()
   }
