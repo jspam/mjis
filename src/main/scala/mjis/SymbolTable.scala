@@ -15,7 +15,7 @@ class SymbolTable {
   def lookup(name: String): Option[Decl] = index.get(name).flatMap(_.defs.get(name)).map(_._1)
 
   def insert(decl: Decl): Unit = {
-    current.get.defs += (decl.name -> (decl, index.get(decl.name)))
+    current.get.defs += (decl.name -> ((decl, index.get(decl.name))))
     index += (decl.name -> current.get)
   }
 

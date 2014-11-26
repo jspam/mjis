@@ -4,6 +4,7 @@ import mjis.ast._
 import org.scalatest._
 import CompilerTestHelper._
 import CompilerTestMatchers._
+import java.nio.file.Paths
 
 class ParserTest extends FlatSpec with Matchers with Inspectors {
 
