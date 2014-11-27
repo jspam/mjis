@@ -2,7 +2,7 @@ package mjis
 
 import java.lang.reflect.Constructor
 import java.io.Reader
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.reflect._
@@ -58,7 +58,13 @@ object Compiler {
         }
         true
       case Right(findings) =>
-        findings.foreach(System.err.println)
+        val inputLines = config.file match {
+          case Some(file) => Files.lines(file).iterator().toIterable
+          case None       => Iterable.empty
+        }
+        val out = new OutputStreamWriter(System.err)
+        Finding.printAll(findings, inputLines, out)
+        out.close()
         if (config.stopAfter != "")
           System.out.println("error")
         false
