@@ -1,15 +1,12 @@
 package mjis
 
 import java.lang.reflect.Constructor
-import java.io.Reader
 import java.io._
 import java.nio.file.Files
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.reflect._
-
 import firm.Firm
-
 
 object Compiler {
   private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
