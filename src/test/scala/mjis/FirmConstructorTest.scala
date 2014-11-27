@@ -174,4 +174,20 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("public boolean m_greater_equal() { return 1 >= 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mGreaterEqual))
   }
 
+  it should "create FIRM graphs for System.out.println" in {
+    val printIntMethodEntity = methodEntity("System_out_println", null, Seq(IntType))
+    val mPrintln = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected_m_println", null, Seq()),
+      """
+        |start = Start
+        |mem_before_call = Proj M M, start
+        |const42 = Const 42 Is
+        |addr_print_int = Addr System_out_println
+        |call = Call System_out_println, mem_before_call, addr_print_int, const42
+        |mem_after_call = Proj M M, call
+        |return = Return, mem_after_call
+        |end = End, return
+      """.stripMargin)
+    fromMembers("public void m_println() { System.out.println(42); }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mPrintln))
+  }
+
 }
