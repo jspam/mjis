@@ -37,16 +37,23 @@ object FirmGraphTestHelper {
         )
         val args = definitionAndArgs.tail.map(nodes).toArray
 
-        val addRegex = "Add (\\w+)".r
+        val s = "(\\w+)"
+        val i = "(\\d+)"
+
+        val addRegex = s"Add $s".r
+        val constRegex = s"Const $i $s".r
         val endRegex = "End".r
-        val projRegex = "Proj (\\w+) (\\w+)".r
-        val projArgRegex = "Proj (\\w+) Arg (\\d+)".r
+        val projRegex = s"Proj $s $s".r
+        val projArgRegex = s"Proj $s Arg $i".r
         val returnRegex = "Return".r
         val startRegex = "Start".r
         definition match {
           case addRegex(mode) =>
             assert(args.length == 2, s"Add needs two arguments: $line")
             curNode = constr.newAdd(args(0), args(1), modes(mode))
+          case constRegex(value, mode) =>
+            assert(args.length == 0, s"Const needs zero arguments: $line")
+            curNode = constr.newConst(value.toInt, modes(mode))
           case endRegex() =>
             assert(args.length >= 1, s"End needs at least one argument: $line")
             args.foreach(graph.getEndBlock.addPred)
@@ -85,6 +92,11 @@ object FirmGraphTestHelper {
         val leftAsProj = new Proj(left.ptr)
         val rightAsProj = new Proj(right.ptr)
         if (leftAsProj.getNum == rightAsProj.getNum) "" else s"Projection numbers of $left and $right do not match"
+      case ir_opcode.iro_Const =>
+        val leftAsConst = new Const(left.ptr)
+        val rightAsConst = new Const(right.ptr)
+        if (leftAsConst.getTarval.compare(rightAsConst.getTarval) == Relation.Equal) ""
+        else s"Constant values of $left and $right do not match"
       case _ => throw new NotImplementedError(s"Unimplemented opcode: ${left.getOpCode}")
     }
   }

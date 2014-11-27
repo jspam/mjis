@@ -8,7 +8,8 @@ import scala.collection.mutable.ListBuffer
 import scala.reflect._
 
 object Compiler {
-  private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer])
+  private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
+    classOf[FirmConstructor])
 
   private val stopAfterTargets = Map[String, Class[_ <: Phase[_]]](
     "lexer" -> classOf[Lexer],

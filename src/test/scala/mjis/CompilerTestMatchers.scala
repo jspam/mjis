@@ -86,7 +86,9 @@ trait CompilerTestMatchers {
         map(g => g.getEntity.getName -> g).toMap
       if (actualGraphsMap.size != expectedGraphsMap.size) {
         success = false
-        failureMessage = s"Expected ${expectedGraphsMap.size} graph(s), got ${actualGraphsMap.size}"
+        val expGraphs = expectedGraphsMap.keys.mkString(", ")
+        val actGraphs = actualGraphsMap.keys.mkString(", ")
+        failureMessage = s"Expected ${expectedGraphsMap.size} graph(s): $expGraphs, got ${actualGraphsMap.size}: $actGraphs"
       } else {
         expectedGraphsMap.foreach { case (name, expected) => actualGraphsMap.get(name) match {
           case None =>
