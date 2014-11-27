@@ -7,12 +7,13 @@ object Builtins {
   val ExtendedIntType = TypeBasic("int (including 2^31)") /* An integer that can additionally take the value 2147483648 = 2^31. */
   val BooleanType = TypeBasic("boolean")
 
+  val IntAddDecl = MethodDecl("+", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
+  val IntSubDecl = MethodDecl("-", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
+  val IntMulDecl = MethodDecl("*", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
+  val IntDivDecl = MethodDecl("/", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
+  val IntModDecl = MethodDecl("%", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
   val IntDecl = ClassDecl("int", List(
-    MethodDecl("+", List(Parameter("", IntType), Parameter("", IntType)), IntType, null),
-    MethodDecl("-", List(Parameter("", IntType), Parameter("", IntType)), IntType, null),
-    MethodDecl("*", List(Parameter("", IntType), Parameter("", IntType)), IntType, null),
-    MethodDecl("/", List(Parameter("", IntType), Parameter("", IntType)), IntType, null),
-    MethodDecl("%", List(Parameter("", IntType), Parameter("", IntType)), IntType, null),
+    IntAddDecl, IntSubDecl, IntMulDecl, IntDivDecl, IntModDecl,
     MethodDecl("<", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
     MethodDecl("<=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
     MethodDecl(">", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),

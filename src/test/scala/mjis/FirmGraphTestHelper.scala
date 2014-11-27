@@ -2,6 +2,7 @@ package mjis
 
 import firm._
 import firm.bindings.binding_irnode.ir_opcode
+import firm.bindings.binding_ircons.op_pin_state
 import firm.nodes._
 
 object FirmGraphTestHelper {
@@ -17,7 +18,9 @@ object FirmGraphTestHelper {
     )
     val modeNrs: scala.collection.immutable.Map[String, Int] = Map(
       "M" -> firm.nodes.Start.pnM,
-      "T_args" -> firm.nodes.Start.pnTArgs
+      "T_args" -> firm.nodes.Start.pnTArgs,
+      "ResDiv" -> firm.nodes.Div.pnRes,
+      "ResMod" -> firm.nodes.Mod.pnRes
     )
 
     val graph = new Graph(methodEntity, 42 /* TODO */)
@@ -42,11 +45,15 @@ object FirmGraphTestHelper {
 
         val addRegex = s"Add $s".r
         val constRegex = s"Const $i $s".r
+        val divRegex = s"Div $s".r
         val endRegex = "End".r
+        val modRegex = s"Mod $s".r
+        val mulRegex = s"Mul $s".r
         val projRegex = s"Proj $s $s".r
         val projArgRegex = s"Proj $s Arg $i".r
         val returnRegex = "Return".r
         val startRegex = "Start".r
+        val subRegex = s"Sub $s".r
         definition match {
           case addRegex(mode) =>
             assert(args.length == 2, s"Add needs two arguments: $line")
@@ -54,9 +61,18 @@ object FirmGraphTestHelper {
           case constRegex(value, mode) =>
             assert(args.length == 0, s"Const needs zero arguments: $line")
             curNode = constr.newConst(value.toInt, modes(mode))
+          case divRegex(mode) =>
+            assert(args.length == 3, s"Div needs three arguments (first one is mem): $line")
+            curNode = constr.newDiv(args(0), args(1), args(2), modes(mode), op_pin_state.op_pin_state_floats)
           case endRegex() =>
             assert(args.length >= 1, s"End needs at least one argument: $line")
             args.foreach(graph.getEndBlock.addPred)
+          case modRegex(mode) =>
+            assert(args.length == 3, s"Mod needs three arguments (first one is mem): $line")
+            curNode = constr.newMod(args(0), args(1), args(2), modes(mode), op_pin_state.op_pin_state_floats)
+          case mulRegex(mode) =>
+            assert(args.length == 2, s"Mul needs two arguments: $line")
+            curNode = constr.newMul(args(0), args(1), modes(mode))
           case projRegex(mode, argNr) =>
             assert(args.length == 1, s"Proj needs one argument: $line")
             curNode = constr.newProj(args(0), modes(mode), modeNrs(argNr))
@@ -69,6 +85,9 @@ object FirmGraphTestHelper {
           case startRegex() =>
             assert(args.length == 0, s"Start needs zero arguments: $line")
             curNode = graph.getStart
+          case subRegex(mode) =>
+            assert(args.length == 2, s"Sub needs two arguments: $line")
+            curNode = constr.newSub(args(0), args(1), modes(mode))
         }
         nodes.update(nodeName, curNode)
       } else if (line.trim.isEmpty) {
@@ -87,16 +106,18 @@ object FirmGraphTestHelper {
     if (left.getMode != right.getMode)
       return s"Modes of $left and $right do not match"
     left.getOpCode match {
-      case ir_opcode.iro_Add | ir_opcode.iro_Start | ir_opcode.iro_End | ir_opcode.iro_Return => ""
+      case ir_opcode.iro_Add | ir_opcode.iro_Start | ir_opcode.iro_End | ir_opcode.iro_Sub |
+           ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod => ""
       case ir_opcode.iro_Proj =>
         val leftAsProj = new Proj(left.ptr)
         val rightAsProj = new Proj(right.ptr)
-        if (leftAsProj.getNum == rightAsProj.getNum) "" else s"Projection numbers of $left and $right do not match"
+        if (leftAsProj.getNum == rightAsProj.getNum) ""
+        else s"Projection numbers of $left (${leftAsProj.getNum}} and $right (${rightAsProj.getNum}} do not match"
       case ir_opcode.iro_Const =>
         val leftAsConst = new Const(left.ptr)
         val rightAsConst = new Const(right.ptr)
         if (leftAsConst.getTarval.compare(rightAsConst.getTarval) == Relation.Equal) ""
-        else s"Constant values of $left and $right do not match"
+        else s"Constant values of $left (${leftAsConst.getTarval}) and $right (${rightAsConst.getTarval}) do not match"
       case _ => throw new NotImplementedError(s"Unimplemented opcode: ${left.getOpCode}")
     }
   }
@@ -111,7 +132,8 @@ object FirmGraphTestHelper {
     val rightEndBlock = right.getEndBlock
 
     if (leftEndBlock.getPredCount != rightEndBlock.getPredCount)
-      return "Predecessor count of end blocks does not match"
+      return "Predecessor count of end blocks does not match " +
+        s"(left: ${leftEndBlock.getPredCount}, right: ${rightEndBlock.getPredCount})"
     for (i <- 0 until leftEndBlock.getPredCount) workList.+=((leftEndBlock.getPred(i), rightEndBlock.getPred(i)))
 
     while (workList.nonEmpty) {
