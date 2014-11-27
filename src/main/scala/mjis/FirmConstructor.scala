@@ -40,7 +40,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       }
       val methodType = new MethodType(paramTypes, resultTypes)
       val methodEntity = new Entity(P.getGlobalType, mangle(method.name), methodType)
-      graph = new Graph(methodEntity, 42 /* TODO */)
+      graph = new Graph(methodEntity, method.numVars)
       constr = new Construction(graph)
     }
 

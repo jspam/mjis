@@ -158,6 +158,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     override def postVisit(param: Parameter, _1: Unit) = assertNotVoid(param.typ)
 
     override def postVisit(stmt: LocalVarDeclStatement, _1: Unit, _2: Option[Unit]): Boolean = {
+      currentMethod.numVars += 1
       assertNotVoid(stmt.typ)
       stmt.initializer match {
         case Some(expr) => assertConvertible(getType(expr), stmt.typ)

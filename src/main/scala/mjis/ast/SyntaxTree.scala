@@ -66,6 +66,7 @@ final case class MethodDecl(
   body: Block,
   isStatic: Boolean = false) extends TypedDecl {
 
+  var numVars = parameters.length
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
   override def isReadable = !isStatic /* for methods, isReadable == isCallable */
 }

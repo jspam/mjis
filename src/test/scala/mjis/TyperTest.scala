@@ -341,4 +341,24 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     fromStatements(s"int x = $value;") should succeedTyping
     fromStatements(s"int x = -$value;") should succeedTyping
   }
+
+  it should "properly count the number of declared vars in a main method" in {
+    val cls = assertExecClass[Typer]("class Test { public static void main(String[] args) { int a = 3; } }")
+    cls.methods(0).numVars shouldBe 2 // parameter + a
+  }
+
+  it should "count the this-parameter in methods" in {
+    val mth = assertExecMethod[Typer]("public void foo() {}")
+    mth.numVars shouldBe 1
+  }
+
+  it should "properly count the number of declared vars in a method" in {
+    val mth = assertExecMethod[Typer]("public int foo(int a, boolean b) { boolean z; return a; }")
+    mth.numVars shouldBe 4 // this, a, b, z
+  }
+
+  it should "properly count variables in inner blocks" in {
+    val mth = assertExecMethod[Typer]("public void foo() { int a; { int b; } }")
+    mth.numVars shouldBe 3
+  }
 }
