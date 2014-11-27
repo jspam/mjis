@@ -73,7 +73,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     reinitFirm()
     val m4MethodEntity = methodEntity("__expected_m4", IntType, Seq())
     val m4 = FirmGraphTestHelper.buildFirmGraph(m4MethodEntity, returnZeroMethodFirm)
-    fromMembers("public boolean m4() {return false;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m4))
+    fromMembers("public int m4() {return 0;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m4))
   }
 
   it should "create FIRM graphs for Integer arithmetic expressions" in {
