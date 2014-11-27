@@ -2,10 +2,14 @@ package mjis
 
 import java.lang.reflect.Constructor
 import java.io.Reader
-import java.nio.file.{Files, Path}
+import java.io._
+import java.nio.file.Files
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.reflect._
+
+import firm.Firm
+
 
 object Compiler {
   private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
@@ -14,7 +18,8 @@ object Compiler {
   private val stopAfterTargets = Map[String, Class[_ <: Phase[_]]](
     "lexer" -> classOf[Lexer],
     "parser" -> classOf[Parser],
-    "semantics" -> classOf[Typer]
+    "semantics" -> classOf[Typer],
+    "firm" -> classOf[FirmConstructor]
   )
 
   def exec(input: Reader, until: Class[_ <: Phase[_]]): Either[Phase[_], List[Finding]] = {
@@ -45,7 +50,8 @@ object Compiler {
     exec(input, classTag[P].runtimeClass.asInstanceOf[Class[_ <: Phase[_]]]).asInstanceOf[Either[P, List[Finding]]]
 
   def compile(config: Config): Boolean = {
-    import java.io._
+    Firm.init()
+
     val fileOrStdIn = config.file.map(f => new FileInputStream(f.toFile)).getOrElse(System.in)
     val input = new InputStreamReader(new BufferedInputStream(fileOrStdIn), "ASCII")
     val target = if (config.stopAfter != "") stopAfterTargets(config.stopAfter) else pipeline.last
