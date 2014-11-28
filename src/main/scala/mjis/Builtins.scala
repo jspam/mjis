@@ -12,12 +12,12 @@ object Builtins {
   val IntMulDecl = MethodDecl("*", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
   val IntDivDecl = MethodDecl("/", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
   val IntModDecl = MethodDecl("%", List(Parameter("", IntType), Parameter("", IntType)), IntType, null)
+  val IntLessDecl = MethodDecl("<", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null)
+  val IntLessEqualDecl = MethodDecl("<=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null)
+  val IntGreaterDecl = MethodDecl(">", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null)
+  val IntGreaterEqualDecl = MethodDecl(">=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null)
   val IntDecl = ClassDecl("int", List(
-    IntAddDecl, IntSubDecl, IntMulDecl, IntDivDecl, IntModDecl,
-    MethodDecl("<", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
-    MethodDecl("<=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
-    MethodDecl(">", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null),
-    MethodDecl(">=", List(Parameter("", IntType), Parameter("", IntType)), BooleanType, null)
+    IntAddDecl, IntSubDecl, IntMulDecl, IntDivDecl, IntModDecl, IntLessDecl, IntLessEqualDecl, IntGreaterDecl, IntGreaterEqualDecl
   ), List.empty)
 
   val ExtendedIntDecl = ClassDecl("int (including 2^31)", List(

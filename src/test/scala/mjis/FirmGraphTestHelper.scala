@@ -12,6 +12,7 @@ object FirmGraphTestHelper {
     var curNode: Node = null
 
     val modes: scala.collection.immutable.Map[String, Mode] = Map(
+      "b" -> Mode.getb,
       "Is" -> Mode.getIs,
       "M" -> Mode.getM,
       "T" -> Mode.getT
@@ -44,11 +45,13 @@ object FirmGraphTestHelper {
         val i = "(\\d+)"
 
         val addRegex = s"Add $s".r
-        val constRegex = s"Const $i $s".r
+        val constRegex = s"Const $s $s".r
+        val cmpRegex = s"Cmp $s".r
         val divRegex = s"Div $s".r
         val endRegex = "End".r
         val modRegex = s"Mod $s".r
         val mulRegex = s"Mul $s".r
+        val notRegex = s"Not $s".r
         val projRegex = s"Proj $s $s".r
         val projArgRegex = s"Proj $s Arg $i".r
         val returnRegex = "Return".r
@@ -60,7 +63,17 @@ object FirmGraphTestHelper {
             curNode = constr.newAdd(args(0), args(1), modes(mode))
           case constRegex(value, mode) =>
             assert(args.length == 0, s"Const needs zero arguments: $line")
-            curNode = constr.newConst(value.toInt, modes(mode))
+            curNode = constr.newConst(mode match {
+              case "Is" => value.toInt
+              case "b" => value match {
+                case "true" => 1
+                case "false" => 0
+                case _ => throw new IllegalArgumentException(s"Invalid Boolean constant: $value")
+              }
+            }, modes(mode))
+          case cmpRegex(relationType) =>
+            assert(args.length == 2, s"Cmp needs two arguments: $line")
+            curNode = constr.newCmp(args(0), args(1), Relation.valueOf(relationType))
           case divRegex(mode) =>
             assert(args.length == 3, s"Div needs three arguments (first one is mem): $line")
             curNode = constr.newDiv(args(0), args(1), args(2), modes(mode), op_pin_state.op_pin_state_floats)
@@ -73,6 +86,9 @@ object FirmGraphTestHelper {
           case mulRegex(mode) =>
             assert(args.length == 2, s"Mul needs two arguments: $line")
             curNode = constr.newMul(args(0), args(1), modes(mode))
+          case notRegex(mode) =>
+            assert(args.length == 1, s"Not needs one argument: $line")
+            curNode = constr.newNot(args(0), modes(mode))
           case projRegex(mode, argNr) =>
             assert(args.length == 1, s"Proj needs one argument: $line")
             curNode = constr.newProj(args(0), modes(mode), modeNrs(argNr))
@@ -107,17 +123,20 @@ object FirmGraphTestHelper {
       return s"Modes of $left and $right do not match"
     left.getOpCode match {
       case ir_opcode.iro_Add | ir_opcode.iro_Start | ir_opcode.iro_End | ir_opcode.iro_Sub |
-           ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod => ""
+           ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod |
+           ir_opcode.iro_Not => ""
       case ir_opcode.iro_Proj =>
-        val leftAsProj = new Proj(left.ptr)
-        val rightAsProj = new Proj(right.ptr)
+        val (leftAsProj, rightAsProj) = (new Proj(left.ptr), new Proj(right.ptr))
         if (leftAsProj.getNum == rightAsProj.getNum) ""
         else s"Projection numbers of $left (${leftAsProj.getNum}} and $right (${rightAsProj.getNum}} do not match"
       case ir_opcode.iro_Const =>
-        val leftAsConst = new Const(left.ptr)
-        val rightAsConst = new Const(right.ptr)
+        val (leftAsConst, rightAsConst) = (new Const(left.ptr), new Const(right.ptr))
         if (leftAsConst.getTarval.compare(rightAsConst.getTarval) == Relation.Equal) ""
         else s"Constant values of $left (${leftAsConst.getTarval}) and $right (${rightAsConst.getTarval}) do not match"
+      case ir_opcode.iro_Cmp =>
+        val (leftAsCmp, rightAsCmp) = (new Cmp(left.ptr), new Cmp(right.ptr))
+        if (leftAsCmp.getRelation.value() == rightAsCmp.getRelation.value()) ""
+        else s"Comparison modes of $left (${leftAsCmp.getRelation}) and $right (${rightAsCmp.getRelation}) do not match"
       case _ => throw new NotImplementedError(s"Unimplemented opcode: ${left.getOpCode}")
     }
   }

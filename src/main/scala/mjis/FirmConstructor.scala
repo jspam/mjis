@@ -37,6 +37,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           val typ = firmType(f.typ)
           val firmField = Entity.createParameterEntity(struct, i, typ)
 
+          // TODO: Align type 'b' like type 'Bu'
           val fieldAlign = typ.getAlignmentBytes
           if (offset % fieldAlign > 0)
             offset += fieldAlign  - offset % fieldAlign
@@ -54,7 +55,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
     val firmType: mutable.Map[TypeDef, firm.Type] = new mutable.HashMap[TypeDef, firm.Type]() {
       override def default(typ: TypeDef): firm.Type = typ match {
-        case Builtins.BooleanType => new PrimitiveType(Mode.getBu)
+        case Builtins.BooleanType => new PrimitiveType(Mode.getb)
         case Builtins.IntType => new PrimitiveType(Mode.getIs)
         case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
         case Builtins.VoidType => throw new IllegalArgumentException("void doesn't have a runtime type")
@@ -96,7 +97,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       constr.newConst(expr match {
         case TrueLiteral => 1
         case FalseLiteral => 0
-      }, Mode.getIs)
+      }, Mode.getb)
     }
 
     override def postVisit(expr: IntLiteral): Node = {
@@ -121,6 +122,21 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
             Mode.getIs, op_pin_state.op_pin_state_floats)
           constr.setCurrentMem(constr.newProj(modNode, Mode.getM, firm.nodes.Mod.pnM))
           constr.newProj(modNode, Mode.getIs, firm.nodes.Mod.pnRes)
+
+        case Some(Builtins.IntLessDecl) =>
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Less)
+        case Some(Builtins.IntLessEqualDecl) =>
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.LessEqual)
+        case Some(Builtins.IntGreaterDecl) =>
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Greater)
+        case Some(Builtins.IntGreaterEqualDecl) =>
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.GreaterEqual)
+
+        case Some(Builtins.EqualsDecl) =>
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
+        case Some(Builtins.UnequalDecl) =>
+          val equalNode = constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
+          constr.newNot(equalNode, Mode.getb)
         case _ => ???
       }
     }
