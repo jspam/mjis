@@ -190,25 +190,4 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("public void m_println() { System.out.println(42); }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mPrintln))
   }
 
-  it should "create FIRM graphs for object constructor calls" in {
-    def methEntity() = methodEntity("__expected_m1", IntType, Seq())
-    val prog = fromMembers("public void m1() { A a = new A(); }")
-    def testGraph(size: Int, alignment: Int) =
-      FirmGraphTestHelper.buildFirmGraph(methEntity(),
-        s"""
-      |start = Start
-      |mem = Proj M M, start
-      |const2 = Alloc $size $alignment, mem
-      |return = Return, mem
-      |end = End, return
-    """.stripMargin)
-
-    "class A { public int x; }" + prog should succeedFirmConstructingWith(
-      List(getEmptyMainMethodGraph, testGraph(4, 4)))
-
-    reinitFirm()
-    "class A {}" + prog should succeedFirmConstructingWith(
-      List(getEmptyMainMethodGraph, testGraph(0, 0))
-    )
-  }
 }
