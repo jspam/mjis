@@ -10,13 +10,14 @@ import firm.Firm
 
 object Compiler {
   private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
-    classOf[FirmConstructor])
+    classOf[FirmConstructor], classOf[CodeGenerator])
 
   private val stopAfterTargets = Map[String, Class[_ <: Phase[_]]](
     "lexer" -> classOf[Lexer],
     "parser" -> classOf[Parser],
     "semantics" -> classOf[Typer],
-    "firm" -> classOf[FirmConstructor]
+    "firm" -> classOf[FirmConstructor],
+    "codegen" -> classOf[CodeGenerator]
   )
 
   def exec(input: Reader, until: Class[_ <: Phase[_]]): Either[Phase[_], List[Finding]] = {
