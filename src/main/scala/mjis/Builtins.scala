@@ -36,10 +36,7 @@ object Builtins {
   val VoidType = TypeBasic("void")
   val VoidDecl = ClassDecl("void", List.empty, List.empty)
 
-  val SystemOutPrintlnDecl = MethodDecl("System.out.println",
-    List(Parameter("this", TypeBasic("$System.out")), Parameter("", IntType)), VoidType, null)
-  val SystemOutFieldDecl = FieldDecl("out", TypeBasic("$System.out"))
-  val SystemDecl = ClassDecl("$System", List(), List(SystemOutFieldDecl))
+  val SystemOutPrintlnDecl = MethodDecl("System.out.println", List(Parameter("", IntType)), VoidType, null, isStatic = true)
 
   val NullType = TypeBasic("null")
   val NullDecl = ClassDecl("null", List.empty, List.empty)
