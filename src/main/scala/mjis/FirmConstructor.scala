@@ -27,7 +27,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       "_" + cls.name.length.toString + cls.name + "_" + method.name
   }
 
-  private class FirmConstructorVisitor extends PlainRecursiveVisitor[Unit, Node, Node]((), null, null) {
+  private class FirmConstructorVisitor extends TailRecursiveVisitor[Unit, Node, Node]((), null, null) {
 
     private var graph: Graph = null
     private var constr: Construction = null

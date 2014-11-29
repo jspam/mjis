@@ -125,7 +125,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
   }
 
-  private class TyperVisitor extends PlainRecursiveVisitor[Unit, Boolean, Unit]((), false, ()) {
+  private class TyperVisitor extends TailRecursiveVisitor[Unit, Boolean, Unit]((), false, ()) {
 
     private var currentMethod: MethodDecl = null
 

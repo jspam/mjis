@@ -1,5 +1,7 @@
 package mjis.ast
 
+import scala.util.control.TailCalls._
+
 trait ProgramVisitor {
   def visit(program: Program): Unit
   def visit(cls: ClassDecl): Unit
@@ -36,7 +38,7 @@ trait ExpressionVisitor[E] {
   def visit(expr: ThisLiteral): E
 }
 
-class RecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E) {
+class ProgramVisitorPrePost[T, S, E](defaultT: T, defaultS: S, defaultE: E) {
 
   def preVisit(program: Program): Unit = {}
   def postVisit(program: Program): Unit = {}
@@ -105,7 +107,7 @@ class RecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E) {
 }
 
 class PlainRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
-  extends RecursiveVisitor[T, S, E](defaultT, defaultS, defaultE)
+  extends ProgramVisitorPrePost[T, S, E](defaultT, defaultS, defaultE)
   with ProgramVisitor
   with TypeVisitor[T]
   with StatementVisitor[S]
@@ -214,3 +216,124 @@ class PlainRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
     postVisit(expr, expr.qualifier.accept(this))
   }
 }
+
+class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
+  extends ProgramVisitorPrePost[T, S, E](defaultT, defaultS, defaultE)
+  with ProgramVisitor
+  with TypeVisitor[T]
+  with StatementVisitor[TailRec[S]]
+  with ExpressionVisitor[TailRec[E]] {
+
+  private def sequence[A](xs: => List[TailRec[A]]): TailRec[List[A]] = tailcall(done(xs.map(_.result)))
+
+  def visit(program: Program): Unit = {
+    preVisit(program)
+    program.classes.foreach(visit)
+    postVisit(program)
+  }
+
+  def visit(cls: ClassDecl): Unit = {
+    preVisit(cls)
+    cls.fields.foreach(visit)
+    cls.methods.foreach(visit)
+    postVisit(cls)
+  }
+
+  def visit(method: MethodDecl): Unit = {
+    preVisit(method)
+    method.parameters.foreach(visit)
+    postVisit(method, method.returnType.accept(this), visit(method.body).result)
+  }
+
+  def visit(field: FieldDecl): Unit = {
+    preVisit(field)
+    postVisit(field, field.typ.accept(this))
+  }
+
+  def visit(param: Parameter): Unit = {
+    preVisit(param)
+    postVisit(param, param.typ.accept(this))
+  }
+
+  def visit(typ: TypeBasic): T = postVisit(typ)
+
+  def visit(typ: TypeArray): T = {
+    preVisit(typ)
+    postVisit(typ, visit(typ.elementType))
+  }
+
+  def visit(stmt: Block): TailRec[S] = {
+    preVisit(stmt)
+    sequence(stmt.statements.map(_.accept(this))).map(postVisit(stmt, _))
+  }
+
+  def visit(stmt: EmptyStatement): TailRec[S] = done(postVisit(stmt))
+
+  def visit(stmt: If): TailRec[S] = {
+    preVisit(stmt)
+    for (condResult <- stmt.condition.accept(this);
+         ifTrueResult <- stmt.ifFalse.accept(this);
+         ifFalseResult <- stmt.ifTrue.accept(this))
+      yield postVisit(stmt, condResult, ifTrueResult, ifFalseResult)
+  }
+
+  def visit(stmt: While): TailRec[S] = {
+    preVisit(stmt)
+    for (condResult <- stmt.condition.accept(this);
+         bodyResult <- stmt.body.accept(this))
+      yield postVisit(stmt, condResult, bodyResult)
+  }
+
+  def visit(stmt: LocalVarDeclStatement): TailRec[S] = {
+    preVisit(stmt)
+    done(postVisit(stmt, stmt.typ.accept(this), stmt.initializer.map(_.accept(this).result)))
+  }
+
+  def visit(stmt: ReturnStatement): TailRec[S] = {
+    preVisit(stmt)
+    done(postVisit(stmt, stmt.returnValue.map(_.accept(this).result)))
+  }
+
+  def visit(stmt: ExpressionStatement): TailRec[S] = {
+    preVisit(stmt)
+    done(postVisit(stmt, stmt.expr.accept(this).result))
+  }
+
+  def visit(expr: Apply): TailRec[E] = {
+    preVisit(expr)
+    sequence(expr.arguments.map(_.accept(this))).map(postVisit(expr, _))
+  }
+
+  def visit(expr: Assignment): TailRec[E] = {
+    preVisit(expr)
+    for (lhsResult <- expr.lhs.accept(this);
+         rhsResult <- expr.rhs.accept(this))
+      yield postVisit(expr, lhsResult, rhsResult)
+  }
+
+  def visit(expr: BooleanLiteral): TailRec[E] = done(postVisit(expr))
+
+  def visit(expr: Ident): TailRec[E] = done(postVisit(expr))
+
+  def visit(expr: IntLiteral): TailRec[E] = done(postVisit(expr))
+
+  def visit(expr: NullLiteral): TailRec[E] = done(postVisit(expr))
+
+  def visit(expr: ThisLiteral): TailRec[E] = done(postVisit(expr))
+
+  def visit(expr: NewArray): TailRec[E] = {
+    preVisit(expr)
+    expr.firstDimSize.accept(this).map(postVisit(expr, expr.typ.accept(this), _))
+  }
+
+  def visit(expr: NewObject): TailRec[E] = {
+    preVisit(expr)
+    done(postVisit(expr, expr.typ.accept(this)))
+  }
+
+  def visit(expr: Select): TailRec[E] = {
+    preVisit(expr)
+    expr.qualifier.accept(this).map(postVisit(expr, _))
+  }
+}
+

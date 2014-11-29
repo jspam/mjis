@@ -36,7 +36,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
   private case class ResolveException(finding: Finding) extends Exception
   private class ClassLookup(val cls: ClassDecl, val fields: Map[String, FieldDecl], val methods: Map[String, MethodDecl])
 
-  private class NamerVisitor extends PlainRecursiveVisitor[Unit, Unit, Unit]((), (), ()) {
+  private class NamerVisitor extends TailRecursiveVisitor[Unit, Unit, Unit]((), (), ()) {
 
     // mind the order: local classes may shadow builtin classes
     private val classes: Map[String, ClassLookup] = mkPackageLookup(Builtins.PublicTypeDecls) ++
@@ -86,12 +86,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     override def postVisit(prog: Program): Unit =
       if (prog.mainMethodDecl.isEmpty) throw new ResolveException(NoMainMethodError(prog.pos))
 
-    override def visit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
+    override def postVisit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
 
     override def preVisit(method: MethodDecl): Unit = {
       localVars.enterScope()
       method.parameters.foreach(addLocalVarDecl)
-
       if (method.isStatic) {
         if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError(method.pos))
         input.mainMethodDecl match {
@@ -141,9 +140,9 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       setDecl(expr, classes(thisType.name).fields.get(expr.name), "field")
     }
 
-    override def visit(expr: Ident): Unit = setDecl(expr, valueLookup(expr.name), "value")
+    override def postVisit(expr: Ident): Unit = setDecl(expr, valueLookup(expr.name), "value")
 
-    override def visit(expr: ThisLiteral): Unit = {
+    override def postVisit(expr: ThisLiteral): Unit = {
       // lookup can only be None (for static methods) or the this parameter
       setDecl(expr, valueLookup("this").map(_.asInstanceOf[Parameter]), "value")
     }

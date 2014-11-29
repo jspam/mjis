@@ -5,9 +5,9 @@ package mjis.util
 object DummyTailCalls {
 
   class TailRec[A](x: A) {
-    def map[B](f: A => B) = f(x)
+    def map[B](f: A => B): TailRec[B] = done(f(x))
 
-    def flatMap[B](f: A => TailRec[B]) = f(x)
+    def flatMap[B](f: A => TailRec[B]): TailRec[B] = f(x)
 
     def result: A = x
   }
