@@ -45,6 +45,8 @@ object FirmGraphTestHelper {
         val i = "(\\d+)"
 
         val addRegex = s"Add $s".r
+        val addrRegex = s"Addr $s".r
+        val callRegex = s"Call $s".r
         val constRegex = s"Const $s $s".r
         val cmpRegex = s"Cmp $s".r
         val divRegex = s"Div $s".r
@@ -61,6 +63,16 @@ object FirmGraphTestHelper {
           case addRegex(mode) =>
             assert(args.length == 2, s"Add needs two arguments: $line")
             curNode = constr.newAdd(args(0), args(1), modes(mode))
+          case addrRegex(name) =>
+            assert(args.length == 0, s"Addr needs zero arguments: $line")
+            val entity = Program.getGlobalType.getMemberByName(name)
+            assert(entity != null, s"Entity $name not found: $line")
+            curNode = constr.newAddress(entity)
+          case callRegex(name) =>
+            assert(args.length >= 2, s"Call needs at least two arguments (mem and called function address): $line")
+            val entity = Program.getGlobalType.getMemberByName(name)
+            assert(entity != null, s"Entity $name not found: $line")
+            curNode = constr.newCall(args(0), args(1), args.drop(2), entity.getType)
           case constRegex(value, mode) =>
             assert(args.length == 0, s"Const needs zero arguments: $line")
             curNode = constr.newConst(mode match {
@@ -124,7 +136,11 @@ object FirmGraphTestHelper {
     left.getOpCode match {
       case ir_opcode.iro_Add | ir_opcode.iro_Start | ir_opcode.iro_End | ir_opcode.iro_Sub |
            ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod |
-           ir_opcode.iro_Not => ""
+           ir_opcode.iro_Not | ir_opcode.iro_Call => ""
+      case ir_opcode.iro_Address =>
+        val (leftAsAddr, rightAsAddr) = (new Address(left.ptr), new Address(right.ptr))
+        if (leftAsAddr.getEntity.getLdName == rightAsAddr.getEntity.getLdName) ""
+        else s"Entity ldnames of $left (${leftAsAddr.getEntity.getLdName}) and $right (${rightAsAddr.getEntity.getLdName}) do not match"
       case ir_opcode.iro_Proj =>
         val (leftAsProj, rightAsProj) = (new Proj(left.ptr), new Proj(right.ptr))
         if (leftAsProj.getNum == rightAsProj.getNum) ""

@@ -6,6 +6,7 @@ import firm.bindings.binding_ircons.op_pin_state
 import firm.{Program => P, _}
 import firm.nodes._
 import mjis.ast._
+import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
@@ -20,7 +21,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
   private def transformProgram(prog: Program) = new FirmConstructorVisitor().visit(prog)
 
-  private def mangle(methodName: String) = methodName
+  private def mangle(methodName: String) = methodName.replace('.', '_') // TODO
 
   private class FirmConstructorVisitor extends PlainRecursiveVisitor[Unit, Node, Node]((), null, null) {
 
@@ -62,18 +63,20 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case _ => new PrimitiveType(Mode.getP)
       }
     }
+    private val methodEntity = new mutable.HashMap[MethodDecl, Entity] {
+      override def default(decl: MethodDecl) = {
+        val paramTypes: Array[Type] = (decl.parameters map { p => firmType(p.typ) }).toArray
+        val resultTypes: Array[Type] = decl.typ match {
+          case Builtins.VoidType => Array[Type]()
+          case t => Array[Type](firmType(t))
+        }
+        val methodType = new MethodType(paramTypes, resultTypes)
+        new Entity(P.getGlobalType, mangle(decl.name), methodType)
+      }
+    }
 
     override def preVisit(method: MethodDecl) = {
-      // For the FIRM graph, main has signature void() as args may not be accessed anyway
-      val params = if (method.isStatic) Seq() else method.parameters
-      val paramTypes: Array[Type] = (params map { p => firmType(p.typ) }).toArray
-      val resultTypes: Array[Type] = method.typ match {
-        case Builtins.VoidType => Array[Type]()
-        case t => Array[Type](firmType(t))
-      }
-      val methodType = new MethodType(paramTypes, resultTypes)
-      val methodEntity = new Entity(P.getGlobalType, mangle(method.name), methodType)
-      graph = new Graph(methodEntity, method.numVars)
+      graph = new Graph(methodEntity(method), method.numVars)
       constr = new Construction(graph)
     }
 
@@ -105,39 +108,46 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(expr: Apply, argumentResults: List[Node]): Node = {
-      expr.decl match {
-        case Some(Builtins.IntAddDecl) =>
+      if (expr.decl.isEmpty) throw new IllegalArgumentException("Unresolved reference")
+      expr.decl.get match {
+        case Builtins.IntAddDecl =>
           constr.newAdd(argumentResults(0), argumentResults(1), Mode.getIs)
-        case Some(Builtins.IntSubDecl) =>
+        case Builtins.IntSubDecl =>
           constr.newSub(argumentResults(0), argumentResults(1), Mode.getIs)
-        case Some(Builtins.IntMulDecl) =>
+        case Builtins.IntMulDecl =>
           constr.newMul(argumentResults(0), argumentResults(1), Mode.getIs)
-        case Some(Builtins.IntDivDecl) =>
+        case Builtins.IntDivDecl =>
           val divNode = constr.newDiv(constr.getCurrentMem, argumentResults(0), argumentResults(1),
             Mode.getIs, op_pin_state.op_pin_state_floats)
           constr.setCurrentMem(constr.newProj(divNode, Mode.getM, firm.nodes.Div.pnM))
           constr.newProj(divNode, Mode.getIs, firm.nodes.Div.pnRes)
-        case Some(Builtins.IntModDecl) =>
+        case Builtins.IntModDecl =>
           val modNode = constr.newMod(constr.getCurrentMem, argumentResults(0), argumentResults(1),
             Mode.getIs, op_pin_state.op_pin_state_floats)
           constr.setCurrentMem(constr.newProj(modNode, Mode.getM, firm.nodes.Mod.pnM))
           constr.newProj(modNode, Mode.getIs, firm.nodes.Mod.pnRes)
 
-        case Some(Builtins.IntLessDecl) =>
+        case Builtins.IntLessDecl =>
           constr.newCmp(argumentResults(0), argumentResults(1), Relation.Less)
-        case Some(Builtins.IntLessEqualDecl) =>
+        case Builtins.IntLessEqualDecl =>
           constr.newCmp(argumentResults(0), argumentResults(1), Relation.LessEqual)
-        case Some(Builtins.IntGreaterDecl) =>
+        case Builtins.IntGreaterDecl =>
           constr.newCmp(argumentResults(0), argumentResults(1), Relation.Greater)
-        case Some(Builtins.IntGreaterEqualDecl) =>
+        case Builtins.IntGreaterEqualDecl =>
           constr.newCmp(argumentResults(0), argumentResults(1), Relation.GreaterEqual)
 
-        case Some(Builtins.EqualsDecl) =>
+        case Builtins.EqualsDecl =>
           constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
-        case Some(Builtins.UnequalDecl) =>
+        case Builtins.UnequalDecl =>
           val equalNode = constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
           constr.newNot(equalNode, Mode.getb)
-        case _ => ???
+
+        case decl =>
+          val entity = methodEntity(decl)
+          val addrNode = constr.newAddress(entity)
+          val callNode = constr.newCall(constr.getCurrentMem, addrNode, argumentResults.toArray, entity.getType)
+          constr.setCurrentMem(constr.newProj(callNode, Mode.getM, firm.nodes.Call.pnM))
+          callNode
       }
     }
   }
