@@ -128,7 +128,7 @@ final case class Assignment(lhs: Expression, rhs: Expression) extends Expression
   override def accept[E](visitor: ExpressionVisitor[E]): E = visitor.visit(this)
 }
 /* `name`(`args`) */
-final case class Apply(name: String, arguments: List[Expression], isOperator: Boolean = false) extends Expression with Ref[MethodDecl] {
+final case class Apply(name: String, var arguments: List[Expression], isOperator: Boolean = false) extends Expression with Ref[MethodDecl] {
   override def accept[E](visitor: ExpressionVisitor[E]): E = visitor.visit(this)
 }
 /* new `typ`() */

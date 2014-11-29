@@ -115,23 +115,19 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
      * apply to MiniJava. 'int x = (x = 2) * 2' is valid Java and MiniJava. */
     override def preVisit(stmt: LocalVarDeclStatement): Unit = addLocalVarDecl(stmt)
 
-    override def visit(expr: Apply): Unit = {
+    override def preVisit(expr: Apply): Unit = expr match {
+      case Apply("println", Select(Ident("System"), "out") :: args, _) if valueLookup("System") == None =>
+        expr.decl = Builtins.SystemOutPrintlnDecl
+        expr.arguments = args // throw away fake "this" argument
+      case _ =>
+    }
+    override def postVisit(expr: Apply, _1: List[Unit]): Unit = {
       val name = if (expr.name == "-" && expr.arguments.length == 1) "- (unary)" else expr.name
       operators.get(name) match {
         case Some(op) =>
-          super.visit(expr)
           expr.decl = op
         case None =>
-          if (expr.name == "println" &&
-            expr.arguments(0) == Select(Ident("System"), "out") &&
-            valueLookup("System") == None) {
-            setDecl(expr, Some(Builtins.SystemOutPrintlnDecl), "method")
-            expr.arguments(0).asInstanceOf[Select].qualifier.asInstanceOf[Ident].decl = Builtins.SystemDecl
-            expr.arguments(0).asInstanceOf[Select].decl = Builtins.SystemOutFieldDecl
-            // do _not_ visit arguments(0)
-            expr.arguments.tail.foreach(_.accept(this))
-          } else {
-            super.visit(expr)
+          if (expr.decl.isEmpty) {
             val qualifierType = resolveType(expr.arguments(0))
             setDecl(expr, classes(qualifierType.name).methods.get(name), "method")
           }
