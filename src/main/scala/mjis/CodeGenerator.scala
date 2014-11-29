@@ -12,7 +12,7 @@ class CodeGenerator(a: Unit) extends Phase[Unit] {
   def getResult(): Unit = {
     Util.lowerSels()
     Backend.createAssembler("a.s", "input")
-    Runtime.getRuntime.exec("gcc -m32 a.s")
+    Runtime.getRuntime.exec("gcc -m32 a.s lib/System_out_println_32.s")
   }
 
 }
