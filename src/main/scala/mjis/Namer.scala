@@ -87,9 +87,10 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
 
     override def visit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
 
-    override def visit(method: MethodDecl): Unit = {
+    override def preVisit(method: MethodDecl): Unit = {
       localVars.enterScope()
       method.parameters.foreach(addLocalVarDecl)
+
       if (method.isStatic) {
         if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError())
         input.mainMethodDecl match {
@@ -97,12 +98,11 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
             if (!(existingMain eq method)) throw new ResolveException(DuplicateDefinitionError(existingMain, method))
           case None => input.mainMethodDecl = Some(method)
         }
-        visit(method.body) // do not visit the arguments since 'String' is not defined in general
-      } else {
-        super.visit(method)
+        // remove 'args' parameter since it doesn't have any semantics apart from being name-resolvable
+        method.parameters = method.parameters.tail
       }
-      localVars.leaveScope()
     }
+    override def postVisit(method: MethodDecl, _1: Unit, _2: Unit): Unit = localVars.leaveScope()
 
     override def preVisit(stmt: Block): Unit = localVars.enterScope()
     override def postVisit(stmt: Block, _1: List[Unit]): Unit = localVars.leaveScope()

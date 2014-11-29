@@ -61,7 +61,7 @@ final case class FieldDecl(
 /* `typ` `name`(`parameters`) { `body` } */
 final case class MethodDecl(
   name: String,
-  parameters: List[Parameter],
+  var parameters: List[Parameter],
   override val typ: TypeDef,
   body: Block,
   isStatic: Boolean = false) extends TypedDecl {
