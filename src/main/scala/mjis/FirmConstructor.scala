@@ -6,7 +6,6 @@ import firm.bindings.binding_ircons.op_pin_state
 import firm.{Program => P, _}
 import firm.nodes._
 import mjis.ast._
-import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
@@ -141,14 +140,48 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case Builtins.UnequalDecl =>
           val equalNode = constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
           constr.newNot(equalNode, Mode.getb)
-
+        case Builtins.ArrayAccessDecl =>
+          constr.newSel(argumentResults(0), argumentResults(1), firmType(Typer.getType(expr)))
         case decl =>
-          val entity = methodEntity(decl)
-          val addrNode = constr.newAddress(entity)
-          val callNode = constr.newCall(constr.getCurrentMem, addrNode, argumentResults.toArray, entity.getType)
-          constr.setCurrentMem(constr.newProj(callNode, Mode.getM, firm.nodes.Call.pnM))
-          callNode
+          // This *should* just work, but I can't test it because we have no way of getting an object reference
+          // (as is needed for method calls as `this`-pointer
+          call(methodEntity(decl), argumentResults.toArray)
       }
+    }
+
+    private val callocType = {
+      val Iu = firmType(Builtins.ExtendedIntType)
+      val params: Array[Type] = List(Iu, Iu).toArray
+      // we can't construct a void*, so we take the next best thing: byte*
+      val result: Array[Type] = Array(new PointerType(new PrimitiveType(Mode.getb)))
+      new MethodType(params, result)
+    }
+    private val calloc = new Entity(P.getGlobalType, "calloc", callocType)
+
+    private def call(methodEntity: Entity, args: Array[Node]): Node = {
+      val addr = constr.newAddress(methodEntity)
+      val call = constr.newCall(constr.getCurrentMem, addr, args, methodEntity.getType)
+      constr.setCurrentMem(constr.newProj(call, Mode.getM, firm.nodes.Call.pnM))
+
+      constr.newProj(
+        constr.newProj(call, Mode.getT, firm.nodes.Call.pnTResult),
+        callocType.getMode,
+        0
+      )
+    }
+
+    override def postVisit(expr: NewArray, _1: Unit, firstDimSize: Node): Node = {
+      val baseType = firmType(expr.typ)
+      val size = constr.newConst(baseType.getSizeBytes, Mode.getIu)
+      val elems = constr.newConv(firstDimSize, Mode.getIu)
+      call(calloc, Array[Node](elems, size))
+    }
+
+    override def postVisit(expr: NewObject, _1: Unit): Node = {
+      val classType = firmClassEntity(expr.typ.decl.get).getType
+      val size = constr.newConst(classType.getSizeBytes, Mode.getIu)
+      val num_elems = constr.newConst(1, Mode.getIu)
+      call(calloc, Array[Node](num_elems, size))
     }
   }
 

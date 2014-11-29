@@ -59,6 +59,7 @@ object FirmGraphTestHelper {
         val returnRegex = "Return".r
         val startRegex = "Start".r
         val subRegex = s"Sub $s".r
+        val allocRegex = s"Alloc $i $i".r
         definition match {
           case addRegex(mode) =>
             assert(args.length == 2, s"Add needs two arguments: $line")
@@ -116,6 +117,9 @@ object FirmGraphTestHelper {
           case subRegex(mode) =>
             assert(args.length == 2, s"Sub needs two arguments: $line")
             curNode = constr.newSub(args(0), args(1), modes(mode))
+          case allocRegex(size, alignment) =>
+            assert(args.length == 1, s"Alloc needs one argument: $line")
+            curNode = constr.newAlloc(args(0), constr.newConst(size.toInt, Mode.getIu), alignment.toInt)
         }
         nodes.update(nodeName, curNode)
       } else if (line.trim.isEmpty) {
