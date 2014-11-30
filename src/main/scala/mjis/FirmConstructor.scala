@@ -3,7 +3,7 @@ package mjis
 import java.io.BufferedWriter
 
 import firm.bindings.binding_ircons.op_pin_state
-import firm.{Program => P, _}
+import firm.{ Program => FirmProgram, Ident => _, _ }
 import firm.nodes._
 import mjis.ast._
 import scala.collection.JavaConversions._
@@ -15,7 +15,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
   }
 
   override def dumpResult(writer: BufferedWriter): Unit = {
-    P.getGraphs.foreach(Dump.dumpGraph(_, "-FirmConstructor"))
+    FirmProgram.getGraphs.foreach(Dump.dumpGraph(_, "-FirmConstructor"))
   }
 
   private def transformProgram(prog: Program) = new FirmConstructorVisitor().visit(prog)
@@ -26,6 +26,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     private var graph: Graph = null
     private var constr: Construction = null
+    private var lastIndex = 0
+    private var declIndex = mutable.Map[Decl, Int]()
 
     val firmFieldEntity = new mutable.HashMap[FieldDecl, firm.Entity]()
     val firmClassEntity = new mutable.HashMap[ClassDecl, firm.Entity]() {
@@ -40,7 +42,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           // TODO: Align type 'b' like type 'Bu'
           val fieldAlign = typ.getAlignmentBytes
           if (offset % fieldAlign > 0)
-            offset += fieldAlign  - offset % fieldAlign
+            offset += fieldAlign - offset % fieldAlign
 
           firmField.setOffset(offset)
           offset += typ.getSizeBytes
@@ -55,11 +57,11 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
     val firmType: mutable.Map[TypeDef, firm.Type] = new mutable.HashMap[TypeDef, firm.Type]() {
       override def default(typ: TypeDef): firm.Type = typ match {
-        case Builtins.BooleanType => new PrimitiveType(Mode.getb)
-        case Builtins.IntType => new PrimitiveType(Mode.getIs)
+        case Builtins.BooleanType     => new PrimitiveType(Mode.getb)
+        case Builtins.IntType         => new PrimitiveType(Mode.getIs)
         case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
-        case Builtins.VoidType => throw new IllegalArgumentException("void doesn't have a runtime type")
-        case _ => new PrimitiveType(Mode.getP)
+        case Builtins.VoidType        => throw new IllegalArgumentException("void doesn't have a runtime type")
+        case _                        => new PrimitiveType(Mode.getP)
       }
     }
     private val methodEntity = new mutable.HashMap[MethodDecl, Entity] {
@@ -67,16 +69,24 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         val paramTypes: Array[Type] = (decl.parameters map { p => firmType(p.typ) }).toArray
         val resultTypes: Array[Type] = decl.typ match {
           case Builtins.VoidType => Array[Type]()
-          case t => Array[Type](firmType(t))
+          case t                 => Array[Type](firmType(t))
         }
         val methodType = new MethodType(paramTypes, resultTypes)
-        new Entity(P.getGlobalType, mangle(decl.name), methodType)
+        new Entity(FirmProgram.getGlobalType, mangle(decl.name), methodType)
       }
     }
 
     override def preVisit(method: MethodDecl) = {
       graph = new Graph(methodEntity(method), method.numVars)
       constr = new Construction(graph)
+      lastIndex = 0
+      declIndex.clear
+      // Create a local variable for each parameter. Otherwise, parameters could not be set
+      for ((param, index) <- method.parameters.zipWithIndex) {
+        newLocalVar(param)
+        val proj = constr.newProj(graph.getArgs(), firmType(param.typ).getMode(), index)
+        handleLocalVarAssignment(param, proj)
+      }
     }
 
     override def postVisit(method: MethodDecl, _1: Unit, bodyResult: Node): Unit = {
@@ -88,7 +98,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(stmt: ReturnStatement, exprResult: Option[Node]): Node = {
       val returnNode = constr.newReturn(constr.getCurrentMem, exprResult match {
-        case None => Array[Node]()
+        case None            => Array[Node]()
         case Some(valueNode) => Array[Node](valueNode)
       })
       graph.getEndBlock.addPred(returnNode)
@@ -97,7 +107,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(expr: BooleanLiteral): Node = {
       constr.newConst(expr match {
-        case TrueLiteral() => 1
+        case TrueLiteral()  => 1
         case FalseLiteral() => 0
       }, Mode.getb)
     }
@@ -162,7 +172,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       val result: Array[Type] = Array(new PointerType(new PrimitiveType(Mode.getBu)))
       new MethodType(params, result)
     }
-    private val calloc = new Entity(P.getGlobalType, "calloc", callocType)
+    private val calloc = new Entity(FirmProgram.getGlobalType, "calloc", callocType)
 
     private def call(methodEntity: Entity, args: Array[Node]): Node = {
       val methodType = methodEntity.getType.asInstanceOf[MethodType]
@@ -175,8 +185,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         constr.newProj(
           res,
           methodType.getResType(0).getMode,
-          0
-        )
+          0)
       } else call
     }
 
@@ -192,6 +201,38 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       val size = constr.newConst(classType.getSizeBytes, Mode.getIu)
       val num_elems = constr.newConst(1, Mode.getIu)
       call(calloc, Array[Node](num_elems, size))
+    }
+
+    override def postVisit(expr: Assignment, lhs: Node, rhs: Node): Node = {
+      expr.lhs match {
+        case ident: Ident => ident.decl.get match {
+          // TODO: Handle field and array assignment
+          case local @ (_: Parameter | _: LocalVarDeclStatement) =>
+            handleLocalVarAssignment(local.asInstanceOf[TypedDecl], rhs)
+        }
+        case other => throw new UnsupportedOperationException(s"Unexpected LHS value: $other")
+      }
+    }
+    override def postVisit(ident: Ident): Node = ident.decl.get match {
+      case local @ (_: Parameter | _: LocalVarDeclStatement) =>
+        constr.getVariable(declIndex(local), firmType(local.asInstanceOf[TypedDecl].typ).getMode())
+    }
+    override def postVisit(stmt: LocalVarDeclStatement, typResult: Unit, initializerResult: Option[Node]): Node = {
+      val localVar = newLocalVar(stmt)
+      if (initializerResult.isDefined)
+        handleLocalVarAssignment(stmt, initializerResult.get)
+      localVar
+    }
+
+    private def newLocalVar(decl: TypedDecl): Node = {
+      declIndex += decl -> lastIndex
+      lastIndex += 1
+      constr.getVariable(lastIndex - 1, firmType(decl.typ).getMode)
+    }
+    private def handleLocalVarAssignment(decl: TypedDecl, rhs: Node): Node = {
+      val index = declIndex(decl)
+      constr.setVariable(index, rhs)
+      constr.getVariable(index, firmType(decl.typ).getMode)
     }
   }
 

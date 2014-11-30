@@ -9,11 +9,13 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   var IntType: PrimitiveType = null
   var BooleanType: PrimitiveType = null
+  var RefType: PrimitiveType = null
 
   def initFirm() = {
     Firm.init()
     IntType = new PrimitiveType(Mode.getIs)
     BooleanType = new PrimitiveType(Mode.getb)
+    RefType = new PrimitiveType(Mode.getP)
   }
 
   def reinitFirm(): Unit = {
@@ -190,4 +192,31 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("public void m_println() { System.out.println(42); }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mPrintln))
   }
 
+  it should "create FIRM graphs with local parameter access and assignment" in {
+    val mParamsEntity = methodEntity("__expected_local_params", IntType, Seq(RefType, IntType, IntType))
+    val mParams = FirmGraphTestHelper.buildFirmGraph(mParamsEntity,
+      """start = Start
+        |args = Proj T T_args, start
+        |arg1 = Proj Is Arg 2, args
+        |arg2 = Const 2 Is
+        |retval = Add Is, arg1, arg2
+        |mem_before_return = Proj M M, start
+        |return = Return, mem_before_return, retval
+        |end = End, return""".stripMargin)
+    fromMembers("public int local_params(int x, int y) {x = 2; return y + x;}") should
+      succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mParams))
+  }
+  it should "create FIRM graphs with local variable access and assignment" in {
+    val mVarsEntity = methodEntity("__expected_local_vars", IntType, Seq(RefType))
+    val mVars = FirmGraphTestHelper.buildFirmGraph(mVarsEntity,
+      """start = Start
+        |const1 = Const 2 Is
+        |const2 = Const 2 Is
+        |retval = Add Is, const1, const2
+        |mem_before_return = Proj M M, start
+        |return = Return, mem_before_return, retval
+        |end = End, return""".stripMargin)
+    fromMembers("public int local_vars() {int y = 3; int z = 2; return (y = 2) + z;}") should
+      succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mVars))
+  }
 }
