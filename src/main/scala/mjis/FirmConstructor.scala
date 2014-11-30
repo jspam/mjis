@@ -20,7 +20,12 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
   private def transformProgram(prog: Program) = new FirmConstructorVisitor().visit(prog)
 
-  private def mangle(methodName: String) = methodName.replace('.', '_') // TODO
+  private def mangle(method: MethodDecl, cls: ClassDecl) = {
+    if (method.isStatic)
+      method.name.replace('.', '_')
+    else
+      "_" + cls.name.length.toString + cls.name + "_" + method.name
+  }
 
   private class FirmConstructorVisitor extends PlainRecursiveVisitor[Unit, Node, Node]((), null, null) {
 
@@ -39,6 +44,10 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case Builtins.IntType => new PrimitiveType(Mode.getIs)
         case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
         case Builtins.VoidType => throw new IllegalArgumentException("void doesn't have a runtime type")
+        case array: ast.TypeArray     =>
+          var firmArray = firmType(array.elementType)
+          for (i <- 0 until array.numDimensions) firmArray = new ArrayType(firmArray)
+          firmArray
         case _ => new PrimitiveType(Mode.getP)
       }
       firmType += typ -> result
@@ -55,7 +64,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case t                 => Array[Type](firmType(t))
       }
       val methodType = new MethodType(paramTypes, resultTypes)
-      new Entity(FirmProgram.getGlobalType, mangle(method.name), methodType)
+      new Entity(FirmProgram.getGlobalType, mangle(method, cls), methodType)
     }
 
     override def preVisit(program: Program): Unit = {
@@ -178,18 +187,43 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           convToBu(constr.newNot(equalNode, Mode.getb))
 
         case Builtins.ArrayAccessDecl =>
-          val arrayType = Typer.getType((expr.arguments(0))).asInstanceOf[TypeArray]
-          var firmArray = firmType(arrayType.elementType)
-          // TODO we probably want to cache these types
-          for (i <- 0 until arrayType.numDimensions) firmArray = new ArrayType(firmArray)
-          val sel = constr.newSel(argumentResults(0), argumentResults(1), firmArray)
-          // TODO the lecture slides say we're supposed to use NoMem, but... how?!
-          val load = constr.newLoad(constr.getCurrentMem, sel, firmType(arrayType.elementType).getMode)
-          constr.setCurrentMem(constr.newProj(load, Mode.getM, firm.nodes.Load.pnM))
-          constr.newProj(load, firmType(arrayType.elementType).getMode, firm.nodes.Load.pnRes)
+          val sel = createArrayAccess(expr, argumentResults)
+          if (expr.isLvalue)
+            sel
+          else {
+            val arrayType = Typer.getType(expr.arguments(0)).asInstanceOf[TypeArray]
+            val firmArray = firmType(arrayType.elementType)
+            createLoad(sel, firmArray)
+          }
+
         case decl =>
           call(firmMethodEntity(decl), argumentResults.toArray)
       }
+    }
+
+    private def createLoad(ptr: Node, typ: Type): Node = {
+      // FIRM doesn't have a proper concept for array loads, so we need to catch that case and special case it
+      val mode = if (typ.isInstanceOf[ArrayType]) Mode.getP else typ.getMode
+      val load = constr.newLoad(constr.getCurrentMem, ptr, mode, typ)
+      constr.setCurrentMem(constr.newProj(load, Mode.getM, firm.nodes.Load.pnM))
+      constr.newProj(load, mode, firm.nodes.Load.pnRes)
+    }
+
+    private def createStore(ptr: Node, value: Node): Node = {
+      val store = constr.newStore(constr.getCurrentMem, ptr, value)
+      val newMem = constr.newProj(store, Mode.getM, firm.nodes.Store.pnM)
+      constr.setCurrentMem(newMem)
+      newMem
+    }
+
+    override def postVisit(expr: Select, qualifier: Node): Node = {
+      assert(qualifier.getMode == Mode.getP)
+      val fieldEntity = firmFieldEntity(expr.decl.get)
+      val member = constr.newMember(qualifier, fieldEntity)
+      if (expr.isLvalue)
+        member
+      else
+        createLoad(member, fieldEntity.getType)
     }
 
     private val callocType = {
@@ -230,20 +264,48 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       call(calloc, Array[Node](num_elems, size))
     }
 
+    private def createArrayAccess(expr: Apply, args: List[Node]): Node = {
+      assert(expr.decl.get eq Builtins.ArrayAccessDecl, "method calls may not be used as lvalues")
+      val arrayType = Typer.getType(expr.arguments(0)).asInstanceOf[TypeArray]
+      val firmArray = firmType(arrayType)
+      constr.newSel(args(0), args(1), firmArray)
+    }
+
     override def postVisit(expr: Assignment, lhs: Node, rhs: Node): Node = {
       expr.lhs match {
         case ident: Ident => ident.decl.get match {
-          // TODO: Handle field and array assignment
+          case field: FieldDecl =>
+            createStore(lhs, rhs)
           case local @ (_: Parameter | _: LocalVarDeclStatement) =>
             handleLocalVarAssignment(local.asInstanceOf[TypedDecl], rhs)
         }
+        case sel: Select =>
+          createStore(lhs, rhs)
+        case arrAccess: Apply =>
+          assert(arrAccess.decl.get eq Builtins.ArrayAccessDecl, "method calls are not valid lvalues")
+          createStore(lhs, rhs)
         case other => throw new UnsupportedOperationException(s"Unexpected LHS value: $other")
       }
     }
+
     override def postVisit(ident: Ident): Node = ident.decl.get match {
       case local @ (_: Parameter | _: LocalVarDeclStatement) =>
-        constr.getVariable(declIndex(local), firmType(local.asInstanceOf[TypedDecl].typ).getMode())
+        getVariable(declIndex(local), local.asInstanceOf[TypedDecl])
+      case field: FieldDecl =>
+        val fieldEntity = firmFieldEntity(field)
+        val thisPtr = constr.getVariable(0, Mode.getP)
+        val member = constr.newMember(thisPtr, fieldEntity)
+        if (ident.isLvalue)
+          member
+        else
+          createLoad(member, fieldEntity.getType)
     }
+
+    override def postVisit(thisLit: ThisLiteral): Node = thisLit.decl.get match {
+      case p: Parameter =>
+        getVariable(declIndex(p), p)
+    }
+
     override def postVisit(stmt: LocalVarDeclStatement, typResult: Unit, initializerResult: Option[Node]): Node = {
       val localVar = newLocalVar(stmt)
       if (initializerResult.isDefined)
@@ -251,17 +313,24 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       localVar
     }
 
+    // array-safe wrapper around constr.getVariable
+    private def getVariable(index: Int, decl: TypedDecl): Node = {
+      val fType = firmType(decl.typ)
+      val m = if (fType.isInstanceOf[ArrayType]) Mode.getP else fType.getMode
+      constr.getVariable(index, m)
+    }
+
     private def newLocalVar(decl: TypedDecl): Node = {
       declIndex += decl -> lastIndex
       lastIndex += 1
-      constr.getVariable(lastIndex - 1, firmType(decl.typ).getMode)
+      getVariable(lastIndex - 1, decl)
     }
     private def handleLocalVarAssignment(decl: TypedDecl, rhs: Node): Node = {
       val index = declIndex(decl)
       constr.setVariable(index, rhs)
-      constr.getVariable(index, firmType(decl.typ).getMode)
+      getVariable(index, decl)
     }
-  }
+ }
 
   override def findings: List[Finding] = List()
 }

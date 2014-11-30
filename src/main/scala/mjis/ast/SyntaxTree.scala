@@ -131,6 +131,7 @@ final case class ReturnStatement(returnValue: Option[Expression])(implicit val p
 
 sealed trait Expression extends SyntaxTree {
   def accept[E](visitor: ExpressionVisitor[E]): E
+  var isLvalue = false
 }
 
 /* `lhs` = `rhs` */

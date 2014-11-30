@@ -196,6 +196,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     override def postVisit(expr: Assignment, _1: Unit, _2: Unit) = {
       if (!isLValue(expr.lhs)) throw new TypecheckException(AssignmentToNonLValueError(expr.pos))
       assertConvertible(getType(expr.rhs), getType(expr.lhs), expr.pos)
+      expr.lhs.isLvalue = true
     }
 
     override def postVisit(expr: Apply, _1: List[Unit]) = {

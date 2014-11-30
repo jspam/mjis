@@ -60,22 +60,22 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "create methods with the correct types" in {
-    val m1MethodEntity = methodEntity("__expected_m1", null, Seq())
+    val m1MethodEntity = methodEntity("__expected__4Test_m1", null, Seq())
     val m1 = FirmGraphTestHelper.buildFirmGraph(m1MethodEntity, emptyMethodFirm)
     fromMembers("public void m1() {}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m1))
 
     reinitFirm()
-    val m2MethodEntity = methodEntity("__expected_m2", IntType, Seq())
+    val m2MethodEntity = methodEntity("__expected__4Test_m2", IntType, Seq())
     val m2 = FirmGraphTestHelper.buildFirmGraph(m2MethodEntity, returnConstMethodFirm())
     fromMembers("public int m2() {return 0;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m2))
 
     reinitFirm()
-    val m3MethodEntity = methodEntity("__expected_m3", IntType, Seq(IntType))
+    val m3MethodEntity = methodEntity("__expected__4Test_m3", IntType, Seq(IntType))
     val m3 = FirmGraphTestHelper.buildFirmGraph(m3MethodEntity, returnConstMethodFirm())
     fromMembers("public int m3(int p1) {return 0;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m3))
 
     reinitFirm()
-    val m4MethodEntity = methodEntity("__expected_m4", BooleanType, Seq())
+    val m4MethodEntity = methodEntity("__expected__4Test_m4", BooleanType, Seq())
     val m4 = FirmGraphTestHelper.buildFirmGraph(m4MethodEntity, returnConstMethodFirm("Const 0 Bu"))
     fromMembers("public boolean m4() {return false;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m4))
   }
@@ -90,25 +90,25 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |end = End, return
       """.stripMargin
 
-    val mPlusMethodEntity = methodEntity("__expected_m_plus", IntType, Seq())
+    val mPlusMethodEntity = methodEntity("__expected__4Test_m_plus", IntType, Seq())
     val mPlus = FirmGraphTestHelper.buildFirmGraph(mPlusMethodEntity,
       progTemplate("retval = Add Is, const1, const2\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_plus() { return 1 + 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mPlus))
 
     reinitFirm()
-    val mMinusMethodEntity = methodEntity("__expected_m_minus", IntType, Seq())
+    val mMinusMethodEntity = methodEntity("__expected__4Test_m_minus", IntType, Seq())
     val mMinus = FirmGraphTestHelper.buildFirmGraph(mMinusMethodEntity,
       progTemplate("retval = Sub Is, const1, const2\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_minus() { return 1 - 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMinus))
 
     reinitFirm()
-    val mMultMethodEntity = methodEntity("__expected_m_mult", IntType, Seq())
+    val mMultMethodEntity = methodEntity("__expected__4Test_m_mult", IntType, Seq())
     val mMult = FirmGraphTestHelper.buildFirmGraph(mMultMethodEntity,
       progTemplate("retval = Mul Is, const1, const2\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_mult() { return 1 * 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMult))
 
     reinitFirm()
-    val mDivMethodEntity = methodEntity("__expected_m_div", IntType, Seq())
+    val mDivMethodEntity = methodEntity("__expected__4Test_m_div", IntType, Seq())
     val mDiv = FirmGraphTestHelper.buildFirmGraph(mDivMethodEntity,
       progTemplate(
         """mem = Proj M M, start
@@ -119,7 +119,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("public int m_div() { return 1 / 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mDiv))
 
     reinitFirm()
-    val mModMethodEntity = methodEntity("__expected_m_mod", IntType, Seq())
+    val mModMethodEntity = methodEntity("__expected__4Test_m_mod", IntType, Seq())
     val mMod = FirmGraphTestHelper.buildFirmGraph(mModMethodEntity,
       progTemplate(
         """mem = Proj M M, start
@@ -130,7 +130,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("public int m_mod() { return 1 % 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMod))
 
     reinitFirm()
-    val mUnaryMinusMethodEntity = methodEntity("__expected_m_unary_minus", IntType, Seq())
+    val mUnaryMinusMethodEntity = methodEntity("__expected__4Test_m_unary_minus", IntType, Seq())
     val mUnaryMinus = FirmGraphTestHelper.buildFirmGraph(mUnaryMinusMethodEntity,
       progTemplate("retval = Minus Is, const1\nmem_before_return = Proj M M, start".stripMargin))
     fromMembers("public int m_unary_minus() { return -1; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mUnaryMinus))
@@ -151,37 +151,37 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |end = End, return
       """.stripMargin
 
-    val mEqualMethodEntity = methodEntity("__expected_m_equal", BooleanType, Seq())
+    val mEqualMethodEntity = methodEntity("__expected__4Test_m_equal", BooleanType, Seq())
     val mEqual = FirmGraphTestHelper.buildFirmGraph(mEqualMethodEntity,
       progTemplate("cmpval = Cmp Equal, const1, const2"))
     fromMembers("public boolean m_equal() { return 1 == 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mEqual))
 
     reinitFirm()
-    val mUnequalMethodEntity = methodEntity("__expected_m_unequal", BooleanType, Seq())
+    val mUnequalMethodEntity = methodEntity("__expected__4Test_m_unequal", BooleanType, Seq())
     val mUnequal = FirmGraphTestHelper.buildFirmGraph(mUnequalMethodEntity,
       progTemplate("eq = Cmp Equal, const1, const2\ncmpval = Not b, eq"))
     fromMembers("public boolean m_unequal() { return 1 != 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mUnequal))
 
     reinitFirm()
-    val mLessMethodEntity = methodEntity("__expected_m_less", BooleanType, Seq())
+    val mLessMethodEntity = methodEntity("__expected__4Test_m_less", BooleanType, Seq())
     val mLess = FirmGraphTestHelper.buildFirmGraph(mLessMethodEntity,
       progTemplate("cmpval = Cmp Less, const1, const2"))
     fromMembers("public boolean m_less() { return 1 < 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mLess))
 
     reinitFirm()
-    val mLessEqualMethodEntity = methodEntity("__expected_m_less_equal", BooleanType, Seq())
+    val mLessEqualMethodEntity = methodEntity("__expected__4Test_m_less_equal", BooleanType, Seq())
     val mLessEqual = FirmGraphTestHelper.buildFirmGraph(mLessEqualMethodEntity,
       progTemplate("cmpval = Cmp LessEqual, const1, const2"))
     fromMembers("public boolean m_less_equal() { return 1 <= 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mLessEqual))
 
     reinitFirm()
-    val mGreaterMethodEntity = methodEntity("__expected_m_greater", BooleanType, Seq())
+    val mGreaterMethodEntity = methodEntity("__expected__4Test_m_greater", BooleanType, Seq())
     val mGreater = FirmGraphTestHelper.buildFirmGraph(mGreaterMethodEntity,
       progTemplate("cmpval = Cmp Greater, const1, const2"))
     fromMembers("public boolean m_greater() { return 1 > 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mGreater))
 
     reinitFirm()
-    val mGreaterEqualMethodEntity = methodEntity("__expected_m_greater_equal", BooleanType, Seq())
+    val mGreaterEqualMethodEntity = methodEntity("__expected__4Test_m_greater_equal", BooleanType, Seq())
     val mGreaterEqual = FirmGraphTestHelper.buildFirmGraph(mGreaterEqualMethodEntity,
       progTemplate("cmpval = Cmp GreaterEqual, const1, const2"))
     fromMembers("public boolean m_greater_equal() { return 1 >= 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mGreaterEqual))
@@ -195,14 +195,14 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |return = Return, mem, retval
         |end = End, return
       """.stripMargin
-    val mIntLiteralMethodEntity = methodEntity("__expected_m_int_literal", IntType, Seq())
+    val mIntLiteralMethodEntity = methodEntity("__expected__4Test_m_int_literal", IntType, Seq())
     val mIntLiteral = FirmGraphTestHelper.buildFirmGraph(mIntLiteralMethodEntity,
       progTemplate("retval = Const 2147483647 Is"))
     fromMembers("public int m_int_literal() { return 2147483647; }") should
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mIntLiteral))
 
     reinitFirm()
-    val mExtendedIntLiteralMethodEntity = methodEntity("__expected_m_extended_int_literal", IntType, Seq())
+    val mExtendedIntLiteralMethodEntity = methodEntity("__expected__4Test_m_extended_int_literal", IntType, Seq())
     val mExtendedIntLiteral = FirmGraphTestHelper.buildFirmGraph(mExtendedIntLiteralMethodEntity,
       progTemplate("temp1 = Const 2147483648 Iu\ntemp2 = Minus Iu, temp1\nretval = Conv Is, temp2"))
     fromMembers("public int m_extended_int_literal() { return -2147483648; }") should
@@ -211,7 +211,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   it should "create FIRM graphs for System.out.println" in {
     val printIntMethodEntity = methodEntity("System_out_println", null, Seq(IntType))
-    val mPrintln = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected_m_println", null, Seq()),
+    val mPrintln = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_m_println", null, Seq()),
       """
         |start = Start
         |mem_before_call = Proj M M, start
@@ -226,7 +226,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "create FIRM graphs with local parameter access and assignment" in {
-    val mParamsEntity = methodEntity("__expected_local_params", IntType, Seq(RefType, IntType, IntType))
+    val mParamsEntity = methodEntity("__expected__4Test_local_params", IntType, Seq(RefType, IntType, IntType))
     val mParams = FirmGraphTestHelper.buildFirmGraph(mParamsEntity,
       """start = Start
         |args = Proj T T_args, start
@@ -240,7 +240,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mParams))
   }
   it should "create FIRM graphs with local variable access and assignment" in {
-    val mVarsEntity = methodEntity("__expected_local_vars", IntType, Seq(RefType))
+    val mVarsEntity = methodEntity("__expected__4Test_local_vars", IntType, Seq(RefType))
     val mVars = FirmGraphTestHelper.buildFirmGraph(mVarsEntity,
       """start = Start
         |const1 = Const 2 Is
