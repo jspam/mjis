@@ -21,8 +21,9 @@ object Builtins {
     IntAddDecl, IntSubDecl, IntMulDecl, IntDivDecl, IntModDecl, IntLessDecl, IntLessEqualDecl, IntGreaterDecl, IntGreaterEqualDecl
   ), List.empty)
 
+  val ExtendedIntMinusDecl = MethodDecl("- (unary)", List(Parameter("", ExtendedIntType)), IntType, null)
   val ExtendedIntDecl = ClassDecl("int (including 2^31)", List(
-    MethodDecl("- (unary)", List(Parameter("", ExtendedIntType)), IntType, null)
+    ExtendedIntMinusDecl
   ), List.empty)
 
   val BooleanDecl = ClassDecl("boolean", List(

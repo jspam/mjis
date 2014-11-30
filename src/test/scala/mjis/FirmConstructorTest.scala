@@ -128,6 +128,13 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
           |mem_before_return = Proj M M, divmod
         """.stripMargin))
     fromMembers("public int m_mod() { return 1 % 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMod))
+
+    reinitFirm()
+    val mUnaryMinusMethodEntity = methodEntity("__expected_m_unary_minus", IntType, Seq())
+    val mUnaryMinus = FirmGraphTestHelper.buildFirmGraph(mUnaryMinusMethodEntity,
+      progTemplate("retval = Minus Is, const1\nmem_before_return = Proj M M, start".stripMargin))
+    fromMembers("public int m_unary_minus() { return -1; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mUnaryMinus))
+    // an additional test for unary minus is in test "create FIRM graphs for Integer literals"
   }
 
   it should "create FIRM graphs for Integer comparison expressions" in {
@@ -180,6 +187,28 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("public boolean m_greater_equal() { return 1 >= 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mGreaterEqual))
   }
 
+  it should "create FIRM graphs for Integer literals" in {
+    def progTemplate(retval: String) =
+      s"""start = Start
+        |mem = Proj M M, start
+        |$retval
+        |return = Return, mem, retval
+        |end = End, return
+      """.stripMargin
+    val mIntLiteralMethodEntity = methodEntity("__expected_m_int_literal", IntType, Seq())
+    val mIntLiteral = FirmGraphTestHelper.buildFirmGraph(mIntLiteralMethodEntity,
+      progTemplate("retval = Const 2147483647 Is"))
+    fromMembers("public int m_int_literal() { return 2147483647; }") should
+      succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mIntLiteral))
+
+    reinitFirm()
+    val mExtendedIntLiteralMethodEntity = methodEntity("__expected_m_extended_int_literal", IntType, Seq())
+    val mExtendedIntLiteral = FirmGraphTestHelper.buildFirmGraph(mExtendedIntLiteralMethodEntity,
+      progTemplate("temp1 = Const 2147483648 Iu\ntemp2 = Minus Iu, temp1\nretval = Conv Is, temp2"))
+    fromMembers("public int m_extended_int_literal() { return -2147483648; }") should
+      succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mExtendedIntLiteral))
+  }
+
   it should "create FIRM graphs for System.out.println" in {
     val printIntMethodEntity = methodEntity("System_out_println", null, Seq(IntType))
     val mPrintln = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected_m_println", null, Seq()),
@@ -223,4 +252,5 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("public int local_vars() {int y = 3; int z = 2; return (y = 2) + z;}") should
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mVars))
   }
+
 }

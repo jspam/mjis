@@ -115,7 +115,11 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(expr: IntLiteral): Node = {
-      constr.newConst(expr.value.toInt, Mode.getIs) // TODO: what about 2^31?
+      Typer.getType(expr) match {
+        case Builtins.IntType => constr.newConst(expr.value.toInt, Mode.getIs)
+        case Builtins.ExtendedIntType => constr.newConst(new TargetValue(expr.value.toLong, Mode.getIu))
+        case _ => throw new IllegalArgumentException("Invalid type for IntLiteral")
+      }
     }
 
     override def postVisit(expr: Apply, argumentResults: List[Node]): Node = {
@@ -137,6 +141,14 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
             Mode.getIs, op_pin_state.op_pin_state_floats)
           constr.setCurrentMem(constr.newProj(modNode, Mode.getM, firm.nodes.Mod.pnM))
           constr.newProj(modNode, Mode.getIs, firm.nodes.Mod.pnRes)
+
+        case Builtins.ExtendedIntMinusDecl =>
+          val minusNode = constr.newMinus(argumentResults(0), argumentResults(0).getMode)
+          if (argumentResults(0).getMode == Mode.getIu) {
+            constr.newConv(minusNode, Mode.getIs)
+          } else {
+            minusNode
+          }
 
         case Builtins.IntLessDecl =>
           convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.Less))
