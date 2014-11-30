@@ -10,23 +10,24 @@ import scala.collection.mutable
 object Namer {
 
   case class DuplicateDefinitionError(firstDecl: Decl, secondDecl: Decl) extends SyntaxTreeError {
-    def msg = s"${secondDecl.name} already defined" // TODO: "at ${firstDecl.pos}"
+    def msg = s"${secondDecl.name} already defined at ${firstDecl.pos}"
+    override def pos: Position = secondDecl.pos
   }
 
-  case class InvalidMainMethodNameError() extends SyntaxTreeError {
+  case class InvalidMainMethodNameError(override val pos: Position) extends SyntaxTreeError {
     def msg = s"'main' is the only name allowed for static methods"
   }
 
-  case class NoMainMethodError() extends SyntaxTreeError {
+  case class NoMainMethodError(override val pos: Position) extends SyntaxTreeError {
     def msg = "No main method found"
   }
 
-  case class InaccessibleDeclError(decl: Decl) extends SyntaxTreeError {
+  case class InaccessibleDeclError(decl: Decl, override val pos: Position) extends SyntaxTreeError {
     def msg = s"'$decl' is not accessible from here"
   }
 
-  case class DefNotFoundError(ident: String, defType: String) extends SyntaxTreeError {
-    def msg = s"Not found: $defType $ident"
+  case class DefNotFoundError(name: String, defType: String, override val pos: Position) extends SyntaxTreeError {
+    def msg = s"Not found: $defType $name"
   }
 }
 
@@ -48,14 +49,14 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     private def mkDeclLookup[D <: Decl](xs: List[D]): Map[String, D] = xs groupBy (_.name) map {
-      case (name, List(decl)) => name -> decl
+      case (name, List(decl))                => name -> decl
       case (_, firstDecl :: secondDecl :: _) => throw ResolveException(DuplicateDefinitionError(firstDecl, secondDecl))
     }
 
     private def setDecl[A <: Decl](ref: Ref[A], value: Option[A], refType: String): Unit = value match {
-      case None => throw ResolveException(DefNotFoundError(ref.name, refType))
+      case None => throw ResolveException(DefNotFoundError(ref.name, refType, ref.pos))
       case Some(decl) =>
-        if (!decl.isReadable) throw new ResolveException(InaccessibleDeclError(decl))
+        if (!decl.isReadable) throw new ResolveException(InaccessibleDeclError(decl, decl.pos))
         else ref.decl = decl
     }
 
@@ -69,21 +70,21 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       case Some(decl) => Some(decl)
       case None => localVars.lookup("this") match {
         case Some(Parameter(_, TypeBasic(className), _, _)) => classes(className).fields.get(name)
-        case None => None
+        case _ => None
       }
     }
 
-    def addLocalVarDecl(decl: Decl) {
+    def addLocalVarDecl(decl: Decl): Unit = {
       localVars.lookup(decl.name) match {
         case Some(existingDecl) => throw new ResolveException(DuplicateDefinitionError(existingDecl, decl))
-        case None =>
+        case None               =>
       }
 
       localVars.insert(decl)
     }
 
     override def postVisit(prog: Program): Unit =
-      if (prog.mainMethodDecl.isEmpty) throw new ResolveException(NoMainMethodError())
+      if (prog.mainMethodDecl.isEmpty) throw new ResolveException(NoMainMethodError(prog.pos))
 
     override def visit(typ: TypeBasic): Unit = setDecl(typ, classes.get(typ.name).map(_.cls), "type")
 
@@ -92,7 +93,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       method.parameters.foreach(addLocalVarDecl)
 
       if (method.isStatic) {
-        if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError())
+        if (method.name != "main") throw new ResolveException(InvalidMainMethodNameError(method.pos))
         input.mainMethodDecl match {
           case Some(existingMain) =>
             if (!(existingMain eq method)) throw new ResolveException(DuplicateDefinitionError(existingMain, method))

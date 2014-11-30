@@ -28,6 +28,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
   private val _findings = ListBuffer.empty[Finding]
   private def currentToken: Token = tokens.head
   private def atEOF = currentToken.data == EOF
+  implicit def pos: Position = currentToken.pos
   override def findings: List[Finding] = _findings.toList
 
   protected override def getResult(): Program = parseProgram()
@@ -90,7 +91,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
     ClassDecl(ident, methods.toList, fields.toList)
   }
 
-  private def parseClassMember(cls: TypeBasic): TypedDecl = {
+  private def parseClassMember(cls: TypeBasic): MemberDecl = {
     expectSymbol(Public)
     if (currentToken.data == Static) {
       // found main method
@@ -230,7 +231,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
       case CurlyBraceOpen => parseBlock()
       case Semicolon =>
         consume()
-        done(EmptyStatement)
+        done(EmptyStatement())
       case IfToken    => tailcall(parseIfStatement())
       case WhileToken => tailcall(parseWhileStatement())
       case Return     => done(parseReturnStatement())
@@ -253,7 +254,7 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
         val elseStmt = parseStatement().result
         done(If(cond, trueStat, elseStmt))
       } else
-        done(If(cond, trueStat, EmptyStatement))
+        done(If(cond, trueStat, EmptyStatement()))
     })
   }
 
@@ -315,13 +316,13 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
     currentToken.data match {
       case Null =>
         consume()
-        done(NullLiteral)
+        done(NullLiteral())
       case False =>
         consume()
-        done(FalseLiteral)
+        done(FalseLiteral())
       case True =>
         consume()
-        done(TrueLiteral)
+        done(TrueLiteral())
       case IntegerLiteral(int) =>
         consume()
         done(IntLiteral(int))

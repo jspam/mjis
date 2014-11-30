@@ -17,7 +17,6 @@ object Finding {
     findings sortBy (_.pos) foreach (f => {
       writer.write(f.toString)
       writer.write(System.lineSeparator)
-
       if (f.pos.line >= 1) {
         curSourceLines = curSourceLines.drop(f.pos.line - curLine)
         curLine = f.pos.line

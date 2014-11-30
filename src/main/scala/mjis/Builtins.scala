@@ -3,6 +3,7 @@ package mjis
 import mjis.ast._
 
 object Builtins {
+  implicit val pos = Position.NoPosition
   val IntType = TypeBasic("int") /* A normal 32-bit signed integer */
   val ExtendedIntType = TypeBasic("int (including 2^31)") /* An integer that can additionally take the value 2147483648 = 2^31. */
   val BooleanType = TypeBasic("boolean")

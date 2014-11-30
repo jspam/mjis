@@ -15,7 +15,7 @@ trait TypeVisitor[T] {
 
 trait StatementVisitor[S] {
   def visit(stmt: Block): S
-  def visit(stmt: EmptyStatement.type): S
+  def visit(stmt: EmptyStatement): S
   def visit(stmt: If): S
   def visit(stmt: While): S
   def visit(stmt: LocalVarDeclStatement): S
@@ -29,7 +29,7 @@ trait ExpressionVisitor[E] {
   def visit(expr: BooleanLiteral): E
   def visit(expr: Ident): E
   def visit(expr: IntLiteral): E
-  def visit(expr: NullLiteral.type): E
+  def visit(expr: NullLiteral): E
   def visit(expr: NewArray): E
   def visit(expr: NewObject): E
   def visit(expr: Select): E
@@ -61,7 +61,7 @@ class RecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E) {
   def preVisit(stmt: Block): Unit = {}
   def postVisit(stmt: Block, statementResults: List[S]): S = defaultS
 
-  def postVisit(stmt: EmptyStatement.type): S = defaultS
+  def postVisit(stmt: EmptyStatement): S = defaultS
 
   def preVisit(stmt: If): Unit = {}
   def postVisit(stmt: If, condResult: E, ifTrueResult: S, ifFalseResult: S): S = defaultS
@@ -90,7 +90,7 @@ class RecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E) {
 
   def postVisit(expr: IntLiteral): E = defaultE
 
-  def postVisit(stmt: NullLiteral.type): E = defaultE
+  def postVisit(stmt: NullLiteral): E = defaultE
 
   def postVisit(expr: ThisLiteral): E = defaultE
 
@@ -152,7 +152,7 @@ class PlainRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
     postVisit(stmt, stmt.statements.map(_.accept(this)))
   }
 
-  def visit(stmt: EmptyStatement.type): S = postVisit(stmt)
+  def visit(stmt: EmptyStatement): S = postVisit(stmt)
 
   def visit(stmt: If): S = {
     preVisit(stmt)
@@ -195,7 +195,7 @@ class PlainRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
 
   def visit(expr: IntLiteral): E = postVisit(expr)
 
-  def visit(expr: NullLiteral.type): E = postVisit(expr)
+  def visit(expr: NullLiteral): E = postVisit(expr)
 
   def visit(expr: ThisLiteral): E = postVisit(expr)
 

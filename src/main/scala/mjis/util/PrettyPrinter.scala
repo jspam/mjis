@@ -1,10 +1,12 @@
 package mjis.util
 
 import mjis.ast._
+import mjis.Position
 import java.io.Writer
 import scala.collection.immutable.StringOps
 
 class PrettyPrinter(writer: Writer) {
+  implicit val pos: Position = Position.NoPosition
   private var indent_level = 0
   private def emit(s: String) = writer.write(s)
   private def indent() = { indent_level += 1 }
@@ -60,7 +62,7 @@ class PrettyPrinter(writer: Writer) {
         printExpression(condition, parens=false)
         emit(")")
         printConditionalBody(ifTrue)
-        if (ifFalse != EmptyStatement) {
+        if (!ifFalse.isEmpty) {
           if (ifTrue.isInstanceOf[Block]) emit(" ") else newLine()
           emit("else")
           if (ifFalse.isInstanceOf[Block] || ifFalse.isInstanceOf[If] || ifFalse.isInstanceOf[While]) {
@@ -102,7 +104,7 @@ class PrettyPrinter(writer: Writer) {
         }
         emit(";")
       case block: Block => printBlock(block)
-      case EmptyStatement => emit(";")
+      case EmptyStatement() => emit(";")
     }
   }
 
@@ -131,10 +133,10 @@ class PrettyPrinter(writer: Writer) {
         emit(name)
       case Ident(name) => emit(name)
       case ThisLiteral() => emit("this")
-      case NullLiteral => emit("null")
+      case NullLiteral() => emit("null")
       case IntLiteral(value) => emit(value)
-      case TrueLiteral => emit("true")
-      case FalseLiteral => emit("false")
+      case TrueLiteral() => emit("true")
+      case FalseLiteral() => emit("false")
     }
     if (parens && !expr.isInstanceOf[Literal]) emit(")")
   }
@@ -195,13 +197,13 @@ class PrettyPrinter(writer: Writer) {
   }
 
   private def printBlock(block: Block): Unit = {
-    if (block.statements.forall{ _ == EmptyStatement })
+    if (block.statements.forall(_.isEmpty))
       emit("{ }")
     else {
       emit("{")
       indent()
       for (stmt <- block.statements) {
-        if (stmt != EmptyStatement) {
+        if (!stmt.isEmpty) {
           newLine()
           printStatement(stmt)
         }

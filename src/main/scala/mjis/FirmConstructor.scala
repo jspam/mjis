@@ -97,8 +97,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(expr: BooleanLiteral): Node = {
       constr.newConst(expr match {
-        case TrueLiteral => 1
-        case FalseLiteral => 0
+        case TrueLiteral() => 1
+        case FalseLiteral() => 0
       }, Mode.getb)
     }
 
