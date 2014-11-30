@@ -43,11 +43,13 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |end = End, return
     """.stripMargin
 
-  def methodEntity(name: String, returnType: Type, paramTypes: Seq[Type]) = {
-    new Entity(Program.getGlobalType, name, new MethodType(paramTypes.toArray, returnType match {
-      case null => Array[Type]()
-      case t => Array[Type](t)
-    }))
+  def methodEntity(name: String, returnType: Type, paramTypes: Seq[Type], thisPointer: Boolean = true) = {
+    new Entity(Program.getGlobalType, name,
+      new MethodType((if (thisPointer) (Seq(RefType) ++ paramTypes) else paramTypes).toArray,
+      returnType match {
+        case null => Array[Type]()
+        case t => Array[Type](t)
+      }))
   }
 
   def getEmptyMainMethodGraph = {
@@ -210,7 +212,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "create FIRM graphs for System.out.println" in {
-    val printIntMethodEntity = methodEntity("System_out_println", null, Seq(IntType))
+    val printIntMethodEntity = methodEntity("System_out_println", null, Seq(IntType), thisPointer = false)
     val mPrintln = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_m_println", null, Seq()),
       """
         |start = Start
@@ -226,7 +228,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "create FIRM graphs with local parameter access and assignment" in {
-    val mParamsEntity = methodEntity("__expected__4Test_local_params", IntType, Seq(RefType, IntType, IntType))
+    val mParamsEntity = methodEntity("__expected__4Test_local_params", IntType, Seq(IntType, IntType))
     val mParams = FirmGraphTestHelper.buildFirmGraph(mParamsEntity,
       """start = Start
         |args = Proj T T_args, start
@@ -240,7 +242,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mParams))
   }
   it should "create FIRM graphs with local variable access and assignment" in {
-    val mVarsEntity = methodEntity("__expected__4Test_local_vars", IntType, Seq(RefType))
+    val mVarsEntity = methodEntity("__expected__4Test_local_vars", IntType, Seq())
     val mVars = FirmGraphTestHelper.buildFirmGraph(mVarsEntity,
       """start = Start
         |const1 = Const 2 Is
@@ -251,6 +253,42 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |end = End, return""".stripMargin)
     fromMembers("public int local_vars() {int y = 3; int z = 2; return (y = 2) + z;}") should
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mVars))
+  }
+
+  it should "create FIRM graphs for Select expressions" in {
+    val classType = new StructType("__expected_Test")
+    val memberEntity = Entity.createParameterEntity(classType, 0, new PrimitiveType(Mode.getIs))
+    val mSelect = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_select", IntType, Seq()),
+      """start = Start
+        |args = Proj T T_args, start
+        |this_ptr = Proj P Arg 0, args
+        |member_x = Member __expected_Test 0, this_ptr
+        |mem_before_load = Proj M M, start
+        |load_member_x = Load Is, mem_before_load, member_x
+        |member_x_value = Proj Is Res, load_member_x
+        |mem_before_return = Proj M M, load_member_x
+        |return = Return, mem_before_return, member_x_value
+        |end = End, return""".stripMargin)
+    fromMembers("public int x; public int select() { return this.x; }") should
+      succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mSelect))
+  }
+
+  it should "create FIRM graphs for method calls" in {
+    val classType = new StructType("__expected_Test")
+    val memberEntity = Entity.createParameterEntity(classType, 0, new PrimitiveType(Mode.getIs))
+    val mSelect = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_methodcall", null, Seq(IntType)),
+      """start = Start
+        |args = Proj T T_args, start
+        |this_ptr = Proj P Arg 0, args
+        |mem_before_call = Proj M M, start
+        |addr_call = Addr __expected__4Test_methodcall
+        |const42 = Const 42 Is
+        |call = Call __expected__4Test_methodcall, mem_before_call, addr_call, this_ptr, const42
+        |mem_before_return = Proj M M, call
+        |return = Return, mem_before_return
+        |end = End, return""".stripMargin)
+    fromMembers("public void methodcall(int x) { this.methodcall(42); }") should
+      succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mSelect))
   }
 
 }

@@ -4,8 +4,14 @@ import firm._
 import firm.bindings.binding_irnode.ir_opcode
 import firm.bindings.binding_ircons.op_pin_state
 import firm.nodes._
+import scala.collection.JavaConversions._
 
 object FirmGraphTestHelper {
+
+  val ExpectedPrefix = "__expected_"
+
+  def removeExpectedPrefix(name: String) =
+    if (name.startsWith(ExpectedPrefix)) name.substring(ExpectedPrefix.length) else name
 
   def buildFirmGraph(methodEntity: Entity, graphDescription: String): Graph = {
     val nodes = scala.collection.mutable.Map[String, Node]()
@@ -17,11 +23,13 @@ object FirmGraphTestHelper {
       "Is" -> Mode.getIs,
       "Iu" -> Mode.getIu,
       "M" -> Mode.getM,
+      "P" -> Mode.getP,
       "T" -> Mode.getT
     )
     val modeNrs: scala.collection.immutable.Map[String, Int] = Map(
       "M" -> firm.nodes.Start.pnM,
       "T_args" -> firm.nodes.Start.pnTArgs,
+      "Res" -> firm.nodes.Load.pnRes,
       "ResDiv" -> firm.nodes.Div.pnRes,
       "ResMod" -> firm.nodes.Mod.pnRes
     )
@@ -54,6 +62,8 @@ object FirmGraphTestHelper {
         val cmpRegex = s"Cmp $s".r
         val divRegex = s"Div $s".r
         val endRegex = "End".r
+        val loadRegex = s"Load $s".r
+        val memberRegex = s"Member $s $i".r
         val modRegex = s"Mod $s".r
         val mulRegex = s"Mul $s".r
         val minusRegex = s"Minus $s".r
@@ -101,6 +111,16 @@ object FirmGraphTestHelper {
           case endRegex() =>
             assert(args.length >= 1, s"End needs at least one argument: $line")
             args.foreach(graph.getEndBlock.addPred)
+          case loadRegex(mode) =>
+            assert(args.length == 2, s"Load needs two arguments (first one is memory): $line")
+            curNode = constr.newLoad(args(0), args(1), modes(mode))
+          case memberRegex(className, memberIndex) =>
+            assert(args.length == 1, s"Member needs one argument: $line")
+            val classType = Program.getTypes.find(t => t.isInstanceOf[StructType] && t.asInstanceOf[StructType].getName == className)
+            assert(classType.isDefined, s"Class type $className not found")
+            val memberEntity = classType.get.asInstanceOf[StructType].getMember(memberIndex.toInt)
+            assert(memberEntity != null, s"Member $memberIndex in $className not found: $line")
+            curNode = constr.newMember(args(0), memberEntity)
           case minusRegex(mode) =>
             assert(args.length == 1, s"Minus needs one argument: $line")
             curNode = constr.newMinus(args(0), modes(mode))
@@ -152,11 +172,13 @@ object FirmGraphTestHelper {
       case ir_opcode.iro_Add | ir_opcode.iro_Start | ir_opcode.iro_End | ir_opcode.iro_Sub |
            ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod |
            ir_opcode.iro_Not | ir_opcode.iro_Call | ir_opcode.iro_Conv | ir_opcode.iro_Mux |
-           ir_opcode.iro_Minus => ""
+           ir_opcode.iro_Minus | ir_opcode.iro_Load => ""
       case ir_opcode.iro_Address =>
         val (leftAsAddr, rightAsAddr) = (new Address(left.ptr), new Address(right.ptr))
-        if (leftAsAddr.getEntity.getLdName == rightAsAddr.getEntity.getLdName) ""
-        else s"Entity ldnames of $left (${leftAsAddr.getEntity.getLdName}) and $right (${rightAsAddr.getEntity.getLdName}) do not match"
+        val leftName = removeExpectedPrefix(leftAsAddr.getEntity.getLdName)
+        val rightName = removeExpectedPrefix(rightAsAddr.getEntity.getLdName)
+        if (leftName == rightName) ""
+        else s"Entity ldnames of $left ($leftName) and $right ($rightName) do not match"
       case ir_opcode.iro_Proj =>
         val (leftAsProj, rightAsProj) = (new Proj(left.ptr), new Proj(right.ptr))
         if (leftAsProj.getNum == rightAsProj.getNum) ""
@@ -169,6 +191,12 @@ object FirmGraphTestHelper {
         val (leftAsCmp, rightAsCmp) = (new Cmp(left.ptr), new Cmp(right.ptr))
         if (leftAsCmp.getRelation.value() == rightAsCmp.getRelation.value()) ""
         else s"Comparison modes of $left (${leftAsCmp.getRelation}) and $right (${rightAsCmp.getRelation}) do not match"
+      case ir_opcode.iro_Member =>
+        val (leftAsMember, rightAsMember) = (new Member(left.ptr), new Member(right.ptr))
+        val leftName = removeExpectedPrefix(leftAsMember.getEntity.getLdName)
+        val rightName = removeExpectedPrefix(rightAsMember.getEntity.getLdName)
+        if (leftName == rightName) ""
+        else s"Entity ldnames of $left ($leftName) and $right ($rightName) do not match"
       case _ => throw new NotImplementedError(s"Unimplemented opcode: ${left.getOpCode}")
     }
   }

@@ -67,7 +67,7 @@ trait CompilerTestMatchers {
 
   class FirmConstructorSuccessMatcher(expectedGraphs: List[Graph]) extends Matcher[String] {
     def apply(input: String) = {
-      val expectedPrefix = "__expected_"
+      val expectedPrefix = FirmGraphTestHelper.ExpectedPrefix
       val expectedGraphsMap = (expectedGraphs map { g => {
         assert(g.getEntity.getName.startsWith(expectedPrefix), s"Expected graph names must start with '$expectedPrefix'")
         g.getEntity.getName.drop(expectedPrefix.length) -> g
