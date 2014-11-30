@@ -39,7 +39,6 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           val typ = firmType(f.typ)
           val firmField = Entity.createParameterEntity(struct, i, typ)
 
-          // TODO: Align type 'b' like type 'Bu'
           val fieldAlign = typ.getAlignmentBytes
           if (offset % fieldAlign > 0)
             offset += fieldAlign - offset % fieldAlign
@@ -57,7 +56,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
     val firmType: mutable.Map[TypeDef, firm.Type] = new mutable.HashMap[TypeDef, firm.Type]() {
       override def default(typ: TypeDef): firm.Type = typ match {
-        case Builtins.BooleanType     => new PrimitiveType(Mode.getb)
+        case Builtins.BooleanType     => new PrimitiveType(Mode.getBu)
         case Builtins.IntType         => new PrimitiveType(Mode.getIs)
         case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
         case Builtins.VoidType        => throw new IllegalArgumentException("void doesn't have a runtime type")
@@ -75,6 +74,9 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         new Entity(FirmProgram.getGlobalType, mangle(decl.name), methodType)
       }
     }
+
+    private def convToBu(node: Node) =
+      constr.newMux(node, constr.newConst(0, Mode.getBu), constr.newConst(1, Mode.getBu), Mode.getBu)
 
     override def preVisit(method: MethodDecl) = {
       graph = new Graph(methodEntity(method), method.numVars)
@@ -109,11 +111,15 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       constr.newConst(expr match {
         case TrueLiteral()  => 1
         case FalseLiteral() => 0
-      }, Mode.getb)
+      }, Mode.getBu)
     }
 
     override def postVisit(expr: IntLiteral): Node = {
-      constr.newConst(expr.value.toInt, Mode.getIs) // TODO: what about 2^31?
+      Typer.getType(expr) match {
+        case Builtins.IntType => constr.newConst(expr.value.toInt, Mode.getIs)
+        case Builtins.ExtendedIntType => constr.newConst(new TargetValue(expr.value.toLong, Mode.getIu))
+        case _ => throw new IllegalArgumentException("Invalid type for IntLiteral")
+      }
     }
 
     override def postVisit(expr: Apply, argumentResults: List[Node]): Node = {
@@ -136,20 +142,29 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           constr.setCurrentMem(constr.newProj(modNode, Mode.getM, firm.nodes.Mod.pnM))
           constr.newProj(modNode, Mode.getIs, firm.nodes.Mod.pnRes)
 
+        case Builtins.ExtendedIntMinusDecl =>
+          val minusNode = constr.newMinus(argumentResults(0), argumentResults(0).getMode)
+          if (argumentResults(0).getMode == Mode.getIu) {
+            constr.newConv(minusNode, Mode.getIs)
+          } else {
+            minusNode
+          }
+
         case Builtins.IntLessDecl =>
-          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Less)
+          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.Less))
         case Builtins.IntLessEqualDecl =>
-          constr.newCmp(argumentResults(0), argumentResults(1), Relation.LessEqual)
+          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.LessEqual))
         case Builtins.IntGreaterDecl =>
-          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Greater)
+          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.Greater))
         case Builtins.IntGreaterEqualDecl =>
-          constr.newCmp(argumentResults(0), argumentResults(1), Relation.GreaterEqual)
+          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.GreaterEqual))
 
         case Builtins.EqualsDecl =>
-          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
+          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal))
         case Builtins.UnequalDecl =>
           val equalNode = constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
-          constr.newNot(equalNode, Mode.getb)
+          convToBu(constr.newNot(equalNode, Mode.getb))
+
         case Builtins.ArrayAccessDecl =>
           val arrayType = Typer.getType((expr.arguments(0))).asInstanceOf[TypeArray]
           var firmArray = firmType(arrayType.elementType)

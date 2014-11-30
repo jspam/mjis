@@ -13,7 +13,9 @@ object FirmGraphTestHelper {
 
     val modes: scala.collection.immutable.Map[String, Mode] = Map(
       "b" -> Mode.getb,
+      "Bu" -> Mode.getBu,
       "Is" -> Mode.getIs,
+      "Iu" -> Mode.getIu,
       "M" -> Mode.getM,
       "T" -> Mode.getT
     )
@@ -48,11 +50,14 @@ object FirmGraphTestHelper {
         val addrRegex = s"Addr $s".r
         val callRegex = s"Call $s".r
         val constRegex = s"Const $s $s".r
+        val convRegex = s"Conv $s".r
         val cmpRegex = s"Cmp $s".r
         val divRegex = s"Div $s".r
         val endRegex = "End".r
         val modRegex = s"Mod $s".r
         val mulRegex = s"Mul $s".r
+        val minusRegex = s"Minus $s".r
+        val muxRegex = s"Mux $s".r
         val notRegex = s"Not $s".r
         val projRegex = s"Proj $s $s".r
         val projArgRegex = s"Proj $s Arg $i".r
@@ -75,14 +80,18 @@ object FirmGraphTestHelper {
             curNode = constr.newCall(args(0), args(1), args.drop(2), entity.getType)
           case constRegex(value, mode) =>
             assert(args.length == 0, s"Const needs zero arguments: $line")
-            curNode = constr.newConst(mode match {
-              case "Is" => value.toInt
-              case "b" => value match {
+            curNode = mode match {
+              case "Iu" => constr.newConst(new TargetValue(value.toLong, modes(mode)))
+              case "Is" | "Bu" => constr.newConst(value.toInt, modes(mode))
+              case "b" => constr.newConst(value match {
                 case "true" => 1
                 case "false" => 0
                 case _ => throw new IllegalArgumentException(s"Invalid Boolean constant: $value")
-              }
-            }, modes(mode))
+              }, modes(mode))
+            }
+          case convRegex(mode) =>
+            assert(args.length == 1, s"Conv needs one argument: $line")
+            curNode = constr.newConv(args(0), modes(mode))
           case cmpRegex(relationType) =>
             assert(args.length == 2, s"Cmp needs two arguments: $line")
             curNode = constr.newCmp(args(0), args(1), Relation.valueOf(relationType))
@@ -92,12 +101,18 @@ object FirmGraphTestHelper {
           case endRegex() =>
             assert(args.length >= 1, s"End needs at least one argument: $line")
             args.foreach(graph.getEndBlock.addPred)
+          case minusRegex(mode) =>
+            assert(args.length == 1, s"Minus needs one argument: $line")
+            curNode = constr.newMinus(args(0), modes(mode))
           case modRegex(mode) =>
             assert(args.length == 3, s"Mod needs three arguments (first one is mem): $line")
             curNode = constr.newMod(args(0), args(1), args(2), modes(mode), op_pin_state.op_pin_state_floats)
           case mulRegex(mode) =>
             assert(args.length == 2, s"Mul needs two arguments: $line")
             curNode = constr.newMul(args(0), args(1), modes(mode))
+          case muxRegex(mode) =>
+            assert(args.length == 3, s"Mux needs three arguments: $line")
+            curNode = constr.newMux(args(0), args(1), args(2), modes(mode))
           case notRegex(mode) =>
             assert(args.length == 1, s"Not needs one argument: $line")
             curNode = constr.newNot(args(0), modes(mode))
@@ -136,7 +151,8 @@ object FirmGraphTestHelper {
     left.getOpCode match {
       case ir_opcode.iro_Add | ir_opcode.iro_Start | ir_opcode.iro_End | ir_opcode.iro_Sub |
            ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod |
-           ir_opcode.iro_Not | ir_opcode.iro_Call => ""
+           ir_opcode.iro_Not | ir_opcode.iro_Call | ir_opcode.iro_Conv | ir_opcode.iro_Mux |
+           ir_opcode.iro_Minus => ""
       case ir_opcode.iro_Address =>
         val (leftAsAddr, rightAsAddr) = (new Address(left.ptr), new Address(right.ptr))
         if (leftAsAddr.getEntity.getLdName == rightAsAddr.getEntity.getLdName) ""
