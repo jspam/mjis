@@ -6,7 +6,6 @@ import firm.bindings.binding_ircons.op_pin_state
 import firm.{Program => P, _}
 import firm.nodes._
 import mjis.ast._
-import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
@@ -141,14 +140,58 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case Builtins.UnequalDecl =>
           val equalNode = constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
           constr.newNot(equalNode, Mode.getb)
-
+        case Builtins.ArrayAccessDecl =>
+          val arrayType = Typer.getType((expr.arguments(0))).asInstanceOf[TypeArray]
+          var firmArray = firmType(arrayType.elementType)
+          // TODO we probably want to cache these types
+          for (i <- 0 until arrayType.numDimensions) firmArray = new ArrayType(firmArray)
+          val sel = constr.newSel(argumentResults(0), argumentResults(1), firmArray)
+          // TODO the lecture slides say we're supposed to use NoMem, but... how?!
+          val load = constr.newLoad(constr.getCurrentMem, sel, firmType(arrayType.elementType).getMode)
+          constr.setCurrentMem(constr.newProj(load, Mode.getM, firm.nodes.Load.pnM))
+          constr.newProj(load, firmType(arrayType.elementType).getMode, firm.nodes.Load.pnRes)
         case decl =>
-          val entity = methodEntity(decl)
-          val addrNode = constr.newAddress(entity)
-          val callNode = constr.newCall(constr.getCurrentMem, addrNode, argumentResults.toArray, entity.getType)
-          constr.setCurrentMem(constr.newProj(callNode, Mode.getM, firm.nodes.Call.pnM))
-          callNode
+          call(methodEntity(decl), argumentResults.toArray)
       }
+    }
+
+    private val callocType = {
+      val Iu = firmType(Builtins.ExtendedIntType)
+      val params: Array[Type] = List(Iu, Iu).toArray
+      // we can't construct a void*, so we take the next best thing: char*
+      val result: Array[Type] = Array(new PointerType(new PrimitiveType(Mode.getBu)))
+      new MethodType(params, result)
+    }
+    private val calloc = new Entity(P.getGlobalType, "calloc", callocType)
+
+    private def call(methodEntity: Entity, args: Array[Node]): Node = {
+      val methodType = methodEntity.getType.asInstanceOf[MethodType]
+      val addr = constr.newAddress(methodEntity)
+      val call = constr.newCall(constr.getCurrentMem, addr, args, methodEntity.getType)
+      constr.setCurrentMem(constr.newProj(call, Mode.getM, firm.nodes.Call.pnM))
+      // libFirm *really* doesn't like us trying to access void
+      if (methodType.getNRess > 0) {
+        val res = constr.newProj(call, Mode.getT, firm.nodes.Call.pnTResult)
+        constr.newProj(
+          res,
+          methodType.getResType(0).getMode,
+          0
+        )
+      } else call
+    }
+
+    override def postVisit(expr: NewArray, _1: Unit, firstDimSize: Node): Node = {
+      val baseType = firmType(expr.typ)
+      val size = constr.newConst(baseType.getSizeBytes, Mode.getIu)
+      val elems = constr.newConv(firstDimSize, Mode.getIu)
+      call(calloc, Array[Node](elems, size))
+    }
+
+    override def postVisit(expr: NewObject, _1: Unit): Node = {
+      val classType = firmClassEntity(expr.typ.decl.get).getType
+      val size = constr.newConst(classType.getSizeBytes, Mode.getIu)
+      val num_elems = constr.newConst(1, Mode.getIu)
+      call(calloc, Array[Node](num_elems, size))
     }
   }
 
