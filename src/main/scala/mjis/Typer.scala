@@ -25,10 +25,6 @@ object Typer {
     override def pos: Position = actual.pos
   }
 
-  case class UnresolvedReferenceError(override val pos: Position) extends SyntaxTreeError {
-    override def msg: String = s"Unresolved reference"
-  }
-
   case class IncomparableTypesError(type1: TypeDef, type2: TypeDef, override val pos: Position) extends SyntaxTreeError {
     override def msg: String = s"Incomparable types: $type1 and $type2"
   }
@@ -53,10 +49,6 @@ object Typer {
     override def msg: String = s"Non-void function must return a value"
   }
 
-  def getTypeForRef(r: Ref[TypedDecl]) = r.decl match {
-    case None => throw new TypecheckException(new UnresolvedReferenceError(r.pos))
-    case Some(decl) => decl.typ
-  }
   def getType(t: Expression) = getTypeRec(t).result
   def getTypeRec(t: Expression): TailRec[TypeDef] = {
     t match {
@@ -64,16 +56,15 @@ object Typer {
       case NewObject(typ) => done(typ)
       case NewArray(typ, _, additionalDims) => done(TypeArray(typ, additionalDims + 1))
       case a: Apply => a.decl match {
-        case None => throw new TypecheckException(new UnresolvedReferenceError(t.pos))
-        case Some(ArrayAccessDecl) =>
+        case ArrayAccessDecl =>
           tailcall(getTypeRec(a.arguments(0))).flatMap {
             case TypeArray(basicType, numDimensions) =>
               done(if (numDimensions == 1) basicType else TypeArray(basicType, numDimensions - 1))
             case otherType => throw new TypecheckException(new ArrayAccessOnNonArrayError(otherType))
           }
-        case Some(decl) => done(decl.returnType)
+        case decl => done(decl.returnType)
       }
-      case r: Ref[_] => done(getTypeForRef(r.asInstanceOf[Ref[TypedDecl]]))
+      case r: Ref[_] => done(r.decl.asInstanceOf[TypedDecl].typ)
       case NullLiteral() => done(NullType)
       case IntLiteral(value) =>
         val MaxInt = 2147483648L
@@ -121,14 +112,8 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
   }
 
   private def isLValue(expr: Expression) = expr match {
-    case a: Apply => a.decl match {
-      case Some(decl) => decl == ArrayAccessDecl
-      case None => throw new TypecheckException(UnresolvedReferenceError(expr.pos))
-    }
-    case r: Ref[_] => r.decl match {
-      case Some(decl) => decl.isWritable
-      case None => throw new TypecheckException(UnresolvedReferenceError(expr.pos))
-    }
+    case a: Apply => a.decl == ArrayAccessDecl
+    case r: Ref[_] => r.decl.isWritable
     case _ => false
   }
 
@@ -200,37 +185,33 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     override def postVisit(expr: Apply, _1: List[Unit]) = {
+      if (expr.arguments.size != expr.decl.parameters.size) {
+        throw new TypecheckException(
+          if (expr.decl.isStatic)
+            new WrongNumberOfParametersError(expr.decl.parameters.size, expr.arguments.size, expr.pos)
+          else
+            new WrongNumberOfParametersError(expr.decl.parameters.size - 1, expr.arguments.size - 1, expr.pos)
+        )
+      }
+      // check untypeable parameters
       expr.decl match {
-        case None => throw new TypecheckException(new UnresolvedReferenceError(expr.pos))
-        case Some(decl) =>
-          if (expr.arguments.size != decl.parameters.size) {
-            throw new TypecheckException(
-              if (expr.decl.get.isStatic)
-                new WrongNumberOfParametersError(decl.parameters.size, expr.arguments.size, expr.pos)
-              else
-                new WrongNumberOfParametersError(decl.parameters.size - 1, expr.arguments.size - 1, expr.pos)
-            )
+        case EqualsDecl | UnequalDecl =>
+          val typeLeft = getType(expr.arguments(0))
+          val typeRight = getType(expr.arguments(1))
+          if (!isConvertible(typeLeft, typeRight) && !isConvertible(typeRight, typeLeft)) {
+            throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight, expr.pos))
           }
-          // check untypeable parameters
-          decl match {
-            case EqualsDecl | UnequalDecl =>
-              val typeLeft = getType(expr.arguments(0))
-              val typeRight = getType(expr.arguments(1))
-              if (!isConvertible(typeLeft, typeRight) && !isConvertible(typeRight, typeLeft)) {
-                throw new TypecheckException(new IncomparableTypesError(typeLeft, typeRight, expr.pos))
-              }
-            case ArrayAccessDecl =>
-              val arrayType = getType(expr.arguments(0))
-              if (!arrayType.isInstanceOf[TypeArray])
-                throw new TypecheckException(new ArrayAccessOnNonArrayError(arrayType))
-            case _ =>
-          }
-          for ((arg, param) <- expr.arguments.zip(decl.parameters)) {
-            // might be null, meaning that the parameter is untypeable and has already been checked above
-            if (param.typ != null && !isConvertible(getType(arg), param.typ)) {
-              throw new TypecheckException(InvalidTypeError(param.typ, getType(arg), param.pos))
-            }
-          }
+        case ArrayAccessDecl =>
+          val arrayType = getType(expr.arguments(0))
+          if (!arrayType.isInstanceOf[TypeArray])
+            throw new TypecheckException(new ArrayAccessOnNonArrayError(arrayType))
+        case _ =>
+      }
+      for ((arg, param) <- expr.arguments.zip(expr.decl.parameters)) {
+        // might be null, meaning that the parameter is untypeable and has already been checked above
+        if (param.typ != null && !isConvertible(getType(arg), param.typ)) {
+          throw new TypecheckException(InvalidTypeError(param.typ, getType(arg), param.pos))
+        }
       }
     }
 

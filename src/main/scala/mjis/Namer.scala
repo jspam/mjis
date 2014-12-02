@@ -48,12 +48,12 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       case (name, cls) => name -> new ClassLookup(cls, mkDeclLookup(cls.fields), mkDeclLookup(cls.methods))
     }
 
-    private def mkDeclLookup[D <: Decl](xs: List[D]): Map[String, D] = xs groupBy (_.name) map {
+    private def mkDeclLookup[D >: Null <: Decl](xs: List[D]): Map[String, D] = xs groupBy (_.name) map {
       case (name, List(decl))                => name -> decl
       case (_, firstDecl :: secondDecl :: _) => throw ResolveException(DuplicateDefinitionError(firstDecl, secondDecl))
     }
 
-    private def setDecl[A <: Decl](ref: Ref[A], value: Option[A], refType: String): Unit = value match {
+    private def setDecl[A >: Null <: Decl](ref: Ref[A], value: Option[A], refType: String): Unit = value match {
       case None => throw ResolveException(DefNotFoundError(ref.name, refType, ref.pos))
       case Some(decl) =>
         if (!decl.isReadable) throw new ResolveException(InaccessibleDeclError(decl, decl.pos))
@@ -128,7 +128,8 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
         case Some(op) =>
           expr.decl = op
         case None =>
-          if (expr.decl.isEmpty) {
+          // could already be populated by preVisit
+          if (expr.decl == null) {
             val qualifierType = resolveType(expr.arguments(0))
             setDecl(expr, classes(qualifierType.name).methods.get(name), "method")
           }
