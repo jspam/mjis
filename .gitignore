@@ -1,5 +1,6 @@
 *.class
 *.log
+firm-dumps/*
 
 # sbt specific
 .cache/
