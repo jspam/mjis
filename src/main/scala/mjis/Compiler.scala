@@ -7,6 +7,8 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.reflect._
 import firm.Firm
+import firm.Mode
+import firm.Backend
 
 object Compiler {
   private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
@@ -53,6 +55,11 @@ object Compiler {
     val fileOrStdIn = config.file.map(f => new FileInputStream(f.toFile)).getOrElse(System.in)
     val input = new InputStreamReader(new BufferedInputStream(fileOrStdIn), "ASCII")
     val target = if (config.stopAfter != "") stopAfterTargets(config.stopAfter) else pipeline.last
+    // tell FIRM we want to output amd64 code
+    val modeP = Mode.createReferenceMode(
+      "P64", Mode.Arithmetic.TwosComplement, 64, 64)
+    Mode.setDefaultModeP(modeP)
+    Backend.option("isa=amd64")
 
     exec(input, target) match {
       case Left(phase) =>
