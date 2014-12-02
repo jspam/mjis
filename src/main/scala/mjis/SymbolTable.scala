@@ -3,18 +3,18 @@ package mjis
 import mjis.ast.Decl
 import scala.collection.mutable
 
-class SymbolTable {
+class SymbolTable[D <: Decl] {
   private class Scope(val parent: Option[Scope]) {
     // name -> (<declaration>, <scope of previous declaration>)
-    val defs = mutable.HashMap[String, (Decl, Option[Scope])]()
+    val defs = mutable.HashMap[String, (D, Option[Scope])]()
   }
 
   private val index = mutable.HashMap[String, Scope]()
   private var current: Option[Scope] = None
 
-  def lookup(name: String): Option[Decl] = index.get(name).flatMap(_.defs.get(name)).map(_._1)
+  def lookup(name: String): Option[D] = index.get(name).flatMap(_.defs.get(name)).map(_._1)
 
-  def insert(decl: Decl): Unit = {
+  def insert(decl: D): Unit = {
     current.get.defs += (decl.name -> ((decl, index.get(decl.name))))
     index += (decl.name -> current.get)
   }

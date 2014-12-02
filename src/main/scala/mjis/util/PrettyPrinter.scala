@@ -183,7 +183,7 @@ class PrettyPrinter(writer: Writer) {
     emit("public ")
     if (method.isStatic)
       emit("static ")
-    printType(method.typ)
+    printType(method.returnType)
     emit(" " + method.name + "(")
     for (i <- (if (method.isStatic) 0 else 1) until method.parameters.length) {
       val param = method.parameters(i)

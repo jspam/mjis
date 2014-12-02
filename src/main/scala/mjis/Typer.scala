@@ -71,7 +71,7 @@ object Typer {
               done(if (numDimensions == 1) basicType else TypeArray(basicType, numDimensions - 1))
             case otherType => throw new TypecheckException(new ArrayAccessOnNonArrayError(otherType))
           }
-        case Some(decl) => done(decl.typ)
+        case Some(decl) => done(decl.returnType)
       }
       case r: Ref[_] => done(getTypeForRef(r.asInstanceOf[Ref[TypedDecl]]))
       case NullLiteral() => done(NullType)
@@ -150,7 +150,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
 
     override def postVisit(m: MethodDecl, _1: Unit, hasReturnStatement: Boolean) = {
       currentMethod = null
-      if (!hasReturnStatement && m.typ != VoidType) {
+      if (!hasReturnStatement && m.returnType != VoidType) {
         throw new TypecheckException(MissingReturnStatementError(m.pos))
       }
     }
@@ -185,9 +185,9 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
       stmt.returnValue match {
         case Some(expr) =>
           assertNotVoid(getType(expr))
-          assertConvertible(getType(expr), currentMethod.typ, expr.pos)
+          assertConvertible(getType(expr), currentMethod.returnType, expr.pos)
         case None =>
-          if (currentMethod.typ != VoidType)
+          if (currentMethod.returnType != VoidType)
             throw new TypecheckException(MissingReturnValueError(stmt.pos))
       }
       true

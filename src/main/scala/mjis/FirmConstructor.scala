@@ -59,7 +59,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     private def createMethodEntity(cls: ClassDecl, method: MethodDecl) = {
       val paramTypes: Array[Type] = (method.parameters map { p => firmType(p.typ) }).toArray
-      val resultTypes: Array[Type] = method.typ match {
+      val resultTypes: Array[Type] = method.returnType match {
         case Builtins.VoidType => Array[Type]()
         case t                 => Array[Type](firmType(t))
       }
@@ -113,7 +113,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(method: MethodDecl, _1: Unit, bodyResult: Node): Unit = {
-      if (method.typ == Builtins.VoidType) {
+      if (method.returnType == Builtins.VoidType) {
         graph.getEndBlock.addPred(constr.newReturn(constr.getCurrentMem, Array[Node]()))
       }
       constr.finish()
@@ -277,7 +277,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           case field: FieldDecl =>
             createStore(lhs, rhs)
           case local @ (_: Parameter | _: LocalVarDeclStatement) =>
-            handleLocalVarAssignment(local.asInstanceOf[TypedDecl], rhs)
+            handleLocalVarAssignment(local, rhs)
         }
         case sel: Select =>
           createStore(lhs, rhs)
