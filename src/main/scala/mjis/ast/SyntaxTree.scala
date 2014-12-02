@@ -50,12 +50,12 @@ sealed trait TypedDecl extends Decl {
   val typ: TypeDef
 }
 
-sealed trait MemberDecl extends TypedDecl
+sealed trait MemberDecl extends Decl
 
 /* `typ` `name` (= `body`) */
 final case class FieldDecl(
   name: String,
-  override val typ: TypeDef)(implicit val pos: Position) extends MemberDecl {
+  override val typ: TypeDef)(implicit val pos: Position) extends MemberDecl with TypedDecl {
 
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
   override def isWritable = true
@@ -65,7 +65,7 @@ final case class FieldDecl(
 final case class MethodDecl(
   name: String,
   var parameters: List[Parameter],
-  override val typ: TypeDef,
+  returnType: TypeDef,
   body: Block,
   isStatic: Boolean = false)(implicit val pos: Position) extends MemberDecl {
 
@@ -157,11 +157,11 @@ final case class Select(qualifier: Expression, name: String)(implicit val pos: P
 
 sealed trait Literal extends Expression
 
-final case class Ident(name: String)(implicit val pos: Position) extends Literal with Ref[Decl] {
+final case class Ident(name: String)(implicit val pos: Position) extends Literal with Ref[TypedDecl] {
   override def accept[E](visitor: ExpressionVisitor[E]): E = visitor.visit(this)
   override def toString = name
 }
-final case class ThisLiteral()(implicit val pos: Position) extends Literal with Ref[TypedDecl] {
+final case class ThisLiteral()(implicit val pos: Position) extends Literal with Ref[Parameter] {
   override def accept[E](visitor: ExpressionVisitor[E]): E = visitor.visit(this)
   override val name = "this"
 }

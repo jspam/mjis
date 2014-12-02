@@ -1,6 +1,6 @@
 package mjis
 
-import mjis.ast.{TypeBasic, LocalVarDeclStatement}
+import mjis.ast.{Decl, TypeBasic, LocalVarDeclStatement}
 import org.scalatest._
 
 class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
@@ -12,7 +12,7 @@ class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
   val bar = LocalVarDeclStatement("bar", TypeBasic("Bar"), None)
 
   "The symbol table" should "store declarations" in {
-    val table = new SymbolTable()
+    val table = new SymbolTable[Decl]()
     table.enterScope()
     table.insert(foo)
 
@@ -22,7 +22,7 @@ class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "find declarations in outer scopes" in {
-    val table = new SymbolTable()
+    val table = new SymbolTable[Decl]()
     table.enterScope()
     table.insert(foo)
     table.enterScope()
@@ -31,7 +31,7 @@ class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "forget declarations after leaving their respective scope" in {
-    val table = new SymbolTable()
+    val table = new SymbolTable[Decl]()
     table.enterScope()
     table.insert(foo)
     table.enterScope()
@@ -43,7 +43,7 @@ class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "report the current scope correctly" in {
-    val table = new SymbolTable()
+    val table = new SymbolTable[Decl]()
     table.enterScope()
     table.insert(foo)
     table.enterScope()
@@ -54,7 +54,7 @@ class SymbolTableTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "allow same-named declarations in different scopes" in {
-    val table = new SymbolTable()
+    val table = new SymbolTable[Decl]()
     table.enterScope()
     table.insert(foo)
     table.enterScope()

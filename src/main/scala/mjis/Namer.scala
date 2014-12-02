@@ -41,7 +41,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     // mind the order: local classes may shadow builtin classes
     private val classes: Map[String, ClassLookup] = mkPackageLookup(Builtins.PublicTypeDecls) ++
       mkPackageLookup(input.classes)
-    private val localVars = new SymbolTable()
+    private val localVars = new SymbolTable[TypedDecl]()
     private val operators = mkDeclLookup(Builtins.Operators)
 
     private def mkPackageLookup(classes: List[ClassDecl]): Map[String, ClassLookup] = mkDeclLookup(classes) map {
@@ -66,7 +66,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     /** Looks up x in the 'localVars' map; if that fails, looks up this.x */
-    private def valueLookup(name: String): Option[Decl] = localVars.lookup(name) match {
+    private def valueLookup(name: String): Option[TypedDecl] = localVars.lookup(name) match {
       case Some(decl) => Some(decl)
       case None => localVars.lookup("this") match {
         case Some(Parameter(_, TypeBasic(className), _, _)) => classes(className).fields.get(name)
@@ -74,7 +74,7 @@ class Namer(val input: Program) extends AnalysisPhase[Program] {
       }
     }
 
-    def addLocalVarDecl(decl: Decl): Unit = {
+    def addLocalVarDecl(decl: TypedDecl): Unit = {
       localVars.lookup(decl.name) match {
         case Some(existingDecl) => throw new ResolveException(DuplicateDefinitionError(existingDecl, decl))
         case None               =>

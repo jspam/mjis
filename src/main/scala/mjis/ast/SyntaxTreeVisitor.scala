@@ -127,7 +127,7 @@ class PlainRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
   def visit(method: MethodDecl): Unit = {
     preVisit(method)
     method.parameters.map(visit)
-    postVisit(method, method.typ.accept(this), visit(method.body))
+    postVisit(method, method.returnType.accept(this), visit(method.body))
   }
 
   def visit(field: FieldDecl): Unit = {
