@@ -12,12 +12,12 @@ abstract class SyntaxTreeError extends Finding {
 }
 
 /** A syntax tree element that has a reference to a Decl. */
-sealed trait Ref[D <: Decl] extends SyntaxTree {
-  private var _decl: Option[D] = None
+sealed trait Ref[D >: Null <: Decl] extends SyntaxTree {
+  private var _decl: D = null
   def decl = _decl
   def decl_=(value: D) = _decl match {
-    case None       => _decl = Some(value)
-    case Some(decl) => if (decl != value) throw new IllegalStateException("Tried to set two different declarations for one Ref.")
+    case null => _decl = value
+    case _    => if (decl != value) throw new IllegalStateException("Tried to set two different declarations for one Ref.")
   }
   val name: String
 }
@@ -27,7 +27,7 @@ final case class Program(classes: List[ClassDecl])(implicit val pos: Position) e
   def accept(visitor: ProgramVisitor): Unit = visitor.visit(this)
 }
 
-sealed trait Decl extends SyntaxTree {
+sealed trait Decl extends AnyRef with SyntaxTree {
   def name: String
   def isReadable = true
   def isWritable = false

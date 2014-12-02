@@ -16,7 +16,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   def getStatements(input: String) = flattenStatements(assertExecStatements[Namer](input))
   def getMethod(c: ClassDecl, name: String) = c.methods.find(decl => decl.name == name).orNull
 
-  def getRefDecl(s: Statement): Decl = s.asInstanceOf[ExpressionStatement].expr.asInstanceOf[Ref[Decl]].decl.get
+  def getRefDecl(s: Statement): Decl = s.asInstanceOf[ExpressionStatement].expr.asInstanceOf[Ref[Decl]].decl
 
   "The namer" should "recognize local variable references" in {
     val statements = getStatements("int x; x;")
@@ -25,7 +25,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
 
   it should "recognize type references" in {
     val cls = assertExecClass[Namer]("class Test { public static void main(String[] args) { int x; Test y; boolean b; } }")
-    val types = cls.methods(0).body.statements.map(_.asInstanceOf[LocalVarDeclStatement].typ.asInstanceOf[TypeBasic].decl.get)
+    val types = cls.methods(0).body.statements.map(_.asInstanceOf[LocalVarDeclStatement].typ.asInstanceOf[TypeBasic].decl)
     types shouldBe List(Builtins.IntDecl, cls, Builtins.BooleanDecl)
   }
 
@@ -199,8 +199,8 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
     val fieldDecl = program.classes(0).fields(0)
     val localVarDecl = methodBody.statements(0)
     val statement = methodBody.statements(1).asInstanceOf[ExpressionStatement].expr.asInstanceOf[Assignment]
-    statement.lhs.asInstanceOf[Ref[Decl]].decl.get shouldBe localVarDecl
-    statement.rhs.asInstanceOf[Ref[Decl]].decl.get shouldBe fieldDecl
+    statement.lhs.asInstanceOf[Ref[Decl]].decl shouldBe localVarDecl
+    statement.rhs.asInstanceOf[Ref[Decl]].decl shouldBe fieldDecl
   }
 
   it should "allow(!) accessing a local variable in its initializer" in {

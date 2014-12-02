@@ -144,8 +144,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(expr: Apply, argumentResults: List[Node]): Node = {
-      if (expr.decl.isEmpty) throw new IllegalArgumentException("Unresolved reference")
-      expr.decl.get match {
+      expr.decl match {
         case Builtins.IntAddDecl =>
           constr.newAdd(argumentResults(0), argumentResults(1), Mode.getIs)
         case Builtins.IntSubDecl =>
@@ -218,7 +217,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(expr: Select, qualifier: Node): Node = {
       assert(qualifier.getMode == Mode.getP)
-      val fieldEntity = firmFieldEntity(expr.decl.get)
+      val fieldEntity = firmFieldEntity(expr.decl)
       val member = constr.newMember(qualifier, fieldEntity)
       if (expr.isLvalue)
         member
@@ -258,14 +257,14 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(expr: NewObject, _1: Unit): Node = {
-      val classType = firmClassEntity(expr.typ.decl.get).getType
+      val classType = firmClassEntity(expr.typ.decl).getType
       val size = constr.newConst(classType.getSizeBytes, Mode.getIu)
       val num_elems = constr.newConst(1, Mode.getIu)
       call(calloc, Array[Node](num_elems, size))
     }
 
     private def createArrayAccess(expr: Apply, args: List[Node]): Node = {
-      assert(expr.decl.get eq Builtins.ArrayAccessDecl, "method calls may not be used as lvalues")
+      assert(expr.decl eq Builtins.ArrayAccessDecl, "method calls may not be used as lvalues")
       val arrayType = Typer.getType(expr.arguments(0)).asInstanceOf[TypeArray]
       val firmArray = firmType(arrayType)
       constr.newSel(args(0), args(1), firmArray)
@@ -273,7 +272,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(expr: Assignment, lhs: Node, rhs: Node): Node = {
       expr.lhs match {
-        case ident: Ident => ident.decl.get match {
+        case ident: Ident => ident.decl match {
           case field: FieldDecl =>
             createStore(lhs, rhs)
           case local @ (_: Parameter | _: LocalVarDeclStatement) =>
@@ -282,13 +281,13 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case sel: Select =>
           createStore(lhs, rhs)
         case arrAccess: Apply =>
-          assert(arrAccess.decl.get eq Builtins.ArrayAccessDecl, "method calls are not valid lvalues")
+          assert(arrAccess.decl eq Builtins.ArrayAccessDecl, "method calls are not valid lvalues")
           createStore(lhs, rhs)
         case other => throw new UnsupportedOperationException(s"Unexpected LHS value: $other")
       }
     }
 
-    override def postVisit(ident: Ident): Node = ident.decl.get match {
+    override def postVisit(ident: Ident): Node = ident.decl match {
       case local @ (_: Parameter | _: LocalVarDeclStatement) =>
         getVariable(declIndex(local), local.asInstanceOf[TypedDecl])
       case field: FieldDecl =>
@@ -301,7 +300,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           createLoad(member, fieldEntity.getType)
     }
 
-    override def postVisit(thisLit: ThisLiteral): Node = thisLit.decl.get match {
+    override def postVisit(thisLit: ThisLiteral): Node = thisLit.decl match {
       case p: Parameter =>
         getVariable(declIndex(p), p)
     }
