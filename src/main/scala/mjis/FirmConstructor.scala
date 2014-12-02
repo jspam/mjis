@@ -6,6 +6,7 @@ import firm.bindings.binding_ircons.op_pin_state
 import firm.{ Program => FirmProgram, Ident => _, _ }
 import firm.nodes._
 import mjis.ast._
+import mjis.util.FirmDumpHelper
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
@@ -15,7 +16,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
   }
 
   override def dumpResult(writer: BufferedWriter): Unit = {
-    FirmProgram.getGraphs.foreach(Dump.dumpGraph(_, "-FirmConstructor"))
+    FirmProgram.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-FirmConstructor"))
   }
 
   private def transformProgram(prog: Program) = new FirmConstructorVisitor().visit(prog)

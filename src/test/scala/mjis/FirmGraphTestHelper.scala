@@ -1,5 +1,6 @@
 package mjis
 
+import mjis.util.FirmDumpHelper
 import firm._
 import firm.bindings.binding_irnode.ir_opcode
 import firm.bindings.binding_ircons.op_pin_state
@@ -159,7 +160,7 @@ object FirmGraphTestHelper {
     })
     constr.finish()
     graph.check()
-    Dump.dumpGraph(graph, "-FirmGraphTestHelper")
+    FirmDumpHelper.dumpGraph(graph, "-FirmGraphTestHelper")
     graph
   }
 

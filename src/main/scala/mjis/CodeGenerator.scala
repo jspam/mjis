@@ -2,7 +2,8 @@ package mjis
 
 import java.io.BufferedWriter
 
-import firm.{Dump, Program, Util, Backend}
+import firm.{Program, Util, Backend}
+import mjis.util.FirmDumpHelper
 
 import scala.io.Source
 import scala.collection.JavaConversions._
@@ -15,7 +16,7 @@ class CodeGenerator(a: Unit) extends Phase[Unit] {
   def getResult(): Unit = {
     // I'd prefer to do this in dumpResult, but libFirm segfaults when
     // you try to dump a graph after it has generated assembler code for it
-    Program.getGraphs.foreach(Dump.dumpGraph(_, "-input"))
+    Program.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-input"))
     Util.lowerSels()
     Backend.createAssembler("a.s", "<input>")
     Runtime.getRuntime.exec("gcc -m64 a.s lib/System_out_println_64.s").waitFor()
