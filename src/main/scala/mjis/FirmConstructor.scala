@@ -212,11 +212,11 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       val store = constr.newStore(constr.getCurrentMem, ptr, value)
       val newMem = constr.newProj(store, Mode.getM, firm.nodes.Store.pnM)
       constr.setCurrentMem(newMem)
-      newMem
+      value
     }
 
     override def postVisit(expr: Select, qualifier: Node): Node = {
-      assert(qualifier.getMode == Mode.getP)
+      assert(qualifier.getMode == Mode.getP, qualifier.getMode)
       val fieldEntity = firmFieldEntity(expr.decl)
       val member = constr.newMember(qualifier, fieldEntity)
       if (expr.isLvalue)
