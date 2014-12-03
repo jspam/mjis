@@ -28,7 +28,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       "_" + cls.name.length.toString + cls.name + "_" + method.name
   }
 
-  private class FirmConstructorVisitor extends TailRecursiveVisitor[Unit, Node, Node]((), null, null) {
+  private class FirmConstructorVisitor extends PlainRecursiveVisitor[Unit, Unit, Node]((), (), null) {
 
     private var graph: Graph = null
     private var constr: Construction = null
@@ -58,8 +58,15 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       firmArray
     }
 
-    private def convToBu(node: Node) =
-      constr.newMux(node, constr.newConst(0, Mode.getBu), constr.newConst(1, Mode.getBu), Mode.getBu)
+    private def convbToBu(node: Node) =
+      if (node.getMode == Mode.getb)
+        constr.newMux(node, constr.newConst(0, Mode.getBu), constr.newConst(1, Mode.getBu), Mode.getBu)
+      else node
+
+    private def convBuTob(node: Node) =
+      if (node.getMode == Mode.getBu)
+        constr.newCmp(node, constr.newConst(1, Mode.getBu), Relation.Equal)
+      else node
 
     private def createMethodEntity(cls: ClassDecl, method: MethodDecl) = {
       val paramTypes: Array[Type] = (method.parameters map { p => firmType(p.typ) }).toArray
@@ -116,20 +123,90 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       }
     }
 
-    override def postVisit(method: MethodDecl, _1: Unit, bodyResult: Node): Unit = {
-      if (method.returnType == Builtins.VoidType) {
+    override def postVisit(method: MethodDecl, _1: Unit, _2: Unit): Unit = {
+      if (method.body.isEndReachable) {
+        assert(method.returnType == Builtins.VoidType, "reachable end of non-void method")
         graph.getEndBlock.addPred(constr.newReturn(constr.getCurrentMem, Array[Node]()))
       }
       constr.finish()
     }
 
-    override def postVisit(stmt: ReturnStatement, exprResult: Option[Node]): Node = {
+    override def visit(stmt: mjis.ast.Block): Unit = {
+      for (s <- stmt.statements) {
+        s.accept(this)
+        if (!s.isEndReachable)
+          return // skip dead code
+      }
+    }
+
+    override def visit(stmt: If): Unit = {
+      val cond = constr.newCond(convBuTob(stmt.condition.accept(this)))
+      val falseX = constr.newProj(cond, Mode.getX, Cond.pnFalse)
+      val trueX = constr.newProj(cond, Mode.getX, Cond.pnTrue)
+
+      val follow = constr.newBlock()
+
+      constr.setCurrentBlock(constr.newBlock())
+      constr.getCurrentBlock.addPred(trueX)
+      stmt.ifTrue.accept(this)
+      if (stmt.ifTrue.isEndReachable)
+        follow.addPred(constr.newJmp())
+
+      constr.setCurrentBlock(constr.newBlock())
+      constr.getCurrentBlock.addPred(falseX)
+      stmt.ifFalse.accept(this)
+      if (stmt.ifFalse.isEndReachable)
+        follow.addPred(constr.newJmp())
+
+      constr.setCurrentBlock(follow)
+    }
+
+    override def visit(stmt: While): Unit = {
+      val jmp = constr.newJmp()
+
+      val condBlock = constr.newBlock()
+      constr.setCurrentBlock(condBlock)
+      condBlock.addPred(jmp)
+      val cond = constr.newCond(convBuTob(stmt.condition.accept(this)))
+      val falseX = constr.newProj(cond, Mode.getX, Cond.pnFalse)
+      val trueX = constr.newProj(cond, Mode.getX, Cond.pnTrue)
+
+      constr.setCurrentBlock(constr.newBlock())
+      constr.getCurrentBlock.addPred(trueX)
+      stmt.body.accept(this)
+      if (stmt.body.isEndReachable)
+        condBlock.addPred(constr.newJmp())
+
+      constr.setCurrentBlock(constr.newBlock())
+      constr.getCurrentBlock.addPred(falseX)
+    }
+
+    override def postVisit(stmt: ReturnStatement, exprResult: Option[Node]): Unit = {
       val returnNode = constr.newReturn(constr.getCurrentMem, exprResult match {
         case None            => Array[Node]()
-        case Some(valueNode) => Array[Node](valueNode)
+        case Some(valueNode) => Array[Node](convbToBu(valueNode))
       })
       graph.getEndBlock.addPred(returnNode)
-      returnNode
+    }
+
+    override def preVisit(stmt: LocalVarDeclStatement): Unit = {
+      newLocalVar(stmt)
+    }
+
+    private def newLocalVar(decl: TypedDecl): Unit = {
+      declIndex += decl -> lastIndex
+      lastIndex += 1
+    }
+
+    private def handleLocalVarAssignment(decl: TypedDecl, rhs: Node): Node = {
+      val index = declIndex(decl)
+      constr.setVariable(index, rhs)
+      constr.getVariable(index, firmType(decl.typ).getMode)
+    }
+
+    override def postVisit(stmt: LocalVarDeclStatement, typResult: Unit, initializerResult: Option[Node]): Unit = initializerResult match {
+      case Some(node) => handleLocalVarAssignment(stmt, node)
+      case None =>
     }
 
     override def postVisit(expr: BooleanLiteral): Node = {
@@ -175,19 +252,19 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           }
 
         case Builtins.IntLessDecl =>
-          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.Less))
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Less)
         case Builtins.IntLessEqualDecl =>
-          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.LessEqual))
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.LessEqual)
         case Builtins.IntGreaterDecl =>
-          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.Greater))
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.Greater)
         case Builtins.IntGreaterEqualDecl =>
-          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.GreaterEqual))
+          constr.newCmp(argumentResults(0), argumentResults(1), Relation.GreaterEqual)
 
         case Builtins.EqualsDecl =>
-          convToBu(constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal))
+          constr.newCmp(convbToBu(argumentResults(0)), convbToBu(argumentResults(1)), Relation.Equal)
         case Builtins.UnequalDecl =>
-          val equalNode = constr.newCmp(argumentResults(0), argumentResults(1), Relation.Equal)
-          convToBu(constr.newNot(equalNode, Mode.getb))
+          val equalNode = constr.newCmp(convbToBu(argumentResults(0)), convbToBu(argumentResults(1)), Relation.Equal)
+          constr.newNot(equalNode, Mode.getb)
 
         case Builtins.ArrayAccessDecl =>
           val sel = createArrayAccess(expr, argumentResults)
@@ -213,7 +290,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     private def createStore(ptr: Node, value: Node): Node = {
-      val store = constr.newStore(constr.getCurrentMem, ptr, value)
+      val store = constr.newStore(constr.getCurrentMem, ptr, convbToBu(value))
       val newMem = constr.newProj(store, Mode.getM, firm.nodes.Store.pnM)
       constr.setCurrentMem(newMem)
       value
@@ -241,7 +318,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     private def call(methodEntity: Entity, args: Array[Node]): Node = {
       val methodType = methodEntity.getType.asInstanceOf[MethodType]
       val addr = constr.newAddress(methodEntity)
-      val call = constr.newCall(constr.getCurrentMem, addr, args, methodEntity.getType)
+      val call = constr.newCall(constr.getCurrentMem, addr, args.map(convbToBu), methodEntity.getType)
       constr.setCurrentMem(constr.newProj(call, Mode.getM, firm.nodes.Call.pnM))
       // libFirm *really* doesn't like us trying to access void
       if (methodType.getNRess > 0) {
@@ -274,18 +351,19 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(expr: Assignment, lhs: Node, rhs: Node): Node = {
+      val rhsVal = convbToBu(rhs)
       expr.lhs match {
         case ident: Ident => ident.decl match {
           case field: FieldDecl =>
-            createStore(lhs, rhs)
+            createStore(lhs, rhsVal)
           case local @ (_: Parameter | _: LocalVarDeclStatement) =>
-            handleLocalVarAssignment(local, rhs)
+            handleLocalVarAssignment(local, rhsVal)
         }
         case sel: Select =>
-          createStore(lhs, rhs)
+          createStore(lhs, rhsVal)
         case arrAccess: Apply =>
           assert(arrAccess.decl eq Builtins.ArrayAccessDecl, "method calls are not valid lvalues")
-          createStore(lhs, rhs)
+          createStore(lhs, rhsVal)
         case other => throw new UnsupportedOperationException(s"Unexpected LHS value: $other")
       }
     }
@@ -307,28 +385,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       case p: Parameter =>
         constr.getVariable(declIndex(p), firmType(p.typ).getMode)
     }
-
-    override def preVisit(stmt: LocalVarDeclStatement): Unit = {
-      newLocalVar(stmt)
-    }
-
-    override def postVisit(stmt: LocalVarDeclStatement, typResult: Unit, initializerResult: Option[Node]): Node = {
-      if (initializerResult.isDefined)
-        handleLocalVarAssignment(stmt, initializerResult.get)
-      constr.getVariable(declIndex(stmt), firmType(stmt.typ).getMode)
-    }
-
-    private def newLocalVar(decl: TypedDecl): Unit = {
-      declIndex += decl -> lastIndex
-      lastIndex += 1
-      constr.getVariable(lastIndex - 1, firmType(decl.typ).getMode)
-    }
-    private def handleLocalVarAssignment(decl: TypedDecl, rhs: Node): Node = {
-      val index = declIndex(decl)
-      constr.setVariable(index, rhs)
-      constr.getVariable(index, firmType(decl.typ).getMode)
-    }
- }
+  }
 
   override def findings: List[Finding] = List()
 }

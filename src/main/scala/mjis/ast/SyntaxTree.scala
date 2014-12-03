@@ -97,6 +97,8 @@ final case class TypeArray(elementType: TypeBasic, numDimensions: Int = 1)(impli
 sealed trait Statement extends SyntaxTree {
   def accept[S](visitor: StatementVisitor[S]): S
   def isEmpty = false
+  /* true iff there is some path through the statement without a return statement on it */
+  var isEndReachable = true
 }
 
 /* `typ` `name` ( = `body`) */
