@@ -306,11 +306,14 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         getVariable(declIndex(p), p)
     }
 
+    override def preVisit(stmt: LocalVarDeclStatement): Unit = {
+      newLocalVar(stmt)
+    }
+
     override def postVisit(stmt: LocalVarDeclStatement, typResult: Unit, initializerResult: Option[Node]): Node = {
-      val localVar = newLocalVar(stmt)
       if (initializerResult.isDefined)
         handleLocalVarAssignment(stmt, initializerResult.get)
-      localVar
+      constr.getVariable(declIndex(stmt), firmType(stmt.typ).getMode)
     }
 
     // array-safe wrapper around constr.getVariable
@@ -320,7 +323,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       constr.getVariable(index, m)
     }
 
-    private def newLocalVar(decl: TypedDecl): Node = {
+    private def newLocalVar(decl: TypedDecl): Unit = {
       declIndex += decl -> lastIndex
       lastIndex += 1
       getVariable(lastIndex - 1, decl)
