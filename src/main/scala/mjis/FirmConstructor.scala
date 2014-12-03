@@ -45,15 +45,18 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case Builtins.IntType => new PrimitiveType(Mode.getIs)
         case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
         case Builtins.VoidType => throw new IllegalArgumentException("void doesn't have a runtime type")
-        case array: ast.TypeArray     =>
-          var firmArray = firmType(array.elementType)
-          for (i <- 0 until array.numDimensions) firmArray = new ArrayType(firmArray)
-          firmArray
+        /* array and class types */
         case _ => new PrimitiveType(Mode.getP)
       }
       firmType += typ -> result
       result
     })
+
+    private def firmArrayType(array: TypeArray): Type = {
+      var firmArray = firmType(array.elementType)
+      for (i <- 0 until array.numDimensions) firmArray = new ArrayType(firmArray)
+      firmArray
+    }
 
     private def convToBu(node: Node) =
       constr.newMux(node, constr.newConst(0, Mode.getBu), constr.newConst(1, Mode.getBu), Mode.getBu)
@@ -192,8 +195,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
             sel
           else {
             val arrayType = Typer.getType(expr.arguments(0)).asInstanceOf[TypeArray]
-            val firmArray = firmType(arrayType.elementType)
-            createLoad(sel, firmArray)
+            val resultType = if (arrayType.numDimensions > 1) firmType(arrayType) else firmType(arrayType.elementType)
+            createLoad(sel, resultType)
           }
 
         case decl =>
@@ -267,8 +270,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     private def createArrayAccess(expr: Apply, args: List[Node]): Node = {
       assert(expr.decl eq Builtins.ArrayAccessDecl, "method calls may not be used as lvalues")
       val arrayType = Typer.getType(expr.arguments(0)).asInstanceOf[TypeArray]
-      val firmArray = firmType(arrayType)
-      constr.newSel(args(0), args(1), firmArray)
+      constr.newSel(args(0), args(1), firmArrayType(arrayType))
     }
 
     override def postVisit(expr: Assignment, lhs: Node, rhs: Node): Node = {
@@ -290,7 +292,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(ident: Ident): Node = ident.decl match {
       case local @ (_: Parameter | _: LocalVarDeclStatement) =>
-        getVariable(declIndex(local), local.asInstanceOf[TypedDecl])
+        constr.getVariable(declIndex(local), firmType(local.asInstanceOf[TypedDecl].typ).getMode)
       case field: FieldDecl =>
         val fieldEntity = firmFieldEntity(field)
         val thisPtr = constr.getVariable(0, Mode.getP)
@@ -303,7 +305,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(thisLit: ThisLiteral): Node = thisLit.decl match {
       case p: Parameter =>
-        getVariable(declIndex(p), p)
+        constr.getVariable(declIndex(p), firmType(p.typ).getMode)
     }
 
     override def preVisit(stmt: LocalVarDeclStatement): Unit = {
@@ -316,22 +318,15 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       constr.getVariable(declIndex(stmt), firmType(stmt.typ).getMode)
     }
 
-    // array-safe wrapper around constr.getVariable
-    private def getVariable(index: Int, decl: TypedDecl): Node = {
-      val fType = firmType(decl.typ)
-      val m = if (fType.isInstanceOf[ArrayType]) Mode.getP else fType.getMode
-      constr.getVariable(index, m)
-    }
-
     private def newLocalVar(decl: TypedDecl): Unit = {
       declIndex += decl -> lastIndex
       lastIndex += 1
-      getVariable(lastIndex - 1, decl)
+      constr.getVariable(lastIndex - 1, firmType(decl.typ).getMode)
     }
     private def handleLocalVarAssignment(decl: TypedDecl, rhs: Node): Node = {
       val index = declIndex(decl)
       constr.setVariable(index, rhs)
-      getVariable(index, decl)
+      constr.getVariable(index, firmType(decl.typ).getMode)
     }
  }
 
