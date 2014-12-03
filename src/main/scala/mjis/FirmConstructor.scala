@@ -7,19 +7,76 @@ import firm.{ Program => FirmProgram, Ident => _, _ }
 import firm.nodes._
 import mjis.ast._
 import mjis.util.FirmDumpHelper
+import mjis.util.MapExtensions._
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
 class FirmConstructor(input: Program) extends Phase[Unit] {
-  override protected def getResult(): Unit = {
-    transformProgram(input)
+  private val firmClassEntity = new mutable.HashMap[ClassDecl, firm.Entity]()
+  private val firmFieldEntity = new mutable.HashMap[FieldDecl, firm.Entity]()
+  private val firmMethodEntity = new mutable.HashMap[MethodDecl, firm.Entity]()
+
+  private val firmType = new mutable.HashMap[TypeDef, firm.Type]().withPersistentDefault {
+    case Builtins.BooleanType => new PrimitiveType(Mode.getBu)
+    case Builtins.IntType => new PrimitiveType(Mode.getIs)
+    case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
+    case Builtins.VoidType => throw new IllegalArgumentException("void doesn't have a runtime type")
+    /* array and class types */
+    case _ => new PrimitiveType(Mode.getP)
   }
+
+  override protected def getResult(): Unit = transformProgram(input)
 
   override def dumpResult(writer: BufferedWriter): Unit = {
     FirmProgram.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-FirmConstructor"))
   }
 
-  private def transformProgram(prog: Program) = new FirmConstructorVisitor().visit(prog)
+  private def createMethodEntity(cls: ClassDecl, method: MethodDecl) = {
+    val paramTypes: Array[Type] = (method.parameters map { p => firmType(p.typ) }).toArray
+    val resultTypes: Array[Type] = method.returnType match {
+      case Builtins.VoidType => Array[Type]()
+      case t                 => Array[Type](firmType(t))
+    }
+    val methodType = new MethodType(paramTypes, resultTypes)
+    new Entity(FirmProgram.getGlobalType, mangle(method, cls), methodType)
+  }
+
+  private def createClassEntity(cls: ClassDecl): Entity = {
+    val struct = new StructType(cls.name)
+    var offset = 0
+    var align = 1
+    for ((f, i) <- cls.fields.zipWithIndex) {
+      val typ = firmType(f.typ)
+      val firmField = Entity.createParameterEntity(struct, i, typ)
+      firmFieldEntity += f -> firmField
+
+      val fieldAlign = typ.getAlignmentBytes
+      if (offset % fieldAlign > 0)
+        offset += fieldAlign - offset % fieldAlign
+
+      firmField.setOffset(offset)
+      offset += typ.getSizeBytes
+
+      align = math.max(align, fieldAlign) // powers of two
+    }
+    struct.setSizeBytes(offset)
+    struct.setAlignmentBytes(align)
+    struct.finishLayout()
+    new Entity(firm.Program.getGlobalType, cls.name, struct)
+  }
+
+  private def transformProgram(program: Program): Unit = {
+    // Create class, field and method entities
+    program.classes.foreach(cls => {
+      firmClassEntity += cls -> createClassEntity(cls)
+      cls.methods.foreach(method => firmMethodEntity += method -> createMethodEntity(cls, method))
+    })
+
+    // Special case: System.out.println; it is the only MethodDecl in Builtins which is not an operator
+    firmMethodEntity += Builtins.SystemOutPrintlnDecl -> createMethodEntity(null, Builtins.SystemOutPrintlnDecl)
+
+    program.classes.foreach(_.methods.foreach(m => new MethodVisitor(m).visit(m)))
+  }
 
   private def mangle(method: MethodDecl, cls: ClassDecl) = {
     if (method.isStatic)
@@ -28,29 +85,11 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       "_" + cls.name.length.toString + cls.name + "_" + method.name
   }
 
-  private class FirmConstructorVisitor extends PlainRecursiveVisitor[Unit, Unit, Node]((), (), null) {
+  private class MethodVisitor(method: MethodDecl) extends PlainRecursiveVisitor[Unit, Unit, Node]((), (), null) {
 
-    private var graph: Graph = null
-    private var constr: Construction = null
-    private var lastIndex = 0
-    private var declIndex = mutable.Map[Decl, Int]()
-
-    val firmClassEntity = new mutable.HashMap[ClassDecl, firm.Entity]()
-    val firmFieldEntity = new mutable.HashMap[FieldDecl, firm.Entity]()
-    val firmMethodEntity = new mutable.HashMap[MethodDecl, firm.Entity]()
-
-    val firmType: mutable.Map[TypeDef, firm.Type] = new mutable.HashMap().withDefault(typ => {
-      val result = typ match {
-        case Builtins.BooleanType => new PrimitiveType(Mode.getBu)
-        case Builtins.IntType => new PrimitiveType(Mode.getIs)
-        case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
-        case Builtins.VoidType => throw new IllegalArgumentException("void doesn't have a runtime type")
-        /* array and class types */
-        case _ => new PrimitiveType(Mode.getP)
-      }
-      firmType += typ -> result
-      result
-    })
+    val graph = new Graph(firmMethodEntity(method), method.numVars)
+    val constr = new Construction(graph)
+    val declIndex: mutable.Map[Decl, Int] = new mutable.HashMap[Decl, Int]().withPersistentDefault(decl => declIndex.size)
 
     private def firmArrayType(array: TypeArray): Type = {
       var firmArray = firmType(array.elementType)
@@ -68,56 +107,9 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         constr.newCmp(node, constr.newConst(1, Mode.getBu), Relation.Equal)
       else node
 
-    private def createMethodEntity(cls: ClassDecl, method: MethodDecl) = {
-      val paramTypes: Array[Type] = (method.parameters map { p => firmType(p.typ) }).toArray
-      val resultTypes: Array[Type] = method.returnType match {
-        case Builtins.VoidType => Array[Type]()
-        case t                 => Array[Type](firmType(t))
-      }
-      val methodType = new MethodType(paramTypes, resultTypes)
-      new Entity(FirmProgram.getGlobalType, mangle(method, cls), methodType)
-    }
-
-    override def preVisit(program: Program): Unit = {
-      // Create class, field and method entities
-      program.classes.foreach(cls => {
-        val struct = new StructType(cls.name)
-        var offset = 0
-        var align = 1
-        for ((f, i) <- cls.fields.zipWithIndex) {
-          val typ = firmType(f.typ)
-          val firmField = Entity.createParameterEntity(struct, i, typ)
-          firmFieldEntity += f -> firmField
-
-          val fieldAlign = typ.getAlignmentBytes
-          if (offset % fieldAlign > 0)
-            offset += fieldAlign - offset % fieldAlign
-
-          firmField.setOffset(offset)
-          offset += typ.getSizeBytes
-
-          align = math.max(align, fieldAlign) // powers of two
-        }
-        struct.setSizeBytes(offset)
-        struct.setAlignmentBytes(align)
-        struct.finishLayout()
-        firmClassEntity += cls -> new Entity(firm.Program.getGlobalType, cls.name, struct)
-
-        cls.methods.foreach(method => firmMethodEntity += method -> createMethodEntity(cls, method))
-      })
-
-      // Special case: System.out.println; it is the only MethodDecl in Builtins which is not an operator
-      firmMethodEntity += Builtins.SystemOutPrintlnDecl -> createMethodEntity(null, Builtins.SystemOutPrintlnDecl)
-    }
-
     override def preVisit(method: MethodDecl) = {
-      graph = new Graph(firmMethodEntity(method), method.numVars)
-      constr = new Construction(graph)
-      lastIndex = 0
-      declIndex.clear()
       // Create a local variable for each parameter. Otherwise, parameters could not be set
       for ((param, index) <- method.parameters.zipWithIndex) {
-        newLocalVar(param)
         val proj = constr.newProj(graph.getArgs, firmType(param.typ).getMode, index)
         handleLocalVarAssignment(param, proj)
       }
@@ -187,15 +179,6 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case Some(valueNode) => Array[Node](convbToBu(valueNode))
       })
       graph.getEndBlock.addPred(returnNode)
-    }
-
-    override def preVisit(stmt: LocalVarDeclStatement): Unit = {
-      newLocalVar(stmt)
-    }
-
-    private def newLocalVar(decl: TypedDecl): Unit = {
-      declIndex += decl -> lastIndex
-      lastIndex += 1
     }
 
     private def handleLocalVarAssignment(decl: TypedDecl, rhs: Node): Node = {
