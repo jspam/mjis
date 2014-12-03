@@ -125,7 +125,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
   }
 
-  private class TyperVisitor extends TailRecursiveVisitor[Unit, Boolean, Unit]((), false, ()) {
+  private class TyperVisitor extends TailRecursiveVisitor[Unit, Unit, Unit]((), (), ()) {
 
     private var currentMethod: MethodDecl = null
 
@@ -133,9 +133,9 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
 
     override def preVisit(m: MethodDecl) = currentMethod = m
 
-    override def postVisit(m: MethodDecl, _1: Unit, hasReturnStatement: Boolean) = {
+    override def postVisit(m: MethodDecl, _1: Unit, _2: Unit) = {
       currentMethod = null
-      if (!hasReturnStatement && m.returnType != VoidType) {
+      if (m.body.isEndReachable && m.returnType != VoidType) {
         throw new TypecheckException(MissingReturnStatementError(m.pos))
       }
     }
@@ -144,26 +144,26 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
 
     override def postVisit(param: Parameter, _1: Unit) = assertNotVoid(param.typ)
 
-    override def postVisit(stmt: LocalVarDeclStatement, _1: Unit, _2: Option[Unit]): Boolean = {
+    override def postVisit(stmt: LocalVarDeclStatement, _1: Unit, _2: Option[Unit]): Unit = {
       currentMethod.numVars += 1
       assertNotVoid(stmt.typ)
       stmt.initializer match {
         case Some(expr) => assertConvertible(getType(expr), stmt.typ, expr.pos)
         case _ =>
       }
-      false
     }
 
-    override def postVisit(stmt: Block, haveReturnStatements: List[Boolean]): Boolean = haveReturnStatements.exists(x => x)
+    override def postVisit(stmt: Block, _1: List[Unit]): Unit =
+      stmt.isEndReachable = stmt.statements.forall(_.isEndReachable)
 
-    override def postVisit(stmt: If, _1: Unit, ifTrueHasReturnStatement: Boolean, ifFalseHasReturnStatement: Boolean): Boolean = {
+    override def postVisit(stmt: If, _1: Unit, _2: Unit, _3: Unit) = {
       assertConvertible(getType(stmt.condition), BooleanType, stmt.pos)
-      ifTrueHasReturnStatement && ifFalseHasReturnStatement
+      stmt.isEndReachable = stmt.ifTrue.isEndReachable | stmt.ifFalse.isEndReachable
     }
 
-    override def postVisit(stmt: While, _1: Unit, bodyHasReturnStatement: Boolean) = {
+    override def postVisit(stmt: While, _1: Unit, _2: Unit) = {
       assertConvertible(getType(stmt.condition), BooleanType, stmt.pos)
-      false
+      stmt.isEndReachable = true // TODO: constant folding
     }
 
     override def postVisit(stmt: ReturnStatement, _1: Option[Unit]) = {
@@ -175,7 +175,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
           if (currentMethod.returnType != VoidType)
             throw new TypecheckException(MissingReturnValueError(stmt.pos))
       }
-      true
+      stmt.isEndReachable = false
     }
 
     override def postVisit(expr: Assignment, _1: Unit, _2: Unit) = {
