@@ -211,6 +211,20 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mExtendedIntLiteral))
   }
 
+  it should "create a FIRM graph for null" in {
+    def prog =
+      s"""start = Start
+        |mem = Proj M M, start
+        |retval = Const 0 P
+        |return = Return, mem, retval
+        |end = End, return
+      """.stripMargin
+    val mNullLiteralMethodEntity = methodEntity("__expected__4Test_m_null_literal", RefType, Seq())
+    val mNullLiteral = FirmGraphTestHelper.buildFirmGraph(mNullLiteralMethodEntity, prog)
+    fromMembers("public int[] m_null_literal() { return null; }") should
+      succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mNullLiteral))
+  }
+
   it should "create FIRM graphs for System.out.println" in {
     val printIntMethodEntity = methodEntity("System_out_println", null, Seq(IntType), thisPointer = false)
     val mPrintln = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_m_println", null, Seq()),

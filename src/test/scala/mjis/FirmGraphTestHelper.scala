@@ -93,7 +93,7 @@ object FirmGraphTestHelper {
             assert(args.length == 0, s"Const needs zero arguments: $line")
             curNode = mode match {
               case "Iu" => constr.newConst(new TargetValue(value.toLong, modes(mode)))
-              case "Is" | "Bu" => constr.newConst(value.toInt, modes(mode))
+              case "Is" | "Bu" | "P" => constr.newConst(value.toInt, modes(mode))
               case "b" => constr.newConst(value match {
                 case "true" => 1
                 case "false" => 0

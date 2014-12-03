@@ -385,6 +385,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       case p: Parameter =>
         constr.getVariable(declIndex(p), firmType(p.typ).getMode)
     }
+
+    override def postVisit(nullLiteral: NullLiteral): Node = constr.newConst(0, Mode.getP)
   }
 
   override def findings: List[Finding] = List()
