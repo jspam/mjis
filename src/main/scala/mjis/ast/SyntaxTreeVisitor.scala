@@ -203,7 +203,7 @@ class PlainRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
 
   def visit(expr: NewArray): E = {
     preVisit(expr)
-    postVisit(expr, expr.typ.accept(this), expr.firstDimSize.accept(this))
+    postVisit(expr, expr.baseType.accept(this), expr.firstDimSize.accept(this))
   }
 
   def visit(expr: NewObject): E = {
@@ -323,7 +323,7 @@ class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
 
   def visit(expr: NewArray): TailRec[E] = {
     preVisit(expr)
-    expr.firstDimSize.accept(this).map(postVisit(expr, expr.typ.accept(this), _))
+    expr.firstDimSize.accept(this).map(postVisit(expr, expr.baseType.accept(this), _))
   }
 
   def visit(expr: NewObject): TailRec[E] = {

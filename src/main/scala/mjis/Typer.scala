@@ -216,7 +216,7 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     }
 
     override def postVisit(expr: NewArray, _1: Unit, _2: Unit): Unit = {
-      assertNotVoid(expr.typ)
+      assertNotVoid(expr.baseType)
       assertConvertible(getType(expr.firstDimSize), IntType, expr.pos)
     }
   }
