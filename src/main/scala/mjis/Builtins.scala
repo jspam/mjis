@@ -26,11 +26,10 @@ object Builtins {
     ExtendedIntMinusDecl
   ), List.empty)
 
-  val BooleanDecl = ClassDecl("boolean", List(
-    MethodDecl("||", List(Parameter("", BooleanType), Parameter("", BooleanType)), BooleanType, null),
-    MethodDecl("&&", List(Parameter("", BooleanType), Parameter("", BooleanType)), BooleanType, null),
-    MethodDecl("!", List(Parameter("", BooleanType)), BooleanType, null)
-  ), List.empty)
+  val BooleanOrDecl = MethodDecl("||", List(Parameter("", BooleanType), Parameter("", BooleanType)), BooleanType, null)
+  val BooleanAndDecl = MethodDecl("&&", List(Parameter("", BooleanType), Parameter("", BooleanType)), BooleanType, null)
+  val BooleanNotDecl = MethodDecl("!", List(Parameter("", BooleanType)), BooleanType, null)
+  val BooleanDecl = ClassDecl("boolean", List(BooleanOrDecl, BooleanAndDecl, BooleanNotDecl), List.empty)
 
   val ValueTypes = List(IntType, ExtendedIntType, BooleanType)
   val ValueTypeDecls = List(IntDecl, ExtendedIntDecl, BooleanDecl)
