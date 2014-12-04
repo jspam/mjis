@@ -52,10 +52,11 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       result
     })
 
-    private def firmArrayType(array: TypeArray): Type = {
-      var firmArray = firmType(array.elementType)
-      for (i <- 0 until array.numDimensions) firmArray = new ArrayType(firmArray)
-      firmArray
+    private def firmArrayType(arrayType: TypeArray): ArrayType = {
+      // For FIRM, only one dimension of an array is visible at a time.
+      // Multidimensional arrays are just arrays of pointers.
+      if (arrayType.numDimensions > 1) new ArrayType(new PrimitiveType(Mode.getP))
+      else new ArrayType(firmType(arrayType.elementType))
     }
 
     private def convbToBu(node: Node) =
@@ -272,7 +273,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
             sel
           else {
             val arrayType = Typer.getType(expr.arguments(0)).asInstanceOf[TypeArray]
-            val resultType = if (arrayType.numDimensions > 1) firmType(arrayType) else firmType(arrayType.elementType)
+            val resultType = firmArrayType(arrayType).getElementType
             createLoad(sel, resultType)
           }
 
@@ -331,7 +332,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(expr: NewArray, _1: Unit, firstDimSize: Node): Node = {
-      val baseType = firmType(expr.typ)
+      val arrayType = Typer.getType(expr).asInstanceOf[TypeArray]
+      val baseType = firmArrayType(arrayType).getElementType
       val size = constr.newConst(baseType.getSizeBytes, Mode.getIu)
       val elems = constr.newConv(firstDimSize, Mode.getIu)
       call(calloc, Array[Node](elems, size))
