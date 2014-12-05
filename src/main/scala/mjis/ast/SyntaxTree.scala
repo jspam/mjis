@@ -148,8 +148,8 @@ final case class Apply(name: String, var arguments: List[Expression], isOperator
 final case class NewObject(typ: TypeBasic)(implicit val pos: Position) extends Expression {
   override def accept[E](visitor: ExpressionVisitor[E]): E = visitor.visit(this)
 }
-/* new `typ`[firstDimSize][]^additionalDims */
-final case class NewArray(typ: TypeBasic, firstDimSize: Expression, additionalDims: Int)(implicit val pos: Position) extends Expression {
+/* new `baseType`[firstDimSize][]^additionalDims */
+final case class NewArray(baseType: TypeBasic, firstDimSize: Expression, additionalDims: Int)(implicit val pos: Position) extends Expression {
   override def accept[E](visitor: ExpressionVisitor[E]): E = visitor.visit(this)
 }
 /* `qualifier`.`name` */
