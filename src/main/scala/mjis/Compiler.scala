@@ -22,26 +22,36 @@ object Compiler {
     "codegen" -> classOf[CodeGenerator]
   )
 
+  /**
+   * Executes the compiler pipeline up to and including the specified Phase and returns
+   * the phase on success, or a list of findings on failure.
+   * Note that for until == classOf[Lexer], this method will always return the phase
+   * and you'll have to check for success yourself. This is because the lexer's result
+   * is only iterable once.
+   */
   def exec(input: Reader, until: Class[_ <: Phase[_]]): Either[Phase[_], List[Finding]] = {
-    val phases = ListBuffer[Phase[AnyRef]](new Lexer(input))
-    for (cls <- pipeline.tail) {
-      val result = phases.last.result
+    val phases = ListBuffer[Phase[AnyRef]]()
+    for (cls <- pipeline) {
+      if (phases.isEmpty)
+        // need to special case the lexer because it has multiple constructors,
+        // so .head won't necessarily pick out the right one
+        phases += new Lexer(input)
+      else {
+        assert(cls.getConstructors.size == 1)
+        phases += cls.getConstructors.head.asInstanceOf[Constructor[_ <: AnyRef]].
+          newInstance(phases.last.result).asInstanceOf[Phase[AnyRef]]
+      }
+
+      // Don't force the Lexer result because it is iterable only once.
+      if (cls != classOf[Lexer])
+        phases.last.forceResult()
 
       val findings = phases.flatMap(_.findings)
       if (findings.exists(_.severity == Severity.ERROR))
         return Right(findings.toList)
 
-      phases += cls.getConstructors.asInstanceOf[Array[Constructor[_ <: AnyRef]]].head.newInstance(phases.last.result).asInstanceOf[Phase[AnyRef]]
-
-      if (cls == until) {
-        phases.last.forceResult()
-
-        val findings = phases.flatMap(_.findings)
-        if (findings.exists(_.severity == Severity.ERROR))
-          return Right(findings.toList)
-
+      if (cls == until)
         return Left(phases.last)
-      }
     }
     throw new IllegalArgumentException(s"Unknown phase: $until")
   }
@@ -61,6 +71,18 @@ object Compiler {
     Mode.setDefaultModeP(modeP)
     Backend.option("isa=amd64")
 
+    def printFindings(findings: Seq[Finding], printErrorText: Boolean) = {
+      val inputLines = config.file match {
+        case Some(file) => Files.lines(file).iterator().toIterable
+        case None       => Iterable.empty
+      }
+      val out = new OutputStreamWriter(System.err)
+      Finding.printAll(findings, inputLines, out)
+      out.close()
+      if (printErrorText)
+        System.out.println("error")
+    }
+
     exec(input, target) match {
       case Left(phase) =>
         if (config.stopAfter != "") {
@@ -68,17 +90,16 @@ object Compiler {
           phase.dumpResult(out)
           out.close()
         }
-        true
-      case Right(findings) =>
-        val inputLines = config.file match {
-          case Some(file) => Files.lines(file).iterator().toIterable
-          case None       => Iterable.empty
+        if (config.stopAfter == "lexer") {
+          // exec does not check for success of the lexer
+          val success = phase.asInstanceOf[Lexer].success
+          printFindings(phase.findings, printErrorText = !success)
+          success
+        } else {
+          true
         }
-        val out = new OutputStreamWriter(System.err)
-        Finding.printAll(findings, inputLines, out)
-        out.close()
-        if (config.stopAfter != "")
-          System.out.println("error")
+      case Right(findings) =>
+        printFindings(findings, printErrorText = config.stopAfter != "")
         false
     }
   }
