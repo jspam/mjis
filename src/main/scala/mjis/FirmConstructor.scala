@@ -260,7 +260,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         // other methods
 
         case _ =>
-          val args = expr.arguments.map(_.accept(this)).map(exprResultToValue(_).node)
+          // Fully process one argument after another, else stray blocks without successors might occur.
+          val args = expr.arguments.map(arg => exprResultToValue(arg.accept(this)).node)
           def cmp(r: Relation) = bToControlFlow(constr.newCmp(args(0), args(1), r))
 
           expr.decl match {
