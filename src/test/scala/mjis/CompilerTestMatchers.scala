@@ -1,6 +1,7 @@
 package mjis
 
 import firm.Graph
+
 import org.scalatest.Assertions
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
@@ -8,6 +9,7 @@ import System.{ lineSeparator => n }
 import java.io._
 import scala.collection.JavaConversions._
 import scala.io.Source
+import scala.sys.process._
 
 import scala.reflect.ClassTag
 
@@ -121,36 +123,30 @@ trait CompilerTestMatchers {
     }
   }
 
+  lazy val ClassPath: String = Seq("sbt", "export compile:fullClasspath").lineStream.last
 
   class IntegrationTestMatcher() extends Matcher[String] {
 
-    def compileCmd(path: String) = "java -cp target/scala-2.11/classes:" +
-      s"target/scala-2.11/mjis-assembly-0.1-SNAPSHOT-deps.jar:lib/jfirm.jar:lib/jna.jar mjis/CLIMain $path"
+    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", path)
 
     def apply(path: String) = {
-      val pb = new ProcessBuilder(compileCmd(path).split(' ').toList)
-      val env = pb.environment()
-      env.put("LD_LIBRARY_PATH", env.get("LD_LIBRARY_PATH") + ":lib")
-      val compilerProcess = pb.start()
-      val stderr = new BufferedReader(new InputStreamReader(compilerProcess.getErrorStream))
-      compilerProcess.waitFor()
-      val stream = Stream.continually(stderr.readLine()).takeWhile(_ != null)
-      if (compilerProcess.exitValue != 0 || stream.nonEmpty)
-        Assertions.fail(stream.mkString("\n"))
+      val p = Process(compileCmd(path), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"
+      var err = ""
+      val out = try {
+        p.!!(ProcessLogger(err += _ + "\n"))
+      } catch {
+        case e: Exception => Assertions.fail(err)
+      }
 
-      val testProcess = Runtime.getRuntime.exec("./a.out")
-      val stdout = new BufferedReader(new InputStreamReader(testProcess.getInputStream))
-      val checkString = Source.fromFile(path.stripSuffix("mj") + "check").mkString.stripLineEnd
-      testProcess.waitFor()
-      val outputString = Stream.continually(stdout.readLine()).takeWhile(_ != null).mkString("\n").stripLineEnd
+      val check = Source.fromFile(path.stripSuffix("mj") + "check").mkString
 
-      MatchResult(checkString == outputString,
+      MatchResult(check == out,
         s"""Expected output is not equal to actual output
           |test file: $path
           |expected:
-          |$checkString
+          |$check
           |actual:
-          |$outputString""".stripMargin,
+          |$out""".stripMargin,
         "Expected output is equal to actual output\n")
     }
   }
