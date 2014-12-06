@@ -53,7 +53,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   def getEmptyMainMethodGraph = {
-    val mainMethodEntity = methodEntity("__expected_main", null, Seq())
+    val mainMethodEntity = methodEntity("__expected___main", null, Seq())
     FirmGraphTestHelper.buildFirmGraph(mainMethodEntity, emptyMethodFirm)
   }
 
