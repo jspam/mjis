@@ -1,12 +1,15 @@
 package mjis
 
 import firm.Graph
+
 import org.scalatest.Assertions
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
 import System.{ lineSeparator => n }
-import java.io.{StringReader, StringWriter, BufferedWriter}
+import java.io._
 import scala.collection.JavaConversions._
+import scala.io.Source
+import scala.sys.process._
 
 import scala.reflect.ClassTag
 
@@ -120,6 +123,34 @@ trait CompilerTestMatchers {
     }
   }
 
+  lazy val ClassPath: String = Seq("sbt", "export compile:fullClasspath").lineStream.last
+
+  class IntegrationTestMatcher() extends Matcher[String] {
+
+    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", path)
+
+    def apply(path: String) = {
+      val p = Process(compileCmd(path), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"
+      var err = ""
+      val out = try {
+        p.!!(ProcessLogger(err += _ + "\n"))
+      } catch {
+        case e: Exception => Assertions.fail(err)
+      }
+
+      val check = Source.fromFile(path.stripSuffix("mj") + "check").mkString
+
+      MatchResult(check == out,
+        s"""Expected output is not equal to actual output
+          |test file: $path
+          |expected:
+          |$check
+          |actual:
+          |$out""".stripMargin,
+        "Expected output is equal to actual output\n")
+    }
+  }
+
   def succeedLexing() = new AnalysisPhaseSuccessMatcher[Lexer]()
   def succeedParsing() = new AnalysisPhaseSuccessMatcher[Parser]()
   def succeedParsingWith(expectedAST: Program) = new AnalysisPhaseSuccessWithMatcher[Program, Parser](expectedAST)
@@ -130,7 +161,7 @@ trait CompilerTestMatchers {
   def succeedNaming() = new AnalysisPhaseSuccessMatcher[Namer]()
   def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
-
+  def passIntegrationTest() = new IntegrationTestMatcher()
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
 }
 
