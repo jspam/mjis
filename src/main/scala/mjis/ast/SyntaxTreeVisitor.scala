@@ -224,7 +224,10 @@ class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
   with StatementVisitor[TailRec[S]]
   with ExpressionVisitor[TailRec[E]] {
 
-  private def sequence[A](xs: => List[TailRec[A]]): TailRec[List[A]] = tailcall(done(xs.map(_.result)))
+  private def sequence[A, B](xs: List[A], f: A => TailRec[B]): TailRec[List[B]] = tailcall(xs match {
+    case Nil => done(Nil)
+    case x :: xs => f(x).flatMap(y => sequence(xs, f).map(ys => y :: ys))
+  })
 
   def visit(program: Program): Unit = {
     preVisit(program)
@@ -264,7 +267,7 @@ class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
 
   def visit(stmt: Block): TailRec[S] = {
     preVisit(stmt)
-    sequence(stmt.statements.map(_.accept(this))).map(postVisit(stmt, _))
+    sequence[Statement, S](stmt.statements, _.accept(this)).map(postVisit(stmt, _))
   }
 
   def visit(stmt: EmptyStatement): TailRec[S] = done(postVisit(stmt))
@@ -301,7 +304,7 @@ class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
 
   def visit(expr: Apply): TailRec[E] = {
     preVisit(expr)
-    sequence(expr.arguments.map(_.accept(this))).map(postVisit(expr, _))
+    sequence[Expression, E](expr.arguments, _.accept(this)).map(postVisit(expr, _))
   }
 
   def visit(expr: Assignment): TailRec[E] = {
