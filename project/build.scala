@@ -18,6 +18,7 @@ object MJIS extends Build {
             case x => old(x)
           }
         },
+        unmanagedResourceDirectories in Compile += baseDirectory.value / "lib" / "stdlib",
         mainClass in assembly := Some("mjis.CLIMain"),
         assemblyOption in assembly ~= { _.copy(prependShellScript = Some(shellScript)) },
         scalaVersion := "2.11.4",

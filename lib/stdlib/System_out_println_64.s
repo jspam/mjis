@@ -1,3 +1,4 @@
+	.text
 	.p2align 4,,15
 	.globl System_out_println
 	.type System_out_println, @function

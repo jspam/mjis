@@ -1,12 +1,10 @@
 package mjis
 
-import java.io.BufferedWriter
+import java.io.{FileWriter, BufferedWriter}
 
-import firm.{Program, Util, Backend}
-import mjis.util.FirmDumpHelper
+import firm.{Util, Backend}
 
 import scala.io.Source
-import scala.collection.JavaConversions._
 
 class CodeGenerator(a: Unit) extends Phase[Unit] {
   def findings = List()
@@ -14,9 +12,15 @@ class CodeGenerator(a: Unit) extends Phase[Unit] {
     Source.fromFile("a.s").foreach(a.write(_))
   }
   def getResult(): Unit = {
+    val asm = "a.s"
     Util.lowerSels()
-    Backend.createAssembler("a.s", "<input>")
-    Runtime.getRuntime.exec("gcc -m64 a.s lib/System_out_println_64.s").waitFor()
+    Backend.createAssembler(asm, "<input>")
+    // concatenate our implementation of System_out_println to the assembly code
+    val stdlib = Source.fromInputStream(this.getClass.getClassLoader.getResourceAsStream("System_out_println_64.s"))
+    val fw = new BufferedWriter(new FileWriter(asm, true))
+    stdlib.foreach(fw.write(_))
+    fw.flush()
+    Runtime.getRuntime.exec(s"gcc -m64 $asm").waitFor()
   }
 
 }
