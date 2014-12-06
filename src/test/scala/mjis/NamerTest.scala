@@ -21,6 +21,8 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   "The namer" should "recognize local variable references" in {
     val statements = getStatements("int x; x;")
     getRefDecl(statements(1)) shouldBe statements(0)
+
+    fromStatements("{ int x; } int y; while (true) { y; }") should succeedNaming()
   }
 
   it should "recognize type references" in {

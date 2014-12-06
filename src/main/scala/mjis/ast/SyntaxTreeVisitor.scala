@@ -1,6 +1,7 @@
 package mjis.ast
 
 import scala.util.control.TailCalls._
+import mjis.util.ListOfTailRecExtensions._
 
 trait ProgramVisitor {
   def visit(program: Program): Unit
@@ -224,8 +225,6 @@ class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
   with StatementVisitor[TailRec[S]]
   with ExpressionVisitor[TailRec[E]] {
 
-  private def sequence[A](xs: => List[TailRec[A]]): TailRec[List[A]] = tailcall(done(xs.map(_.result)))
-
   def visit(program: Program): Unit = {
     preVisit(program)
     program.classes.foreach(visit)
@@ -264,7 +263,7 @@ class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
 
   def visit(stmt: Block): TailRec[S] = {
     preVisit(stmt)
-    sequence(stmt.statements.map(_.accept(this))).map(postVisit(stmt, _))
+    stmt.statements.sequenceMap(_.accept(this)).map(postVisit(stmt, _))
   }
 
   def visit(stmt: EmptyStatement): TailRec[S] = done(postVisit(stmt))
@@ -301,7 +300,7 @@ class TailRecursiveVisitor[T, S, E](defaultT: T, defaultS: S, defaultE: E)
 
   def visit(expr: Apply): TailRec[E] = {
     preVisit(expr)
-    sequence(expr.arguments.map(_.accept(this))).map(postVisit(expr, _))
+    expr.arguments.sequenceMap(_.accept(this)).map(postVisit(expr, _))
   }
 
   def visit(expr: Assignment): TailRec[E] = {
