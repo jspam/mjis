@@ -76,8 +76,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
   private def transformProgram(program: Program): Unit = {
     // Create class, field and method entities
     program.classes.foreach(cls => {
-      firmClassEntity += cls -> createClassEntity(cls)
       cls.methods.foreach(method => firmMethodEntity += method -> createMethodEntity(cls, method))
+      firmClassEntity += cls -> createClassEntity(cls)
     })
 
     // Special case: System.out.println; it is the only MethodDecl in Builtins which is not an operator
@@ -87,8 +87,13 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
   }
 
   private def mangle(method: MethodDecl, cls: ClassDecl) = {
-    if (method.isStatic)
-      method.name.replace('.', '_')
+    if (method.isStatic) {
+      if (method.name == "main")
+        // we wrap the main method because of its missing return value
+        "__main"
+      else
+        method.name.replace('.', '_')
+    }
     else
       "_" + cls.name.length.toString + cls.name + "_" + method.name
   }
