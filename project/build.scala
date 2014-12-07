@@ -20,6 +20,7 @@ object MJIS extends Build {
         },
         unmanagedResourceDirectories in Compile += baseDirectory.value / "lib" / "stdlib",
         mainClass in assembly := Some("mjis.CLIMain"),
+        test in assembly := {},
         assemblyOption in assembly ~= { _.copy(prependShellScript = Some(shellScript)) },
         scalaVersion := "2.11.4",
         scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-Xlint", "-Xfuture"),
