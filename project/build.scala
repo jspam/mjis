@@ -5,7 +5,7 @@ import AssemblyKeys._
 
 object MJIS extends Build {
   val shellScript = Seq("#!/usr/bin/env sh",
-    """LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`dirname $0`/../../lib exec java -jar "$0" "$@" """)
+    """LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(dirname $0)/../../lib exec java -jar "$0" "$@" """)
 
   lazy val root =
     project
