@@ -1,8 +1,10 @@
 package mjis
 
+import CompilerTestHelper._
 import CompilerTestMatchers._
 import firm._
 import org.scalatest._
+import scala.collection.JavaConversions._
 
 class FirmGraphTestHelperTest extends FlatSpec with Matchers with BeforeAndAfter {
 
@@ -118,6 +120,44 @@ class FirmGraphTestHelperTest extends FlatSpec with Matchers with BeforeAndAfter
     constr.finish()
 
     constructedGraph shouldNot beIsomorphicTo(refGraph)
+  }
+
+  it should "check FIRM graphs with control flow for isomorphism" in {
+    val testProg = fromMembers(
+      """
+        |public int controlflow_isomorphic_left() {
+        |  int j = 2;
+        |  int i = 1;
+        |  int k = 42;
+        |  if (j > i) {
+        |    k = 42;
+        |  } else {
+        |    k = 41;
+        |  }
+        |  return k;
+        |}
+        |public int controlflow_isomorphic_right() {
+        |  int i = 2;
+        |  int j = 1;
+        |  int k = 0;
+        |  if (i > j) {
+        |    k = 42;
+        |  } else {
+        |    k = 41;
+        |  }
+        |  return k;
+        |}
+      """.stripMargin)
+
+    val firmConstructor = assertExec[FirmConstructor](testProg)
+    firmConstructor.dumpResult(null)
+
+    val left = Program.getGraphs.find(_.getEntity.getName == "_4Test_controlflow_isomorphic_left")
+    assert(left.isDefined)
+    val right = Program.getGraphs.find(_.getEntity.getName == "_4Test_controlflow_isomorphic_right")
+    assert(right.isDefined)
+
+    left.get should beIsomorphicTo(right.get)
   }
 
 }
