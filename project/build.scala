@@ -8,10 +8,6 @@ object MJIS extends Build {
     """LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(dirname $0)/../../lib exec java -jar "$0" "$@" """)
 
   val binary = TaskKey[Unit]("binary", "creates an executable polyglot ELF/jar binary")
-  (binary in Compile) <<= (binary in Compile) dependsOn (assembly in Compile)
-
-  val _jarName = "run.sh"
-  val buildDir = "target/scala-2.11"
 
   lazy val root =
     project
@@ -19,7 +15,7 @@ object MJIS extends Build {
       .settings(assemblySettings: _*)
       .settings(
         name := "mjis",
-        jarName in assembly := _jarName,
+        jarName in assembly := "run.sh",
         mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) => {
             case PathList("META-INF") => MergeStrategy.discard
             case x => old(x)
@@ -34,12 +30,14 @@ object MJIS extends Build {
         libraryDependencies += "com.github.scopt" % "scopt_2.11" % "3.2.0",
         libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.1" % "test",
         parallelExecution in test := false,
-        binary in Compile <<= (assembly in Compile) map { _ =>
-          import scala.sys.process._
+        binary := {
           println("Creating ELF/jar file...")
-          Seq("cp", "lib/libfirm.so", buildDir + "/libfirm.so").!!
-          Seq("cat", buildDir + "/" + _jarName) #>> new File(buildDir + "/libfirm.so") !!
-        }
+          val file = crossTarget.value / "libfirm.so"
+          IO.copyFile(baseDirectory.value / "lib" / "libfirm.so", file)
+          IO.append(file, IO.readBytes(crossTarget.value / (jarName in assembly).value))
+          Seq("chmod", "+x", file.getAbsolutePath).!
+        },
+        binary <<= binary dependsOn (assembly in Compile)
       )
 
 }
