@@ -99,7 +99,7 @@ trait CompilerTestMatchers {
             failureMessage = s"Missing graph $name"
           case Some(actual) =>
             val error = FirmGraphTestHelper.isIsomorphic(expected, actual)
-            if (!error.isEmpty) {
+            if (error.isDefined) {
               success = false
               failureMessage = s"Graphs ${expected.getEntity.getName} and ${actual.getEntity.getName} " +
                 s"were not isomorphic: $error"

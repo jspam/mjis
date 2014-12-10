@@ -14,6 +14,8 @@ object FirmGraphTestHelper {
   def removeExpectedPrefix(name: String) =
     if (name.startsWith(ExpectedPrefix)) name.substring(ExpectedPrefix.length) else name
 
+  def isBlock(node: Node) = node.getOpCode == ir_opcode.iro_Block
+
   def buildFirmGraph(methodEntity: Entity, graphDescription: String): Graph = {
     val nodes = scala.collection.mutable.Map[String, Node]()
     var curNode: Node = null
@@ -164,85 +166,88 @@ object FirmGraphTestHelper {
     graph
   }
 
-  private def nodesEqual(left: Node, right: Node): String = {
+  private def nodesEqual(left: Node, right: Node): Option[String] = {
+    if (left == null && right == null)
+      return None
+    if (left.visited() && right.visited())
+      return None
+    if (left.visited() && !right.visited())
+      return Some(s"$left was already visited, while $right was not")
+    if (right.visited() && !left.visited())
+      return Some(s"$right was already visited, while $left was not")
+    left.markVisited()
+    right.markVisited()
+
     if (left.getOpCode != right.getOpCode)
-      return s"Opcodes of $left and $right do not match"
+      return Some(s"Opcodes of $left and $right do not match")
     if (left.getMode != right.getMode)
-      return s"Modes of $left and $right do not match"
+      return Some(s"Modes of $left and $right do not match")
+
     left.getOpCode match {
       case ir_opcode.iro_Add | ir_opcode.iro_Start | ir_opcode.iro_End | ir_opcode.iro_Sub |
            ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod |
            ir_opcode.iro_Not | ir_opcode.iro_Call | ir_opcode.iro_Conv | ir_opcode.iro_Mux |
-           ir_opcode.iro_Minus | ir_opcode.iro_Load => ""
+           ir_opcode.iro_Minus | ir_opcode.iro_Load | ir_opcode.iro_Block | ir_opcode.iro_Phi |
+           ir_opcode.iro_Jmp | ir_opcode.iro_Cond =>
+
       case ir_opcode.iro_Address =>
         val (leftAsAddr, rightAsAddr) = (new Address(left.ptr), new Address(right.ptr))
         val leftName = removeExpectedPrefix(leftAsAddr.getEntity.getLdName)
         val rightName = removeExpectedPrefix(rightAsAddr.getEntity.getLdName)
-        if (leftName == rightName) ""
-        else s"Entity ldnames of $left ($leftName) and $right ($rightName) do not match"
+        if (leftName != rightName)
+          return Some(s"Entity ldnames of $left ($leftName) and $right ($rightName) do not match")
+
       case ir_opcode.iro_Proj =>
         val (leftAsProj, rightAsProj) = (new Proj(left.ptr), new Proj(right.ptr))
-        if (leftAsProj.getNum == rightAsProj.getNum) ""
-        else s"Projection numbers of $left (${leftAsProj.getNum}} and $right (${rightAsProj.getNum}} do not match"
+        if (leftAsProj.getNum != rightAsProj.getNum)
+          return Some (s"Projection numbers of $left (${leftAsProj.getNum}} and $right (${rightAsProj.getNum}} do not match")
+
       case ir_opcode.iro_Const =>
         val (leftAsConst, rightAsConst) = (new Const(left.ptr), new Const(right.ptr))
-        if (leftAsConst.getTarval.compare(rightAsConst.getTarval) == Relation.Equal) ""
-        else s"Constant values of $left (${leftAsConst.getTarval}) and $right (${rightAsConst.getTarval}) do not match"
+        if (leftAsConst.getTarval.compare(rightAsConst.getTarval) != Relation.Equal)
+          return Some(s"Constant values of $left (${leftAsConst.getTarval}) and $right (${rightAsConst.getTarval}) do not match")
+
       case ir_opcode.iro_Cmp =>
         val (leftAsCmp, rightAsCmp) = (new Cmp(left.ptr), new Cmp(right.ptr))
-        if (leftAsCmp.getRelation.value() == rightAsCmp.getRelation.value()) ""
-        else s"Comparison modes of $left (${leftAsCmp.getRelation}) and $right (${rightAsCmp.getRelation}) do not match"
+        if (leftAsCmp.getRelation.value() != rightAsCmp.getRelation.value())
+          return Some(s"Comparison modes of $left (${leftAsCmp.getRelation}) and $right (${rightAsCmp.getRelation}) do not match")
+
       case ir_opcode.iro_Member =>
         val (leftAsMember, rightAsMember) = (new Member(left.ptr), new Member(right.ptr))
         val leftName = removeExpectedPrefix(leftAsMember.getEntity.getLdName)
         val rightName = removeExpectedPrefix(rightAsMember.getEntity.getLdName)
-        if (leftName == rightName) ""
-        else s"Entity ldnames of $left ($leftName) and $right ($rightName) do not match"
+        if (leftName != rightName)
+          return Some(s"Entity ldnames of $left ($leftName) and $right ($rightName) do not match")
+
       case _ => throw new NotImplementedError(s"Unimplemented opcode: ${left.getOpCode}")
     }
-  }
 
-  /** Returns an empty string if the graphs are isomorphic, and an error message otherwise. */
-  def isIsomorphic(left: Graph, right: Graph): String = {
-    val leftVisited = scala.collection.mutable.Set[Int]()
-    val rightVisited = scala.collection.mutable.Set[Int]()
-    val workList = scala.collection.mutable.ListBuffer[(Node, Node)]()
+    val blocksEqualError = left.getOpCode match {
+      case ir_opcode.iro_Const => None // Const nodes may be placed anywhere
+      case _ => nodesEqual(left.getBlock, right.getBlock)
+    }
+    if (blocksEqualError.isDefined)
+      return blocksEqualError
 
-    val leftEndBlock = left.getEndBlock
-    val rightEndBlock = right.getEndBlock
+    if (left.getPredCount != right.getPredCount)
+      return Some(s"Predecessor counts of $left and $right do not match")
 
-    if (leftEndBlock.getPredCount != rightEndBlock.getPredCount)
-      return "Predecessor count of end blocks does not match " +
-        s"(left: ${leftEndBlock.getPredCount}, right: ${rightEndBlock.getPredCount})"
-    for (i <- 0 until leftEndBlock.getPredCount) workList.+=((leftEndBlock.getPred(i), rightEndBlock.getPred(i)))
-
-    while (workList.nonEmpty) {
-      val (leftNode, rightNode) = workList.remove(0)
-      nodesEqual(leftNode, rightNode) match {
-        case "" =>
-        case s => return s
-      }
-      if (leftNode.getPredCount != rightNode.getPredCount)
-        return s"Predecessor counts of $leftNode and $rightNode do not match"
-      for (i <- 0 until leftNode.getPredCount) {
-        val leftPred = leftNode.getPred(i)
-        val rightPred = rightNode.getPred(i)
-
-        if (leftVisited(leftPred.getNr)) {
-          if (!rightVisited(rightPred.getNr))
-            return s"$leftPred was already visited, but $rightPred was not"
-        } else if (rightVisited(rightPred.getNr)) {
-          if (!leftVisited(leftPred.getNr))
-            return s"$rightPred was already visited, but $leftPred was not"
-        } else {
-          leftVisited.add(leftPred.getNr)
-          rightVisited.add(rightPred.getNr)
-          workList.+=((leftPred, rightPred))
-        }
+    val (leftIterator, rightIterator) = (left.getPreds.iterator(), right.getPreds.iterator())
+    while (leftIterator.hasNext) {
+      nodesEqual(leftIterator.next(), rightIterator.next()) match {
+        case Some(s) => return Some(s + System.lineSeparator() + s"while checking predecessors of $left and $right")
+        case _ =>
       }
     }
 
-    ""
+    None
+  }
+
+  /** Returns None if the graphs are isomorphic, and an error message otherwise. */
+  def isIsomorphic(left: Graph, right: Graph): Option[String] = {
+    left.incVisited()
+    right.incVisited()
+    nodesEqual(left.getEndBlock, right.getEndBlock)
   }
 
 }
