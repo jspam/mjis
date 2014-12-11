@@ -7,6 +7,8 @@ object MJIS extends Build {
   val shellScript = Seq("#!/usr/bin/env sh",
     """LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(dirname $0)/../../lib exec java -jar "$0" "$@" """)
 
+  val binary = TaskKey[Unit]("binary", "creates an executable polyglot ELF/jar binary")
+
   lazy val root =
     project
       .in(file("."))
@@ -27,6 +29,15 @@ object MJIS extends Build {
         scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-Xlint", "-Xfuture"),
         libraryDependencies += "com.github.scopt" % "scopt_2.11" % "3.2.0",
         libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.1" % "test",
-        parallelExecution in test := false
+        parallelExecution in test := false,
+        binary := {
+          println("Creating ELF/jar file...")
+          val file = crossTarget.value / "libfirm.so"
+          IO.copyFile(baseDirectory.value / "lib" / "libfirm.so", file)
+          IO.append(file, IO.readBytes(crossTarget.value / (jarName in assembly).value))
+          Seq("chmod", "+x", file.getAbsolutePath).!
+        },
+        binary <<= binary dependsOn (assembly in Compile)
       )
+
 }
