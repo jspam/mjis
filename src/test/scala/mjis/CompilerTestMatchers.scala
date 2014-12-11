@@ -5,6 +5,7 @@ import firm.Graph
 import org.scalatest.Assertions
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
+import mjis.CompilerTestHelper._
 import System.{ lineSeparator => n }
 import java.io._
 import scala.collection.JavaConversions._
@@ -123,6 +124,20 @@ trait CompilerTestMatchers {
     }
   }
 
+  class OptimizerMatcher(after: String) extends Matcher[String] {
+    override def apply(before: String): MatchResult = {
+      val firmConstructor = assertExec[Optimizer](fromMembers(before + System.lineSeparator + after))
+      firmConstructor.dumpResult(null)
+
+      val beforeGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_before")
+      assert(beforeGraph.isDefined)
+      val afterGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_after")
+      assert(afterGraph.isDefined)
+
+      (new FirmGraphIsomorphismMatcher(beforeGraph.get))(afterGraph.get)
+    }
+  }
+
   lazy val ClassPath: String = Seq("sbt", "export compile:fullClasspath").lineStream.last
 
   class IntegrationTestMatcher() extends Matcher[String] {
@@ -163,6 +178,7 @@ trait CompilerTestMatchers {
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def passIntegrationTest() = new IntegrationTestMatcher()
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
+  def optimizeTo(after: String) = new OptimizerMatcher(after)
 }
 
 object CompilerTestMatchers extends CompilerTestMatchers

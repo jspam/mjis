@@ -12,13 +12,14 @@ import firm.Backend
 
 object Compiler {
   private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
-    classOf[FirmConstructor], classOf[CodeGenerator])
+    classOf[FirmConstructor], classOf[Optimizer], classOf[CodeGenerator])
 
   private val stopAfterTargets = Map[String, Class[_ <: Phase[_]]](
     "lexer" -> classOf[Lexer],
     "parser" -> classOf[Parser],
     "semantics" -> classOf[Typer],
     "firm" -> classOf[FirmConstructor],
+    "optimizer" -> classOf[Optimizer],
     "codegen" -> classOf[CodeGenerator]
   )
 
