@@ -45,6 +45,16 @@ object FirmExtensions {
 
   }
 
+  implicit class CallExt(call: Call) {
+    def getCalledGraph: Option[Graph] = {
+      val ent = call.getPtr.asInstanceOf[Address].getEntity
+      if (ent == null)
+        None
+      else
+        Option(ent.getGraph)
+    }
+  }
+
   implicit class NodeExt(node: Node) {
 
     def block: Block = node match {
@@ -53,6 +63,10 @@ object FirmExtensions {
         case b: Block => b
         case _ => null
       }
+    }
+
+    def successors: Iterable[Node] = {
+      BackEdges.getOuts(node).map(_.node)
     }
 
     def idx: Int = bindings.binding_irnode.get_irn_idx(node.ptr)

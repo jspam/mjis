@@ -1,6 +1,6 @@
 package mjis
 
-import firm.Graph
+import firm.{Util, Graph}
 import mjis.asm._
 import mjis.util.CCodeGenerator
 
@@ -160,9 +160,20 @@ trait CompilerTestMatchers {
     }
   }
 
-  class CodeGeneratorMatcher(expected: String) extends Matcher[String] {
+  class CodeGeneratorMatcher(expected: String, excludedOptimizations: Set[Optimization]) extends Matcher[String] {
     override def apply(code: String): MatchResult = {
-      val codeGenerator = assertExec[CodeGenerator](code)
+      assertExec[FirmConstructor](code)
+
+      val opt = new Optimizer(())
+      opt.generalOptimizations = opt.generalOptimizations.filter(!excludedOptimizations.contains(_))
+      opt.highLevelOptimizations = opt.highLevelOptimizations.filter(!excludedOptimizations.contains(_))
+      opt.volatileOptimizations = opt.volatileOptimizations.filter(!excludedOptimizations.contains(_))
+
+      opt.result
+
+      val codeGenerator = new CodeGenerator(())
+      codeGenerator.getResult
+
       // add jumps
       val program = new BlockOrdering(codeGenerator.result).result
       val asmGenerator = new MjisAssemblerFileGenerator(program, null)
@@ -263,7 +274,7 @@ trait CompilerTestMatchers {
   def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
-  def succeedGeneratingCodeWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
+  def succeedGeneratingCodeWith(expectedString: String, excludedOptimizations: Set[Optimization] = Set()) = new CodeGeneratorMatcher(expectedString, excludedOptimizations)
   def succeedAllocatingRegistersInstrSeqWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
     new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, expectedString)
   def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
