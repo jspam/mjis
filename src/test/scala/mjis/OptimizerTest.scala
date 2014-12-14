@@ -96,7 +96,7 @@ class OptimizerTest extends FlatSpec with Matchers with BeforeAndAfter {
       |}
       """.stripMargin)
   }
-  
+
   it should "detect if a variable is assigned to the same value in different branches" in {
     """
      |public int before(boolean b) {

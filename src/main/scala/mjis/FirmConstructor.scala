@@ -190,6 +190,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       val jmp = constr.newJmp()
 
       val condBlock = constr.newBlock()
+      graph.keepAlive(condBlock)
       constr.setCurrentBlock(condBlock)
       condBlock.addPred(jmp)
       val cond = exprResultToControlFlow(stmt.condition.accept(this))

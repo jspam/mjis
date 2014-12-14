@@ -27,7 +27,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
   }
 
   private def constantFolding(g: Graph): Unit =
-    new ConstantFoldingVisitor(g).foldAndReplace
+    new ConstantFoldingVisitor(g).foldAndReplace()
 
   private class ConstantFoldingVisitor(g: Graph) extends NodeVisitor.Default {
 
@@ -48,7 +48,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
       }
 
       def sameConstantAs(other: TargetValue): Boolean = {
-        return tval.isConstant && other.isConstant && tval.asInt == other.asInt
+        tval.isConstant && other.isConstant && tval.asInt == other.asInt
       }
 
       def ===(other: TargetValue): Boolean =
@@ -71,19 +71,33 @@ class Optimizer(input: Unit) extends Phase[Unit] {
         }
       }
       g.walkTopological(visitor)
-      while (!workList.isEmpty) {
-        val head = workList.pop
+      while (workList.nonEmpty) {
+        val head = workList.pop()
         head.accept(this)
       }
       // Replace all nodes with const's if possible
       for ((node, targetval) <- nodeToTarval) {
         if (targetval.isConstant) {
-          if (node.isInstanceOf[Div] || node.isInstanceOf[Mod]) {
-            // the Div / Mod node itself is not exchanged, instead it's result Proj
-            // will be replaced
-            deleteDivOrMod(node)
-          } else
-            GraphBase.exchange(node, g.newConst(targetval))
+          node match {
+            case _: Div | _: Mod =>
+              // the Div / Mod node itself is not exchanged, instead it's result Proj
+              // will be replaced
+              deleteDivOrMod(node)
+            case _ : Proj => if (node.getMode != Mode.getX) GraphBase.exchange(node, g.newConst(targetval))
+            case cond: Cond =>
+              // all successors of cond nodes are proj true / false
+              val pred = targetval == TargetValue.getBTrue
+              val trueProj = BackEdges.getOuts(node).filter(_.node.asInstanceOf[Proj].getNum == Cond.pnTrue).head.node
+              val falseProj = BackEdges.getOuts(node).filter(_.node.asInstanceOf[Proj].getNum == Cond.pnFalse).head.node
+              val takenBranch = if (pred) trueProj else falseProj
+              val discardedBranch = if (pred) falseProj else trueProj
+
+              GraphBase.exchange(node, g.newBad(Mode.getX))
+              GraphBase.exchange(takenBranch, g.newJmp(takenBranch.getBlock))
+              GraphBase.exchange(discardedBranch, g.newBad(Mode.getX))
+
+            case _ => GraphBase.exchange(node, g.newConst(targetval))
+          }
         }
       }
     }
@@ -121,7 +135,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
         || node.getPred.isInstanceOf[Call]
         || node.getPred.isInstanceOf[Load])
         updateWorkList(node, TargetValue.getBad)
-      else if (node.getMode == Mode.getIs)
+      else if (node.getMode == Mode.getIs || node.getMode == Mode.getX)
         foldUnaryIntOperator(x => x, node)
     }
 
@@ -136,6 +150,23 @@ class Optimizer(input: Unit) extends Phase[Unit] {
 
     override def visit(node: Minus): Unit =
       foldUnaryIntOperator(x => x.neg, node)
+
+    override def visit(node: Cmp): Unit = {
+      node.getRelation match {
+        case Relation.Equal => foldBinaryBooleanOperator((x, y) => x == y, node)
+        case Relation.Greater => foldBinaryBooleanOperator((x, y) => x > y, node)
+        case Relation.GreaterEqual => foldBinaryBooleanOperator((x, y) => x >= y, node)
+        case Relation.Less => foldBinaryBooleanOperator((x, y) => x < y, node)
+        case Relation.LessEqual => foldBinaryBooleanOperator((x, y) => x <= y, node)
+        case Relation.UnorderedLessGreater => foldBinaryBooleanOperator((x, y) => x != y, node)
+        case _ => ???
+      }
+    }
+
+    override def visit(node: Cond): Unit = {
+      val pred = nodeToTarval(node.getSelector)
+      updateWorkList(node, pred)
+    }
 
     private def foldUnaryIntOperator(op: TargetValue => TargetValue, node: Node): Unit = {
       val predVal = nodeToTarval(node.getPred(0))
@@ -159,6 +190,13 @@ class Optimizer(input: Unit) extends Phase[Unit] {
         else
           updateWorkList(node, TargetValue.getBad)
       }
+    }
+
+    private def foldBinaryBooleanOperator(op: (Int, Int) => Boolean, cmp: Cmp): Unit = {
+      foldBinaryIntOperator((left, right) =>
+          if (op(left.asInt, right.asInt)) TargetValue.getBTrue else TargetValue.getBFalse,
+        cmp, cmp.getLeft, cmp.getRight
+      )
     }
 
     private def updateWorkList(node: Node, tarVal: TargetValue): Unit = {
