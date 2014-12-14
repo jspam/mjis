@@ -17,8 +17,13 @@ class Optimizer(input: Unit) extends Phase[Unit] {
   override protected def getResult(): Unit = firm.Program.getGraphs.foreach(optimizeGraph)
 
   private def optimizeGraph(g: Graph): Unit = {
-    removeTrivialPhis(g)
+    BackEdges.enable(g)
+
     constantFolding(g)
+    eliminateCommonSubexpressions(g)
+    eliminateTrivialPhis(g)
+
+    BackEdges.disable(g)
   }
 
   private def constantFolding(g: Graph): Unit =
@@ -60,7 +65,6 @@ class Optimizer(input: Unit) extends Phase[Unit] {
      * Executes constant folding in the irg.
      */
     def foldAndReplace(): Unit = {
-      BackEdges.enable(g)
       val visitor = new NodeVisitor.Default {
         override def defaultVisit(node: Node): Unit = {
           workList.push(node)
@@ -82,7 +86,6 @@ class Optimizer(input: Unit) extends Phase[Unit] {
             GraphBase.exchange(node, g.newConst(targetval))
         }
       }
-      BackEdges.disable(g)
     }
 
     /*
@@ -167,9 +170,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     }
   }
 
-  private def removeTrivialPhis(g: Graph): Unit = {
-    BackEdges.enable(g)
-
+  private def eliminateTrivialPhis(g: Graph): Unit = {
     g.walk(new NodeVisitor.Default {
       override def visit(node: Phi): Unit = {
         // skip memory phis
@@ -190,7 +191,32 @@ class Optimizer(input: Unit) extends Phase[Unit] {
         }
       }
     })
-    BackEdges.disable(g)
+  }
+
+  private def eliminateCommonSubexpressions(g: Graph): Unit = {
+    // map from data uniquely identifying a subexpression to the representing node
+    val m = mutable.Map[AnyRef, Node]()
+
+    def getData: PartialFunction[Node, AnyRef] = {
+      case c: Const => c.getTarval.asLong.underlying()
+      case _: Add | _: Sub | _: Minus | _: Mul | _: Div | _: Mod | _: Sel | _: Conv | _: Cond | _: Phi => null // no data
+      case proj: Proj => (proj.getPred, proj.getNum)
+      case cmp: Cmp => cmp.getRelation
+      case addr: Address => addr.getEntity
+      case member: Member => member.getEntity
+    }
+
+    g.walkPostorder(new NodeVisitor.Default {
+      override def defaultVisit(node: Node): Unit = getData.lift(node) match {
+        case Some(nodeData) =>
+          val data = (node.getOpCode, node.getBlock, node.getMode, node.getPreds.toList, nodeData)
+          m.get(data) match {
+            case Some(n2) => GraphBase.exchange(node, n2)
+            case None => m += data -> node
+          }
+        case None =>
+      }
+    })
   }
 
 }
