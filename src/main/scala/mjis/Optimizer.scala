@@ -22,7 +22,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
   }
 
   private def constantFolding(g: Graph): Unit =
-    new ConstantFoldingVisitor(g).foldAndReplace
+    new ConstantFoldingVisitor(g).foldAndReplace()
 
   private class ConstantFoldingVisitor(g: Graph) extends NodeVisitor.Default {
 
@@ -43,7 +43,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
       }
 
       def sameConstantAs(other: TargetValue): Boolean = {
-        return tval.isConstant && other.isConstant && tval.asInt == other.asInt
+        tval.isConstant && other.isConstant && tval.asInt == other.asInt
       }
 
       def ===(other: TargetValue): Boolean =
@@ -67,8 +67,8 @@ class Optimizer(input: Unit) extends Phase[Unit] {
         }
       }
       g.walkTopological(visitor)
-      while (!workList.isEmpty) {
-        val head = workList.pop
+      while (workList.nonEmpty) {
+        val head = workList.pop()
         head.accept(this)
       }
       // Replace all nodes with const's if possible
