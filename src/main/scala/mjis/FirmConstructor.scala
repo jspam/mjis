@@ -205,10 +205,12 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(stmt: ReturnStatement, optExprResult: Option[ExprResult]): Unit = {
-      val returnNode = constr.newReturn(constr.getCurrentMem, optExprResult match {
+      // evaluate optExprResult first since it could introduce new blocks
+      val returnValues = optExprResult match {
         case None             => Array[Node]()
         case Some(exprResult) => Array[Node](exprResultToValue(exprResult).node)
-      })
+      }
+      val returnNode = constr.newReturn(constr.getCurrentMem, returnValues)
       graph.getEndBlock.addPred(returnNode)
     }
 
@@ -373,8 +375,10 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     override def postVisit(expr: NewArray, _1: Unit, firstDimSize: ExprResult): ExprResult = {
       val arrayType = Typer.getType(expr).asInstanceOf[TypeArray]
       val baseType = firmArrayType(arrayType).getElementType
-      val size = constr.newConst(baseType.getSizeBytes, Mode.getIu)
+
+      // evaluate elems first since it could introduce new blocks
       val elems = constr.newConv(exprResultToValue(firstDimSize).node, Mode.getIu)
+      val size = constr.newConst(baseType.getSizeBytes, Mode.getIu)
       Value(call(calloc, Array[Node](elems, size)))
     }
 
@@ -392,8 +396,9 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     override def postVisit(expr: Assignment, lhsResult: ExprResult, rhsResult: ExprResult): ExprResult = {
-      val lhs = exprResultToValue(lhsResult).node
+      // evaluate rhs first since it could introduce new blocks
       val rhs = exprResultToValue(rhsResult).node
+      val lhs = lhsResult.asInstanceOf[Value].node // L-values are always Values
 
       Value(expr.lhs match {
         case ident: Ident => ident.decl match {
