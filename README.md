@@ -8,12 +8,12 @@ How to get started
  - Install [SBT](http://www.scala-sbt.org/0.13/tutorial/Manual-Installation.html)
  - Done.
 
-Creating a stand-alone compiler jar file
-----------------------------------------
+Creating a stand-alone binary
+-----------------------------
 
- - Run `sbt assembly` from inside the mjis directory
- - Location of compiler: target/scala-2.11/run.sh
- - Use the compiler, e. g. `./run.sh Hello.java`
+ - Run `sbt binary` from inside the mjis directory
+ - Location of compiler: target/scala-2.11/libfirm.so
+ - Use the compiler, e. g. `./libfirm.so Hello.java`
 
 Generating IDE project files
 ----------------------------
