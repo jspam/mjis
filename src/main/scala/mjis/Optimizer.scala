@@ -47,7 +47,8 @@ class Optimizer(input: Unit) extends Phase[Unit] {
       }
 
       def ===(other: TargetValue): Boolean =
-        tval == other || (tval.isConstant && other.isConstant && tval.asInt == other.asInt)
+        tval == other || (tval.isConstant && other.isConstant
+          && tval.compare(other) == Relation.Equal)
 
     }
 
@@ -112,9 +113,14 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     override def visit(node: Sub): Unit =
       foldBinaryIntOperator((x, y) => x.sub(y, Mode.getIs), node)
 
-    override def visit(node: Proj): Unit =
-      if (node.getMode == Mode.getIs)
+    override def visit(node: Proj): Unit = {
+      if (node.getPred.isInstanceOf[Start]
+        || node.getPred.isInstanceOf[Call]
+        || node.getPred.isInstanceOf[Load])
+        updateWorkList(node, TargetValue.getBad)
+      else if (node.getMode == Mode.getIs)
         foldUnaryIntOperator(x => x, node)
+    }
 
     override def visit(node: Div): Unit =
       foldBinaryIntOperator((x, y) => x.div(y), node, node.getPred(1), node.getPred(2))
