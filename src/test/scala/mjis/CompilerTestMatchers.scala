@@ -6,6 +6,7 @@ import mjis.util.CCodeGenerator
 import org.scalatest.Assertions
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
+import mjis.opt.Optimization
 import mjis.CompilerTestHelper._
 import System.{ lineSeparator => n }
 import java.io._
@@ -130,20 +131,24 @@ trait CompilerTestMatchers {
       val result = FirmGraphTestHelper.isIsomorphic(left, expectedGraph)
       MatchResult(
         result.isEmpty,
-        s"Expected the graphs to be isomorphic, but they weren't: $result",
+        s"Expected the graphs to be isomorphic, but they weren't:$n${result.getOrElse("")}",
         "Expected the graphs to be not isomorphic, but they were")
     }
   }
 
-  class OptimizerMatcher(after: String) extends Matcher[String] {
+  class OptimizerMatcher(under: Optimization, after: Seq[Optimization], to: String) extends Matcher[String] {
     override def apply(before: String): MatchResult = {
-      val firmConstructor = assertExec[Optimizer](fromMembers(before + System.lineSeparator + after))
-      firmConstructor.dumpResult(null)
+      assertExec[FirmConstructor](fromMembers(before))
+      assertExec[FirmConstructor](fromMembers(to))
 
       val beforeGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_before")
       assert(beforeGraph.isDefined)
       val afterGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_after")
       assert(afterGraph.isDefined)
+
+      after.foreach(_.optimize())
+
+      under.optimize(beforeGraph.get)
 
       (new FirmGraphIsomorphismMatcher(beforeGraph.get))(afterGraph.get)
     }
@@ -190,7 +195,7 @@ trait CompilerTestMatchers {
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def passIntegrationTest() = new IntegrationTestMatcher()
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
-  def optimizeTo(after: String) = new OptimizerMatcher(after)
+  def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, to)
 }
 
 object CompilerTestMatchers extends CompilerTestMatchers
