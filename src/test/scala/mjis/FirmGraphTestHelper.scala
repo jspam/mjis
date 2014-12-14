@@ -6,6 +6,7 @@ import firm.bindings.binding_irnode.ir_opcode
 import firm.bindings.binding_ircons.op_pin_state
 import firm.nodes._
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 object FirmGraphTestHelper {
 
@@ -166,18 +167,17 @@ object FirmGraphTestHelper {
     graph
   }
 
-  private def nodesEqual(left: Node, right: Node): Option[String] = {
+  private def nodesEqual(left: Node, right: Node, visited: mutable.Set[(Node, Node)])
+    : Option[String] = {
     if (left == null && right == null)
       return None
-    if (left.visited() && right.visited())
+    if (left == null || right == null)
+      return Some(s"$left and $right are not equal")
+    
+    if (visited.contains((left, right)))
+      // Already checked
       return None
-    if (left.visited() && !right.visited())
-      return Some(s"$left was already visited, while $right was not")
-    if (right.visited() && !left.visited())
-      return Some(s"$right was already visited, while $left was not")
-    left.markVisited()
-    right.markVisited()
-
+      
     if (left.getOpCode != right.getOpCode)
       return Some(s"Opcodes of $left and $right do not match")
     if (left.getMode != right.getMode)
@@ -224,7 +224,7 @@ object FirmGraphTestHelper {
 
     val blocksEqualError = left.getOpCode match {
       case ir_opcode.iro_Const => None // Const nodes may be placed anywhere
-      case _ => nodesEqual(left.getBlock, right.getBlock)
+      case _ => nodesEqual(left.getBlock, right.getBlock, visited)
     }
     if (blocksEqualError.isDefined)
       return blocksEqualError
@@ -232,22 +232,18 @@ object FirmGraphTestHelper {
     if (left.getPredCount != right.getPredCount)
       return Some(s"Predecessor counts of $left and $right do not match")
 
-    val (leftIterator, rightIterator) = (left.getPreds.iterator(), right.getPreds.iterator())
-    while (leftIterator.hasNext) {
-      nodesEqual(leftIterator.next(), rightIterator.next()) match {
-        case Some(s) => return Some(s + System.lineSeparator() + s"while checking predecessors of $left and $right")
-        case _ =>
-      }
-    }
-
+    visited += ((left, right))
+    left.getPreds().zip(right.getPreds()).foreach(lr => 
+      nodesEqual(lr._1, lr._2, visited) match {
+          case Some(s) => return Some(s + System.lineSeparator() + s"while checking predecessors of $left and $right")
+          case _ =>
+      })
     None
   }
 
   /** Returns None if the graphs are isomorphic, and an error message otherwise. */
   def isIsomorphic(left: Graph, right: Graph): Option[String] = {
-    left.incVisited()
-    right.incVisited()
-    nodesEqual(left.getEndBlock, right.getEndBlock)
+    nodesEqual(left.getEndBlock, right.getEndBlock, mutable.Set())
   }
 
 }
