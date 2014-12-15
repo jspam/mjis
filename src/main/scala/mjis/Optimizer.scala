@@ -143,14 +143,27 @@ class Optimizer(input: Unit) extends Phase[Unit] {
         foldUnaryIntOperator(x => x, node)
     }
 
-    override def visit(node: Div): Unit =
-      foldBinaryIntOperator((x, y) => x.div(y), node, node.getPred(1), node.getPred(2))
+    override def visit(node: Div): Unit = nodeToTarval(node.getPred(1)) match {
+      case TargetValueExtr(0) =>
+        // 0 / x == 0 (ignoring 0/0)
+        updateWorkList(node, new TargetValue(0, Mode.getIs))
+      case _ =>
+        foldBinaryIntOperator((x, y) => x.div(y), node, node.getPred(1), node.getPred(2))
+    }
 
-    override def visit(node: Mod): Unit =
-      foldBinaryIntOperator((x, y) => x.mod(y), node, node.getPred(1), node.getPred(2))
+    override def visit(node: Mod): Unit = nodeToTarval(node.getPred(2)) match {
+      case TargetValueExtr(1) =>
+        // x % 1 == 0
+        updateWorkList(node, new TargetValue(0, Mode.getIs))
+      case _ => foldBinaryIntOperator((x, y) => x.mod(y), node, node.getPred(1), node.getPred(2))
+    }
 
-    override def visit(node: Mul): Unit =
-      foldBinaryIntOperator((x, y) => x.mul(y), node)
+    override def visit(node: Mul): Unit = (nodeToTarval(node.getPred(0)), nodeToTarval(node.getPred(1))) match {
+      case (TargetValueExtr(0), _) | (_, TargetValueExtr(0)) =>
+        // x * 0 == 0 * x == 0
+        updateWorkList(node, new TargetValue(0, Mode.getIs))
+      case _ => foldBinaryIntOperator((x, y) => x.mul(y), node)
+    }
 
     override def visit(node: Minus): Unit =
       foldUnaryIntOperator(x => x.neg, node)
@@ -266,8 +279,8 @@ class Optimizer(input: Unit) extends Phase[Unit] {
 
     def applyIdentity: PartialFunction[Node, Node] = {
       case AddExtr(x, ConstExtr(0)) => x
-      case MulExtr(x, c@ConstExtr(0)) => c
       case MulExtr(x, ConstExtr(1)) => x
+      case DivExtr(x, ConstExtr(1)) => x
       case n@MulExtr(x, ConstExtr(4)) =>
         // TODO: Generalize for any powers of two
         g.newShl(n.getBlock, x, g.newConst(2, n.getMode), n.getMode)
