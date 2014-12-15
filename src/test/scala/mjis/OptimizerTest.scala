@@ -179,4 +179,17 @@ class OptimizerTest extends FlatSpec with Matchers with BeforeAndAfter {
         |}
       """.stripMargin)
   }
+
+  it should "apply arithmetic identities" in {
+    """
+      |public int before(int i) {
+      |  return i + i * 0;
+      |}
+    """.stripMargin should optimizeTo(
+      """
+        |public int after(int i) {
+        |  return i;
+        |}
+      """.stripMargin)
+  }
 }

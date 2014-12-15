@@ -3,6 +3,7 @@ package mjis
 import firm._
 import firm.nodes._
 import java.io.BufferedWriter
+import mjis.FirmExtractors._
 import mjis.util.FirmDumpHelper
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -22,6 +23,9 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     constantFolding(g)
     eliminateCommonSubexpressions(g)
     eliminateTrivialPhis(g)
+
+    Util.lowerSels() // make address computation optimizable
+    applyIdentities(g)
 
     BackEdges.disable(g)
   }
@@ -257,4 +261,23 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     })
   }
 
+  private def applyIdentities(g: Graph): Unit = {
+    // TODO: Normalize predecessor order of commutative nodes beforehand
+
+    def applyIdentity: PartialFunction[Node, Node] = {
+      case AddExtr(x, ConstExtr(0)) => x
+      case MulExtr(x, c@ConstExtr(0)) => c
+      case MulExtr(x, ConstExtr(1)) => x
+      case n@MulExtr(x, ConstExtr(4)) =>
+        // TODO: Generalize for any powers of two
+        g.newShl(n.getBlock, x, g.newConst(2, n.getMode), n.getMode)
+    }
+
+    g.walkTopological(new NodeVisitor.Default {
+      override def defaultVisit(node: Node): Unit = applyIdentity.lift(node) match {
+        case Some(newNode) => GraphBase.exchange(node, newNode)
+        case None =>
+      }
+    })
+  }
 }
