@@ -21,6 +21,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     BackEdges.enable(g)
 
     constantFolding(g)
+    normalizeNodes(g)
     eliminateCommonSubexpressions(g)
     eliminateTrivialPhis(g)
 
@@ -248,6 +249,24 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     })
   }
 
+  private def normalizeNodes(g: Graph): Unit = {
+    g.walkTopological(new NodeVisitor.Default {
+      override def defaultVisit(node: Node): Unit = node match {
+        case AddExtr(_: Const, _) | MulExtr(_: Const, _) =>
+          val pred0 = node.getPred(0)
+          node.setPred(0, node.getPred(1))
+          node.setPred(1, pred0)
+        case SubExtr(x, ConstExtr(c)) =>
+          // x - c == x + (-c)
+          GraphBase.exchange(node, g.newAdd(node.getBlock, x, g.newConst(-c.toInt, node.getMode), node.getMode))
+        case SubExtr(ConstExtr(0), x) =>
+          // 0 - x = -x
+          GraphBase.exchange(node, g.newMinus(node.getBlock, x, node.getMode))
+        case _ =>
+      }
+    })
+  }
+
   private def eliminateCommonSubexpressions(g: Graph): Unit = {
     // map from data uniquely identifying a subexpression to the representing node
     val m = mutable.Map[AnyRef, Node]()
@@ -275,15 +294,29 @@ class Optimizer(input: Unit) extends Phase[Unit] {
   }
 
   private def applyIdentities(g: Graph): Unit = {
-    // TODO: Normalize predecessor order of commutative nodes beforehand
+    object PowerOfTwo {
+      def unapply(x: Long): Option[Int] = {
+        // everybody's favorite trick
+        if (x > 0 && (x & (x-1)) == 0) {
+          var ret = 0
+          var x2 = x
+          while (x2 != 1) {
+            x2 >>= 1
+            ret += 1
+          }
+          Some(ret)
+        } else
+          None
+      }
+    }
 
     def applyIdentity: PartialFunction[Node, Node] = {
       case AddExtr(x, ConstExtr(0)) => x
       case MulExtr(x, ConstExtr(1)) => x
       case DivExtr(x, ConstExtr(1)) => x
-      case n@MulExtr(x, ConstExtr(4)) =>
-        // TODO: Generalize for any powers of two
-        g.newShl(n.getBlock, x, g.newConst(2, n.getMode), n.getMode)
+      case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
+        // The new node won't participate in CSE, but it shouldn't matter for a Const node.
+        g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode)
     }
 
     g.walkTopological(new NodeVisitor.Default {

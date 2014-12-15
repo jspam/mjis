@@ -20,6 +20,13 @@ object FirmExtractors {
     }
   }
 
+  object SubExtr {
+    def unapply(node: Node): Option[(Node, Node)] = node match {
+      case sub: Sub => Some((sub.getLeft, sub.getRight))
+      case _ => None
+    }
+  }
+
   object MulExtr {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case mul: Mul => Some((mul.getLeft, mul.getRight))

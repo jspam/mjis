@@ -200,12 +200,25 @@ class OptimizerTest extends FlatSpec with Matchers with BeforeAndAfter {
   it should "apply arithmetic identities" in {
     """
       |public int before(int i) {
-      |  return i + 0 / i + i * 0 + i % 1;
+      |  return 0 / i + (i-0) + i * 0 + i % 1;
       |}
     """.stripMargin should optimizeTo(
       """
         |public int after(int i) {
         |  return i;
+        |}
+      """.stripMargin)
+  }
+
+  it should "normalize nodes" in {
+    """
+      |public int before(int i) {
+      |  return (0 + i) * (i - 2);
+      |}
+    """.stripMargin should optimizeTo(
+      """
+        |public int after(int i) {
+        |  return (i + 0) * (i + (-2));
         |}
       """.stripMargin)
   }
