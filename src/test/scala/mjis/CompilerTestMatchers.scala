@@ -1,7 +1,7 @@
 package mjis
 
 import firm.Graph
-import mjis.util.CppCodeGenerator
+import mjis.util.CCodeGenerator
 
 import org.scalatest.Assertions
 import org.scalatest.matchers.{ MatchResult, Matcher }
@@ -70,10 +70,10 @@ trait CompilerTestMatchers {
     }
   }
 
-  class CppCodeGeneratorSuccessMatcher(expectedString: String) extends AnalysisPhaseSuccessMatcher[Typer]() {
+  class CCodeGeneratorSuccessMatcher(expectedString: String) extends AnalysisPhaseSuccessMatcher[Typer]() {
     override def mkFailureMessage(typer: Typer) = {
       val out = new StringWriter()
-      new CppCodeGenerator(out).visit(typer.result)
+      new CCodeGenerator(out).visit(typer.result)
       if (out.toString != expectedString)
         Some(s"Expected:$n'$expectedString'${n}Computed:$n'${out.toString}'${n}Diff:$n'${expectedString diff out.toString}'")
       else None
@@ -187,7 +187,7 @@ trait CompilerTestMatchers {
   def succeedNaming() = new AnalysisPhaseSuccessMatcher[Namer]()
   def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
-  def succeedGeneratingCppCodeWith(expectedString: String) = new CppCodeGeneratorSuccessMatcher(expectedString)
+  def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def passIntegrationTest() = new IntegrationTestMatcher()
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def optimizeTo(after: String) = new OptimizerMatcher(after)

@@ -3,9 +3,9 @@ package mjis
 import org.scalatest._
 import mjis.CompilerTestMatchers._
 
-class CppCodeGeneratorTest extends FlatSpec with Matchers {
+class CCodeGeneratorTest extends FlatSpec with Matchers {
 
-  "The C++ code generator" should "generate code for an example program" in {
+  "The C code generator" should "generate code for an example program" in {
     val input = """
       |class Test {
       |  public boolean field;
@@ -62,7 +62,7 @@ class CppCodeGeneratorTest extends FlatSpec with Matchers {
       |  Test$foo(this, (this)->stuff, baz);
       |}""".replace("  ", "\t").stripMargin
 
-    input should succeedGeneratingCppCodeWith(expected)
+    input should succeedGeneratingCCodeWith(expected)
   }
 
 }

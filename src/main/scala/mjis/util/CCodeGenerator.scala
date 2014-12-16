@@ -7,7 +7,7 @@ import mjis.ast._
 
 import scala.collection.mutable
 
-class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Unit, String]("", (), "") {
+class CCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Unit, String]("", (), "") {
   private var indentLevel = 0
   private def indent() = indentLevel += 1
   private def dedent() = indentLevel -= 1
