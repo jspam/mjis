@@ -3,6 +3,7 @@ package mjis
 import firm._
 import firm.nodes._
 import java.io.BufferedWriter
+import mjis.FirmExtractors._
 import mjis.util.FirmDumpHelper
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -20,8 +21,12 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     BackEdges.enable(g)
 
     constantFolding(g)
+    normalizeNodes(g)
     eliminateCommonSubexpressions(g)
     eliminateTrivialPhis(g)
+
+    Util.lowerSels() // make address computation optimizable
+    applyIdentities(g)
 
     BackEdges.disable(g)
   }
@@ -139,14 +144,27 @@ class Optimizer(input: Unit) extends Phase[Unit] {
         foldUnaryIntOperator(x => x, node)
     }
 
-    override def visit(node: Div): Unit =
-      foldBinaryIntOperator((x, y) => x.div(y), node, node.getPred(1), node.getPred(2))
+    override def visit(node: Div): Unit = nodeToTarval(node.getPred(1)) match {
+      case TargetValueExtr(0) =>
+        // 0 / x == 0 (ignoring 0/0)
+        updateWorkList(node, new TargetValue(0, Mode.getIs))
+      case _ =>
+        foldBinaryIntOperator((x, y) => x.div(y), node, node.getPred(1), node.getPred(2))
+    }
 
-    override def visit(node: Mod): Unit =
-      foldBinaryIntOperator((x, y) => x.mod(y), node, node.getPred(1), node.getPred(2))
+    override def visit(node: Mod): Unit = nodeToTarval(node.getPred(2)) match {
+      case TargetValueExtr(1) =>
+        // x % 1 == 0
+        updateWorkList(node, new TargetValue(0, Mode.getIs))
+      case _ => foldBinaryIntOperator((x, y) => x.mod(y), node, node.getPred(1), node.getPred(2))
+    }
 
-    override def visit(node: Mul): Unit =
-      foldBinaryIntOperator((x, y) => x.mul(y), node)
+    override def visit(node: Mul): Unit = (nodeToTarval(node.getPred(0)), nodeToTarval(node.getPred(1))) match {
+      case (TargetValueExtr(0), _) | (_, TargetValueExtr(0)) =>
+        // x * 0 == 0 * x == 0
+        updateWorkList(node, new TargetValue(0, Mode.getIs))
+      case _ => foldBinaryIntOperator((x, y) => x.mul(y), node)
+    }
 
     override def visit(node: Minus): Unit =
       foldUnaryIntOperator(x => x.neg, node)
@@ -231,6 +249,24 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     })
   }
 
+  private def normalizeNodes(g: Graph): Unit = {
+    g.walkTopological(new NodeVisitor.Default {
+      override def defaultVisit(node: Node): Unit = node match {
+        case AddExtr(_: Const, _) | MulExtr(_: Const, _) =>
+          val pred0 = node.getPred(0)
+          node.setPred(0, node.getPred(1))
+          node.setPred(1, pred0)
+        case SubExtr(x, ConstExtr(c)) =>
+          // x - c == x + (-c)
+          GraphBase.exchange(node, g.newAdd(node.getBlock, x, g.newConst(-c.toInt, node.getMode), node.getMode))
+        case SubExtr(ConstExtr(0), x) =>
+          // 0 - x = -x
+          GraphBase.exchange(node, g.newMinus(node.getBlock, x, node.getMode))
+        case _ =>
+      }
+    })
+  }
+
   private def eliminateCommonSubexpressions(g: Graph): Unit = {
     // map from data uniquely identifying a subexpression to the representing node
     val m = mutable.Map[AnyRef, Node]()
@@ -257,4 +293,37 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     })
   }
 
+  private def applyIdentities(g: Graph): Unit = {
+    object PowerOfTwo {
+      def unapply(x: Long): Option[Int] = {
+        // everybody's favorite trick
+        if (x > 0 && (x & (x-1)) == 0) {
+          var ret = 0
+          var x2 = x
+          while (x2 != 1) {
+            x2 >>= 1
+            ret += 1
+          }
+          Some(ret)
+        } else
+          None
+      }
+    }
+
+    def applyIdentity: PartialFunction[Node, Node] = {
+      case AddExtr(x, ConstExtr(0)) => x
+      case MulExtr(x, ConstExtr(1)) => x
+      case DivExtr(x, ConstExtr(1)) => x
+      case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
+        // The new node won't participate in CSE, but it shouldn't matter for a Const node.
+        g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode)
+    }
+
+    g.walkTopological(new NodeVisitor.Default {
+      override def defaultVisit(node: Node): Unit = applyIdentity.lift(node) match {
+        case Some(newNode) => GraphBase.exchange(node, newNode)
+        case None =>
+      }
+    })
+  }
 }

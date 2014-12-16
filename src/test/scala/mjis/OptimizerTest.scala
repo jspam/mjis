@@ -97,6 +97,23 @@ class OptimizerTest extends FlatSpec with Matchers with BeforeAndAfter {
       """.stripMargin)
   }
 
+  it should "entwine constant folding with relevant arithmetic identities" in {
+    """
+      |public int before(boolean b) {
+      |  int x = 0;
+      |  while (b)
+      |    x = x * 2;
+      |  return x;
+      |}
+    """.stripMargin should optimizeTo(
+      """
+        |public int after(boolean b) {
+        |  while (b) {}
+        |  return 0;
+        |}
+      """.stripMargin)
+  }
+
   it should "detect if a variable is assigned to the same value in different branches" in {
     """
      |public int before(boolean b) {
@@ -176,6 +193,32 @@ class OptimizerTest extends FlatSpec with Matchers with BeforeAndAfter {
       """
         |public int after(int i, int j) {
         |  return (i + j) * (i - j);
+        |}
+      """.stripMargin)
+  }
+
+  it should "apply arithmetic identities" in {
+    """
+      |public int before(int i) {
+      |  return 0 / i + (i-0) + i * 0 + i % 1;
+      |}
+    """.stripMargin should optimizeTo(
+      """
+        |public int after(int i) {
+        |  return i;
+        |}
+      """.stripMargin)
+  }
+
+  it should "normalize nodes" in {
+    """
+      |public int before(int i) {
+      |  return (0 + i) * (i - 2);
+      |}
+    """.stripMargin should optimizeTo(
+      """
+        |public int after(int i) {
+        |  return (i + 0) * (i + (-2));
         |}
       """.stripMargin)
   }
