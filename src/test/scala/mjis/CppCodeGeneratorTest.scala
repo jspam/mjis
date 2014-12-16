@@ -32,32 +32,34 @@ class CppCodeGeneratorTest extends FlatSpec with Matchers {
       |}
     """.stripMargin
 
-    val expected = """#include <cstdio>
-      |#include <cstdint>
+    val expected = """#include <stdio.h>
+      |#include <stdint.h>
+      |#include <stdlib.h>
       |
-      |class Test {
-      |public:
-      |  Test() : field(false), stuff(0), ptr(NULL), ptrArr(NULL), arr(NULL) {}
-      |  bool field;
+      |struct Test;
+      |
+      |typedef struct Test {
+      |  uint8_t field;
       |  int32_t stuff;
-      |  Test* ptr;
-      |  Test** ptrArr;
+      |  struct Test* ptr;
+      |  struct Test** ptrArr;
       |  int32_t** arr;
-      |  void foo(int32_t bar, int32_t** baz) {
-      |    printf("%d\n", (bar * baz[3][4]));
-      |    if (!(field)) {
-      |      printf("%d\n", 42);
-      |    } else (field = true);
-      |    while (field) {
-      |      (field = !(field));
-      |    }
-      |    (3 + 4);
-      |    (this)->foo((this)->stuff, baz);
-      |  }
-      |};
+      |} Test;
       |
       |int main() {
-      |  (new Test())->foo(42, new int32_t*[42]);
+      |  Test$foo(((struct Test*)calloc(1, sizeof(struct Test))), 42, ((int32_t**)calloc(42, sizeof(int32_t*))));
+      |}
+      |
+      |void Test$foo(struct Test* this, int32_t bar, int32_t** baz) {
+      |  printf("%d\n", (bar * baz[3][4]));
+      |  if (!((this)->field)) {
+      |    printf("%d\n", 42);
+      |  } else ((this)->field = 1);
+      |  while ((this)->field) {
+      |    ((this)->field = !((this)->field));
+      |  }
+      |  (3 + 4);
+      |  Test$foo(this, (this)->stuff, baz);
       |}""".replace("  ", "\t").stripMargin
 
     input should succeedGeneratingCppCodeWith(expected)
