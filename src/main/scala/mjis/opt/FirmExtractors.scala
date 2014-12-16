@@ -1,7 +1,8 @@
-package mjis
+package mjis.opt
 
 import firm._
 import firm.nodes._
+
 import scala.collection.JavaConversions._
 
 object FirmExtractors {
@@ -9,6 +10,13 @@ object FirmExtractors {
   object ConstExtr {
     def unapply(node: Node): Option[Long] = node match {
       case c: Const => Some(c.getTarval.asLong())
+      case _ => None
+    }
+  }
+
+  object ProjExtr {
+    def unapply(node: Node): Option[(Node, Int)] = node match {
+      case proj: Proj => Some(proj.getPred, proj.getNum)
       case _ => None
     }
   }
