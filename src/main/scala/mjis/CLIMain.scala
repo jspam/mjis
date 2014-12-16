@@ -23,6 +23,9 @@ object CLIMain extends App {
       config.copy(stopAfter = "semantics")
     } text ("Run all semantics checks and exit")
     opt[Unit]("compile-firm") action {(_,x) => x} text ("Compiles the given file using the libFirm backend")
+    opt[Unit]("generate-c++") action { (phase, config) =>
+      config.copy(stopAfter = "c++gen")
+    } text ("Converts the input to C++ and outputs the result")
     opt[String]("stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")

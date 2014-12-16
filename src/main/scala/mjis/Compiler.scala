@@ -9,6 +9,7 @@ import scala.reflect._
 import firm.Firm
 import firm.Mode
 import firm.Backend
+import mjis.util.CppCodeGenerator
 
 object Compiler {
   private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
@@ -18,6 +19,7 @@ object Compiler {
     "lexer" -> classOf[Lexer],
     "parser" -> classOf[Parser],
     "semantics" -> classOf[Typer],
+    "c++gen" -> classOf[Typer],
     "firm" -> classOf[FirmConstructor],
     "optimizer" -> classOf[Optimizer],
     "codegen" -> classOf[CodeGenerator]
@@ -88,7 +90,10 @@ object Compiler {
       case Left(phase) =>
         if (config.stopAfter != "") {
           val out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(java.io.FileDescriptor.out), "ASCII"))
-          phase.dumpResult(out)
+          if (config.stopAfter == "c++gen")
+            phase.asInstanceOf[Typer].result.accept(new CppCodeGenerator(out))
+          else
+            phase.dumpResult(out)
           out.close()
         }
         if (config.stopAfter == "lexer") {
