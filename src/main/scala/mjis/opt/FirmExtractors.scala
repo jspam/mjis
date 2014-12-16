@@ -16,7 +16,7 @@ object FirmExtractors {
 
   object ProjExtr {
     def unapply(node: Node): Option[(Node, Int)] = node match {
-      case proj: Proj => Some(proj.getPred, proj.getNum)
+      case proj: Proj => Some((proj.getPred, proj.getNum))
       case _ => None
     }
   }
