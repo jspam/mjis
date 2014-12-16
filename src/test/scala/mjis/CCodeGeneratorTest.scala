@@ -28,6 +28,7 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |    }
       |    3 + 4;
       |    this.foo(this.stuff, baz);
+      |    return;
       |  }
       |}
     """.stripMargin
@@ -60,6 +61,7 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |  }
       |  (3 + 4);
       |  Test$foo(this, (this)->stuff, baz);
+      |  return ;
       |}""".replace("  ", "\t").stripMargin
 
     input should succeedGeneratingCCodeWith(expected)
