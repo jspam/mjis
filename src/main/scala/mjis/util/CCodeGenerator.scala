@@ -5,7 +5,9 @@ import java.io.Writer
 import mjis.{Position, Builtins}
 import mjis.ast._
 
-class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Unit, String]("", (), "") {
+import scala.collection.mutable
+
+class CCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Unit, String]("", (), "") {
   private var indentLevel = 0
   private def indent() = indentLevel += 1
   private def dedent() = indentLevel -= 1
@@ -16,60 +18,57 @@ class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Uni
     for (_ <- 0 until indentLevel) emit("\t")
   }
 
-  override def preVisit(program: Program): Unit = {
-    emit(s"#include <cstdio>")
-    newLine()
-    emit(s"#include <cstdint>")
-    newLine()
+  private var methodNames = new mutable.HashMap[MethodDecl, String]()
+
+  /* Replaces "field" by "(this)->field" if field refers to a field declaration. */
+  private def wrapFieldAccess(possibleFieldAccess: Expression, exprStringToWrap: String) = possibleFieldAccess match {
+    case i: Ident => i.decl match {
+      case f: FieldDecl => s"(this)->$exprStringToWrap"
+      case _ => exprStringToWrap
+    }
+    case _ => exprStringToWrap
   }
 
-  override def postVisit(program: Program): Unit = {
+  override def preVisit(program: Program): Unit = {
+    emit(s"#include <stdio.h>")
     newLine()
-    program.mainMethodDecl.get.accept(this)
-    writer.flush()
+    emit(s"#include <stdint.h>")
+    newLine()
+    emit(s"#include <stdlib.h>")
+    newLine()
+
+    // Forward declare all classes and fill the method name map
+    program.classes.foreach(cls => {
+      newLine()
+      emit(s"struct ${cls.name};")
+      newLine()
+
+      cls.methods.foreach(m => methodNames += m -> (cls.name + "$" + m.name))
+    })
   }
 
   override def visit(cls: ClassDecl) = {
-    preVisit(cls)
+    newLine()
+    emit(s"typedef struct ${cls.name} {")
+    indent()
     cls.fields.foreach(f => { newLine(); f.accept(this) })
-    // Don't print the main method here
-    cls.methods.foreach(m => if (!m.isStatic) { newLine(); m.accept(this) })
+    dedent()
+    newLine()
+    emit(s"} ${cls.name};")
+    cls.methods.foreach(m => { newLine(); m.accept(this) })
     postVisit(cls)
   }
 
-  override def preVisit(cls: ClassDecl): Unit = {
-    newLine()
-    emit(s"class ${cls.name} {")
-    newLine()
-    emit("public:")
-    indent()
-    newLine()
-    // Constructor with field initializers
-    emit(s"${cls.name}()")
-    if (cls.fields.length > 0) {
-      emit(" : " + cls.fields.map(field => s"${field.name}(" + (field.typ match {
-        case Builtins.IntType => "0"
-        case Builtins.BooleanType => "false"
-        case _ => "NULL"
-      }) + ")").mkString(", "))
-    }
-    emit(" {}")
-  }
-
-  override def postVisit(cls: ClassDecl): Unit = {
-    dedent()
-    newLine()
-    emit("};")
-    newLine()
-  }
-
   override def preVisit(method: MethodDecl): Unit = {
-    // Do not print the this parameter
-    val paramsResult =
-      if (method.parameters.isEmpty) ""
-      else method.parameters.tail.map(p => s"${p.typ.accept(this)} ${p.name}").mkString(", ")
-    val typ = if (method.isStatic) "int" else method.returnType.accept(this)
-    emit(s"$typ ${method.name}($paramsResult) ")
+    newLine()
+    if (method.isStatic)
+      emit("int main() ")
+    else {
+      val paramsResult = method.parameters.map(p => s"${p.typ.accept(this)} ${p.name}").mkString(", ")
+      val typ = method.returnType.accept(this)
+      val name = methodNames(method)
+      emit(s"$typ $name($paramsResult) ")
+    }
   }
 
   override def postVisit(field: FieldDecl, typResult: String): Unit =
@@ -77,9 +76,9 @@ class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Uni
 
   override def postVisit(typ: TypeBasic): String = typ match {
     case Builtins.IntType => "int32_t"
-    case Builtins.BooleanType => "bool"
+    case Builtins.BooleanType => "uint8_t"
     case Builtins.VoidType => "void"
-    case _ => typ.name + "*"
+    case _ => s"struct ${typ.name}*"
   }
 
   override def postVisit(typ: TypeArray, elementTypeResult: String): String =
@@ -104,21 +103,22 @@ class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Uni
   }
 
   override def preVisit(stmt: While) =
-    emit(s"while (${stmt.condition.accept(this)}) ")
+    emit(s"while (${wrapFieldAccess(stmt.condition, stmt.condition.accept(this))}) ")
 
   override def postVisit(stmt: LocalVarDeclStatement, typResult: String, initializerResult: Option[String]) = {
     emit(s"$typResult ${stmt.name}")
-    if (initializerResult.isDefined) emit(" = " + initializerResult.get)
+    if (initializerResult.isDefined) emit(" = " + wrapFieldAccess(stmt.initializer.get, initializerResult.get))
     emit(";")
   }
 
   override def postVisit(stmt: ReturnStatement, exprResult: Option[String]) =
-    emit(s"return " + exprResult.getOrElse("") + ";")
+    emit(s"return " + wrapFieldAccess(stmt.returnValue.orNull, exprResult.getOrElse("") + ";"))
 
   override def postVisit(stmt: ExpressionStatement, exprResult: String) =
-    emit(exprResult + ";")
+    emit(wrapFieldAccess(stmt.expr, exprResult) + ";")
 
-  override def postVisit(invoc: Apply, argumentResults: List[String]): String = {
+  override def postVisit(invoc: Apply, argumentResultsNotWrapped: List[String]): String = {
+    val argumentResults = invoc.arguments zip argumentResultsNotWrapped map { case (arg, argResult) => wrapFieldAccess(arg, argResult) }
     if (invoc.isOperator)
       if (argumentResults.length == 2)
         if (invoc.name == "[]")
@@ -134,7 +134,7 @@ class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Uni
       if (invoc.decl == Builtins.SystemOutPrintlnDecl)
         s"""printf("%d\\n", ${argumentResults(0)})"""
       else
-        s"(${argumentResults(0)})->${invoc.name}(" + argumentResults.tail.mkString(", ") + ")"
+        s"${methodNames(invoc.decl)}(" + argumentResults.mkString(", ") + ")"
   }
 
   override def postVisit(expr: Ident): String = expr.name
@@ -143,11 +143,12 @@ class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Uni
 
   override def postVisit(expr: IntLiteral): String = expr.value
 
-  override def postVisit(expr: Assignment, lhsResult: String, rhsResult: String): String = s"($lhsResult = $rhsResult)"
+  override def postVisit(expr: Assignment, lhsResult: String, rhsResult: String): String =
+    s"(${wrapFieldAccess(expr.lhs, lhsResult)} = ${wrapFieldAccess(expr.rhs, rhsResult)})"
 
   override def postVisit(expr: BooleanLiteral): String = expr match {
-    case TrueLiteral() => "true"
-    case FalseLiteral() => "false"
+    case TrueLiteral() => "1"
+    case FalseLiteral() => "0"
   }
 
   override def postVisit(expr: ThisLiteral): String = "this"
@@ -156,11 +157,13 @@ class CppCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Uni
     implicit val pos = Position.NoPosition
     val elementType = TypeArray(expr.baseType, expr.additionalDims)
     val elementTypeResult = elementType.accept(this)
-    s"new $elementTypeResult[$firstDimSizeResult]"
+    s"(($elementTypeResult*)calloc(${wrapFieldAccess(expr.firstDimSize, firstDimSizeResult)}, sizeof($elementTypeResult)))"
   }
 
-  override def postVisit(expr: NewObject, typResult: String): String =
-    s"new ${expr.typ.name}()"
+  override def postVisit(expr: NewObject, typResult: String): String = {
+    val structType = typResult.dropRight(1) // drop trailing "*"
+    s"(($typResult)calloc(1, sizeof($structType)))"
+  }
 
   override def postVisit(expr: Select, qualifierResult: String): String =
     s"($qualifierResult)->${expr.name}"
