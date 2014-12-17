@@ -13,7 +13,7 @@ class NormalizationTest extends FlatSpec with Matchers with BeforeAndAfter {
     Firm.finish()
   }
 
-  it should "normalize nodes" in {
+  "Normalization" should "normalize nodes" in {
     // needs constant folding for '-2'
     """
       |public void before(int i) {

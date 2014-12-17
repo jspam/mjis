@@ -13,7 +13,7 @@ class CommonSubexpressionEliminationTest extends FlatSpec with Matchers with Bef
     Firm.finish()
   }
 
-  it should "eliminate common subexpressions" in {
+  "Common Subexpression Elimination" should "eliminate common subexpressions" in {
     """
       |public int before(int i, int j) {
       |  int k = i + j;
