@@ -111,24 +111,25 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       else new ArrayType(firmType(arrayType.elementType))
     }
 
+    def createAndMatureBlock(preds: Seq[Node]): firm.nodes.Block = {
+      val block = constr.newBlock()
+      preds.foreach(block.addPred)
+      block.mature()
+      block
+    }
+
     def exprResultToValue(res: ExprResult): Value = res match {
       case v: Value => v
       case ControlFlow(falseJmps, trueJmps) =>
-        val follow = constr.newBlock()
-
-        constr.setCurrentBlock(constr.newBlock())
-        falseJmps.foreach(constr.getCurrentBlock.addPred)
+        constr.setCurrentBlock(createAndMatureBlock(falseJmps))
         val falseNode = constr.newConst(0, Mode.getBu)
-        follow.addPred(constr.newJmp())
-        constr.getCurrentBlock.mature()
+        val leaveFalseJmp = constr.newJmp()
 
-        constr.setCurrentBlock(constr.newBlock())
-        trueJmps.foreach(constr.getCurrentBlock.addPred)
+        constr.setCurrentBlock(createAndMatureBlock(trueJmps))
         val trueNode = constr.newConst(1, Mode.getBu)
-        follow.addPred(constr.newJmp())
-        constr.getCurrentBlock.mature()
+        val leaveTrueJmp = constr.newJmp()
 
-        constr.setCurrentBlock(follow)
+        constr.setCurrentBlock(createAndMatureBlock(Seq(leaveFalseJmp, leaveTrueJmp)))
         Value(constr.newPhi(Array(falseNode, trueNode), Mode.getBu))
     }
 
@@ -178,19 +179,18 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
       val follow = constr.newBlock()
 
-      constr.setCurrentBlock(constr.newBlock())
-      cond.falseJmps.foreach(constr.getCurrentBlock.addPred)
+      constr.setCurrentBlock(createAndMatureBlock(cond.falseJmps))
       stmt.ifFalse.accept(this)
       if (stmt.ifFalse.isEndReachable)
         follow.addPred(constr.newJmp())
 
-      constr.setCurrentBlock(constr.newBlock())
-      cond.trueJmps.foreach(constr.getCurrentBlock.addPred)
+      constr.setCurrentBlock(createAndMatureBlock(cond.trueJmps))
       stmt.ifTrue.accept(this)
       if (stmt.ifTrue.isEndReachable)
         follow.addPred(constr.newJmp())
 
       constr.setCurrentBlock(follow)
+      follow.mature()
     }
 
     override def visit(stmt: While): Unit = {
@@ -202,14 +202,14 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       condBlock.addPred(jmp)
       val cond = exprResultToControlFlow(stmt.condition.accept(this))
 
-      constr.setCurrentBlock(constr.newBlock())
-      cond.trueJmps.foreach(constr.getCurrentBlock.addPred)
+      constr.setCurrentBlock(createAndMatureBlock(cond.trueJmps))
       stmt.body.accept(this)
       if (stmt.body.isEndReachable)
         condBlock.addPred(constr.newJmp())
 
-      constr.setCurrentBlock(constr.newBlock())
-      cond.falseJmps.foreach(constr.getCurrentBlock.addPred)
+      condBlock.mature()
+
+      constr.setCurrentBlock(createAndMatureBlock(cond.falseJmps))
     }
 
     override def postVisit(stmt: ReturnStatement, optExprResult: Option[ExprResult]): Unit = {
@@ -256,20 +256,16 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
         case Builtins.BooleanAndDecl =>
           val lhs = exprResultToControlFlow(expr.arguments(0).accept(this))
 
-          constr.setCurrentBlock(constr.newBlock())
-          lhs.trueJmps.foreach(constr.getCurrentBlock.addPred)
+          constr.setCurrentBlock(createAndMatureBlock(lhs.trueJmps))
           val rhs = exprResultToControlFlow(expr.arguments(1).accept(this))
 
-          constr.setCurrentBlock(constr.newBlock())
           ControlFlow(lhs.falseJmps ++ rhs.falseJmps, rhs.trueJmps)
         case Builtins.BooleanOrDecl =>
           val lhs = exprResultToControlFlow(expr.arguments(0).accept(this))
 
-          constr.setCurrentBlock(constr.newBlock())
-          lhs.falseJmps.foreach(constr.getCurrentBlock.addPred)
+          constr.setCurrentBlock(createAndMatureBlock(lhs.falseJmps))
           val rhs = exprResultToControlFlow(expr.arguments(1).accept(this))
 
-          constr.setCurrentBlock(constr.newBlock())
           ControlFlow(rhs.falseJmps, lhs.trueJmps ++ rhs.trueJmps)
 
         // other methods
