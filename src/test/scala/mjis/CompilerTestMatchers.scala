@@ -117,7 +117,7 @@ trait CompilerTestMatchers {
             if (error.isDefined) {
               success = false
               failureMessage = s"Graphs ${expected.getEntity.getName} and ${actual.getEntity.getName} " +
-                s"were not isomorphic: $error"
+                s"were not isomorphic: ${error.get}"
             }
         }}
       }
@@ -166,7 +166,8 @@ trait CompilerTestMatchers {
     override def apply(code: String): MatchResult = {
       val codeGenerator = assertExec[CodeGenerator](code)
       // Remove comments (the regex is evaluated line-wise)
-      val resultWithoutComments = "\\s*#.*".r.replaceAllIn(codeGenerator.getResult(), "")
+      val resultWithoutComments = "\\s*#.*".r.replaceAllIn(codeGenerator.result, "")
+      val expectedWithoutComments = "\\s*#.*".r.replaceAllIn(expected, "")
       var labels = mutable.HashMap[Int, Int]()
       val resultWithNormalizedLabels = "(?m)^\\.L(\\d+)".r.replaceAllIn(resultWithoutComments, m => {
         val currentLabel = labels.size
@@ -175,7 +176,7 @@ trait CompilerTestMatchers {
       val resultWithNormalizedJumps = " \\.L(\\d+)".r.replaceAllIn(resultWithNormalizedLabels, m => {
         val newLabel = labels(m.group(1).toInt)
         s" .L$newLabel" })
-      BeMatcher(be(expected)).apply(resultWithNormalizedJumps)
+      BeMatcher(be(expectedWithoutComments)).apply(resultWithNormalizedJumps)
     }
   }
 

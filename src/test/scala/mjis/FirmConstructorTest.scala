@@ -8,12 +8,19 @@ import org.scalatest._
 class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   var IntType: PrimitiveType = null
+  var UnsignedIntType: PrimitiveType = null
   var BooleanType: PrimitiveType = null
   var RefType: PrimitiveType = null
 
   def initFirm() = {
     Firm.init()
+
+    val modeP = Mode.createReferenceMode(
+      "P64", Mode.Arithmetic.TwosComplement, 64, 64)
+    Mode.setDefaultModeP(modeP)
+
     IntType = new PrimitiveType(Mode.getIs)
+    UnsignedIntType = new PrimitiveType(Mode.getIu)
     BooleanType = new PrimitiveType(Mode.getBu)
     RefType = new PrimitiveType(Mode.getP)
   }
@@ -189,6 +196,24 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |end = End, return
       """.stripMargin)
     fromMembers("public void m_println() { System.out.println(42); }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mPrintln))
+  }
+
+  it should "create FIRM graphs for calloc" in {
+    val callocMethodEntity = new Entity(Program.getGlobalType, "calloc",
+      new MethodType(Array[Type](UnsignedIntType, UnsignedIntType), Array[Type](new PrimitiveType(Mode.getP))))
+    val mCalloc = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_m_calloc", null, Seq()),
+      """
+        |start = Start
+        |mem_before_call = Proj M M, start
+        |const8 = Const 8 Iu
+        |const1 = Const 1 Iu
+        |addr_calloc = Addr calloc
+        |call = Call calloc, mem_before_call, addr_calloc, const1, const8
+        |mem_after_call = Proj M M, call
+        |return = Return, mem_after_call
+        |end = End, return
+      """.stripMargin)
+    fromMembers("public void m_calloc() { new Test(); }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mCalloc))
   }
 
   it should "create FIRM graphs with local parameter access and assignment" in {
