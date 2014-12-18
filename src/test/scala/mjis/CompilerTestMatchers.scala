@@ -154,7 +154,7 @@ trait CompilerTestMatchers {
 
       before.foreach(_.optimize())
 
-      new Optimizer(null).dumpResult(null)
+      new Optimizer(()).dumpResult(null)
 
       (new FirmGraphIsomorphismMatcher(afterGraph.get))(beforeGraph.get)
     }
