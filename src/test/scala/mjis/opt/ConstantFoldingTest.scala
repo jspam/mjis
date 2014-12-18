@@ -66,20 +66,20 @@ class ConstantFoldingTest extends FlatSpec with Matchers with BeforeAndAfter {
   it should "detect if a variable is assigned to the same value in different branches" in {
     """
      |public int before(boolean b) {
-     |  int x = 5;
+     |  int x = 2;
      |  if (b)
-     |    x = 10 / x;
+     |    x = 4 - x;
      |  else
      |    x = 2;
      |  return x;
      |}
      """.stripMargin should optimizeTo(ConstantFolding)(
-      """
+     """
      |public int after(boolean b) {
      |  if (b)
      |    ;
      |  else
-          ;
+     |    ;
      |  return 2;
      |}
      """.stripMargin)
