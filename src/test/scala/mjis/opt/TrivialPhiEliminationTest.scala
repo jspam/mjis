@@ -13,7 +13,7 @@ class TrivialPhiEliminationTest extends FlatSpec with Matchers with BeforeAndAft
     Firm.finish()
   }
 
-  "The optimizer" should "remove trivial phis" in {
+  "Trivial Phi Elimination" should "remove trivial phis" in {
     """
       |public int before(int j) {
       |  int i = 1;

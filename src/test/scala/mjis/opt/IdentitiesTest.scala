@@ -13,7 +13,7 @@ class IdentitiesTest extends FlatSpec with Matchers with BeforeAndAfter {
     Firm.finish()
   }
 
-  it should "apply arithmetic identities" in {
+  "Identities" should "apply arithmetic identities" in {
     """
       |public void before(int i) {
       |  System.out.println(i + 0);

@@ -13,7 +13,7 @@ class ConstantFoldingTest extends FlatSpec with Matchers with BeforeAndAfter {
     Firm.finish()
   }
 
-  it should "apply constant folding for integer expressions" in {
+  "Constant Folding" should "apply constant folding for integer expressions" in {
     """
       |public void before() {
       |  System.out.println(2 + 3);
