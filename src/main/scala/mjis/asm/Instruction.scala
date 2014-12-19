@@ -10,13 +10,28 @@ object AMD64Registers {
   def RBP = -2
   def RAX = -3
   def RBX = -4
+  def RDI = -5
+  def RSI = -6
+  def RDX = -7
+  def RCX = -8
+  def R8  = -9
+  def R9  = -10
 
   val Registers = Map[Int, Register] (
     RSP -> Register("rsp", 8),
     RBP -> Register("rbp", 8),
     RAX -> Register("rax", 8),
-    RBX -> Register("rbx", 8)
+    RBX -> Register("rbx", 8),
+    RDI -> Register("rdi", 8),
+    RSI -> Register("rsi", 8),
+    RDX -> Register("rdx", 8),
+    RCX -> Register("rcx", 8),
+    R8  -> Register("r8", 8),
+    R9  -> Register("r9", 8)
   )
+
+  // Registers to pass parameters in (in order)
+  val ParamRegisters = List(RDI, RSI, RDX, RCX, R8, R9)
 }
 
 abstract class Operand(val sizeBytes: Int)

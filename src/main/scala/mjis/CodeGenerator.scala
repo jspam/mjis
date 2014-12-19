@@ -21,6 +21,22 @@ import System.{lineSeparator => n}
 
 object CodeGenerator {
   def align(x: Int, alignment: Int = 4) = if (x % alignment == 0) x else x + (alignment - x % alignment)
+
+  val VariableAssigningOpcodes = Set[ir_opcode] (
+    ir_opcode.iro_Add, ir_opcode.iro_And, ir_opcode.iro_Div, ir_opcode.iro_Minus, ir_opcode.iro_Mod, ir_opcode.iro_Mul,
+    ir_opcode.iro_Mulh, ir_opcode.iro_Not, ir_opcode.iro_Or, ir_opcode.iro_Shl, ir_opcode.iro_Shr, ir_opcode.iro_Shrs,
+    ir_opcode.iro_Sub, ir_opcode.iro_Load, ir_opcode.iro_Member, ir_opcode.iro_Sel, ir_opcode.iro_Conv
+  )
+
+  def assignsVariable(n: Node): Boolean = {
+    VariableAssigningOpcodes.contains(n.getOpCode) || (n.getOpCode == ir_opcode.iro_Call &&
+      n.asInstanceOf[firm.nodes.Call].getType.asInstanceOf[MethodType].getNRess > 0)
+  }
+
+  def createsValue(n: Node): Boolean = {
+    assignsVariable(n) || n.getOpCode == ir_opcode.iro_Return || n.getOpCode == ir_opcode.iro_Call /* calls create a
+      value (modify global state) even if they don't assign a variable */
+  }
 }
 
 class CodeGenerator(a: Unit) extends Phase[String] {
@@ -30,23 +46,10 @@ class CodeGenerator(a: Unit) extends Phase[String] {
     Source.fromFile("a.s").foreach(a.write(_))
   }
 
-  val variableAssigned = Set[ir_opcode] (
-    ir_opcode.iro_Add, ir_opcode.iro_And, ir_opcode.iro_Div, ir_opcode.iro_Minus, ir_opcode.iro_Mod, ir_opcode.iro_Mul,
-    ir_opcode.iro_Mulh, ir_opcode.iro_Not, ir_opcode.iro_Or, ir_opcode.iro_Shl, ir_opcode.iro_Shr, ir_opcode.iro_Shrs,
-    ir_opcode.iro_Sub, ir_opcode.iro_Load, ir_opcode.iro_Member, ir_opcode.iro_Sel, ir_opcode.iro_Call, ir_opcode.iro_Conv
-  )
-
-  def instrToString(instr: Instruction, activationRecordSize: Int): String = {
+  def instrToString(instr: Instruction): String = {
     val operandsResult = if (instr.operands.isEmpty) "" else " " + instr.operands.map {
       case r: RegisterOperand => "%" + (if (Registers.contains(r.regNo)) Registers(r.regNo).name else "REG" + r.regNo)
-      case r: RegisterOffsetOperand =>
-        // Convert rbp relative addressing to rsp relative addressing
-        // now that the AR size is known
-        if (r.regNr == RBP) {
-          r.regNr = RSP
-          r.offset += activationRecordSize + instr.stackPointerDisplacement
-        }
-        s"${r.offset}(%${Registers(r.regNr).name})"
+      case r: RegisterOffsetOperand => s"${r.offset}(%${Registers(r.regNr).name})"
       case l: LabelOperand => l.name
       case c: ConstOperand => s"$$${c.value}"
     }.mkString(", ")
@@ -58,14 +61,14 @@ class CodeGenerator(a: Unit) extends Phase[String] {
       instrAndOperands
   }
 
-  def getResult(): String = {
+  override def getResult(): String = {
     Program.getGraphs.foreach(_.check())
 
     val asm = "a.s"
     var fw: BufferedWriter = null
 
-    val result = new StringBuilder
-    def emit(s: String, indent: Boolean = true) = result.append(if (indent && s.nonEmpty) s"\t$s$n" else s"$s$n")
+    val assemblerCode = new StringBuilder() // for tests
+    def emit(s: String, indent: Boolean = true) = assemblerCode.append(if (indent && s.nonEmpty) s"\t$s$n" else s"$s$n")
 
     if (useFirmBackend) {
       Util.lowerSels()
@@ -83,24 +86,31 @@ class CodeGenerator(a: Unit) extends Phase[String] {
         emit("")
         emit(s"$name:", indent = false)
 
-        generator.prologue.foreach(instr => emit(instrToString(instr, generator.activationRecordSize)))
-
-        emit(s".L${g.getStartBlock.getNr}: # Start Block ${g.getStartBlock.getNr}", indent = false)
-        blocks(g.getStartBlock).foreach(instr => emit(instrToString(instr, generator.activationRecordSize)))
-        blocks.foreach {
-          case (block, blockInstrs) => if (block != null && block != g.getStartBlock && block != g.getEndBlock) {
-            emit(s".L${block.getNr}: # Basic Block ${block.getNr}", indent = false)
-            blockInstrs.foreach(instr => emit(instrToString(instr, generator.activationRecordSize)))
+        // Converts rbp relative addressing to rsp relative addressing now that the AR size is known
+        def convertRspToRbpRelative(instr: Instruction): Unit = {
+          val rbp = RBP
+          instr.operands.foreach {
+            case r @ RegisterOffsetOperand(`rbp`, _, _) =>
+              r.regNr = RSP
+              r.offset += generator.activationRecordSize + instr.stackPointerDisplacement
+            case _ =>
           }
         }
-        emit(s".L${g.getEndBlock.getNr}: # End Block ${g.getEndBlock.getNr}", indent = false)
-        blocks(g.getEndBlock).foreach(instr => emit(instrToString(instr, generator.activationRecordSize)))
+        def emitInstr(instr: Instruction): Unit = { convertRspToRbpRelative(instr); emit(instrToString(instr)) }
+        def emitBlock(block: Block): Unit = {
+          emit(s".L${block.getNr}: # Block ${block.getNr}", indent = false)
+          blocks(block).foreach (emitInstr)
+        }
 
-        generator.epilogue.foreach(instr => emit(instrToString(instr, generator.activationRecordSize)))
+        generator.prologue.foreach(emitInstr)
+        emitBlock(g.getStartBlock)
+        blocks.keys.foreach { b => if (b != null && b != g.getStartBlock && b != g.getEndBlock) emitBlock(b) }
+        emitBlock(g.getEndBlock)
+        generator.epilogue.foreach(emitInstr)
       })
 
       fw = new BufferedWriter(new FileWriter(asm, /* append */ false))
-      fw.write(result.toString())
+      fw.write(assemblerCode.toString())
     }
 
     // concatenate our implementation of System_out_println to the assembly code
@@ -113,7 +123,7 @@ class CodeGenerator(a: Unit) extends Phase[String] {
     val stream = Stream.continually(stderr.readLine()).takeWhile(_ != null)
     if (gcc.exitValue() != 0 || stream.nonEmpty)
       System.err.println(s"GCC returned exit status ${gcc.exitValue}\n${stream.mkString("\n")}")
-    result.toString()
+    assemblerCode.toString()
   }
 
   def intConstOp(i: Int): Operand = new ConstOperand(i, Mode.getIs.getSizeBytes)
@@ -128,25 +138,35 @@ class CodeGenerator(a: Unit) extends Phase[String] {
       -activationRecordSize
     })
 
+    private def activationRecordOperand(node: Node) = RegisterOffsetOperand(RBP, activationRecord(node), node.getMode.getSizeBytes)
+
+    // This should only be evaluated if the register params really need to be stored
+    private lazy val regParamsActivationRecordOffsets: List[Int] =
+      0.until(g.getEntity.getType.asInstanceOf[MethodType].getNParams.min(ParamRegisters.length)).map{i =>
+        activationRecordSize += Registers(ParamRegisters(i)).sizeBytes
+        -activationRecordSize
+      }.toList
+
     val prologue = ListBuffer[Instruction]()
     val epilogue = ListBuffer[Instruction]()
 
     def getResult(): mutable.Map[Block, ListBuffer[Instruction]] = {
       val linearizedNodes = mutable.HashMap[Block, ListBuffer[Node]]().withPersistentDefault(_ => new ListBuffer[Node]())
       val result = mutable.HashMap[Block, ListBuffer[Instruction]]().withPersistentDefault(_ => new ListBuffer[Instruction]())
+
       g.walkTopological(new NodeVisitor.Default {
         override def defaultVisit(n: Node): Unit = linearizedNodes(n.getBlock.asInstanceOf[Block]) += n
       })
 
       linearizedNodes.foreach {
-        case (block, nodes) => nodes.foreach(n => {
-          if (variableAssigned(n.getOpCode) || n.getOpCode == ir_opcode.iro_Return) {
+        case (block, nodes) => nodes.foreach{ n =>
+          if (createsValue(n)) {
             result(block) ++= createValue(n, RAX)
-            if (n.getOpCode != ir_opcode.iro_Return) {
+            if (assignsVariable(n)) {
               result(block) += Movq(RAX, activationRecordOperand(n)).withComment(s"Spill for $n")
             }
           }
-        })
+        }
       }
 
       if (activationRecordSize > 0) {
@@ -168,8 +188,11 @@ class CodeGenerator(a: Unit) extends Phase[String] {
     }
     // Parameter offsets relative to RBP (= RSP upon entry into the function)
     private val paramOffsets: Seq[Int] =
-      if (paramSizes.isEmpty) Seq()
-      else paramSizes.tail.scanLeft(align(paramSizes(0)))(_ + align(_))
+      if (paramSizes.length <= ParamRegisters.length) Seq()
+      else {
+        val regParams = paramSizes.drop(ParamRegisters.length)
+        regParams.tail.scanLeft(align(regParams(0)))(_ + align(_))
+      }
 
     private def createValue(node: Node, destRegNo: Int): Seq[Instruction] = {
       def loadValueComment: Instruction => Instruction = instr => { instr.comment += s" - load argument of $node"; instr }
@@ -187,18 +210,42 @@ class CodeGenerator(a: Unit) extends Phase[String] {
 
         case n : firm.nodes.Call  =>
           var stackPointerDisplacement = 0
-          def addStackPointerDisplacement(i: Instruction): Instruction =
-            { i.stackPointerDisplacement = stackPointerDisplacement
-              i.comment += s" - stackPointerDisplacement = $stackPointerDisplacement"
-              i }
-          for (i <- n.getPredCount - 1 until 1 by -1) {
+          def addStackPointerDisplacement(i: Instruction): Instruction = {
+            i.stackPointerDisplacement = stackPointerDisplacement
+            i.comment += s" - stackPointerDisplacement = $stackPointerDisplacement"
+            i
+          }
+
+          // Save caller-save registers. At the moment, these are the registers in which
+          // parameters were passed.
+          regParamsActivationRecordOffsets.zipWithIndex.foreach { case (offset, idx) =>
+            val reg = ParamRegisters(idx)
+            result += Movq(reg, RegisterOffsetOperand(RBP, offset, Registers(reg).sizeBytes)).
+              withComment(s"Save caller-save register ${Registers(reg).name}")
+          }
+
+          // Pass first parameters in registers. Skip first 2 preds (memory and method address)
+          for (i <- 0 until (n.getPredCount - 2).min(ParamRegisters.length)) {
+            result ++= getValue(n.getPred(i+2), ParamRegisters(i)) map loadValueComment
+          }
+          // Push rest of parameters onto the stack in reverse order
+          for (i <- n.getPredCount - 1 until ParamRegisters.length by -1) {
             result ++= getValue(n.getPred(i), RAX) map loadValueComment map addStackPointerDisplacement
             result += addStackPointerDisplacement(Pushq(RAX).withComment(s"Push argument $i of $node"))
             stackPointerDisplacement += 8 // TODO
           }
+
           val methodName = n.getPtr.asInstanceOf[Address].getEntity.getLdName
           result += mjis.asm.Call(LabelOperand(methodName)).withComment(node.toString)
-          result += Addq(intConstOp(stackPointerDisplacement), RSP).withComment(s"Restore stack pointer for $node")
+          if (stackPointerDisplacement > 0)
+            result += Addq(intConstOp(stackPointerDisplacement), RSP).withComment(s"Restore stack pointer for $node")
+
+          // Restore saved registers
+          regParamsActivationRecordOffsets.zipWithIndex.foreach { case (offset, idx) =>
+            val reg = ParamRegisters(idx)
+            result += Movq(RegisterOffsetOperand(RBP, offset, Registers(reg).sizeBytes), reg).
+              withComment(s"Restore caller-save register ${Registers(reg).name}")
+          }
 
         case n : firm.nodes.Mul =>
           result ++= getValue(n.getLeft, RAX) map loadValueComment
@@ -220,7 +267,8 @@ class CodeGenerator(a: Unit) extends Phase[String] {
               // Arguments
               case Start.pnTArgs =>
                 result += Movq(
-                  new RegisterOffsetOperand(RBP, paramOffsets(n.getNum), paramSizes(n.getNum)),
+                  if (n.getNum < ParamRegisters.length) ParamRegisters(n.getNum)
+                    else new RegisterOffsetOperand(RBP, paramOffsets(n.getNum), paramSizes(n.getNum)),
                   destRegNo
                 ).withComment(s"Load parameter ${n.getNum}")
 
@@ -235,10 +283,6 @@ class CodeGenerator(a: Unit) extends Phase[String] {
       }
 
       result
-    }
-
-    private def activationRecordOperand(node: Node): RegisterOffsetOperand = {
-      RegisterOffsetOperand(RBP, activationRecord(node), node.getMode.getSizeBytes)
     }
 
     private def getValue(node: Node, destRegNo: Int): Seq[Instruction] = {
