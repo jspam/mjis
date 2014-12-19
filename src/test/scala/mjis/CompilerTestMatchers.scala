@@ -183,7 +183,7 @@ trait CompilerTestMatchers {
 
   class IntegrationTestMatcher() extends Matcher[String] {
 
-    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", path)
+    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", "--compile-firm", path)
 
     def apply(path: String) = {
       val p = Process(compileCmd(path), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"

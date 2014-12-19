@@ -24,7 +24,7 @@ object CodeGenerator {
 }
 
 class CodeGenerator(a: Unit) extends Phase[String] {
-  var useFirmBackend = false
+  val useFirmBackend = false
   def findings = List()
   def dumpResult(a: BufferedWriter) = {
     Source.fromFile("a.s").foreach(a.write(_))
@@ -62,7 +62,7 @@ class CodeGenerator(a: Unit) extends Phase[String] {
     Program.getGraphs.foreach(_.check())
 
     val asm = "a.s"
-    val fw = new BufferedWriter(new FileWriter(asm, /* append */ false))
+    var fw: BufferedWriter = null
 
     val result = new StringBuilder
     def emit(s: String, indent: Boolean = true) = result.append(if (indent && s.nonEmpty) s"\t$s$n" else s"$s$n")
@@ -70,6 +70,7 @@ class CodeGenerator(a: Unit) extends Phase[String] {
     if (useFirmBackend) {
       Util.lowerSels()
       Backend.createAssembler(asm, "<input>")
+      fw = new BufferedWriter(new FileWriter(asm, /* append */ true))
     } else {
       emit(".text")
       emit(".p2align 4,,15")
@@ -98,6 +99,7 @@ class CodeGenerator(a: Unit) extends Phase[String] {
         generator.epilogue.foreach(instr => emit(instrToString(instr, generator.activationRecordSize)))
       })
 
+      fw = new BufferedWriter(new FileWriter(asm, /* append */ false))
       fw.write(result.toString())
     }
 
@@ -257,4 +259,8 @@ class CodeGenerator(a: Unit) extends Phase[String] {
     }
   }
 
+}
+
+class FirmCodeGenerator(a: Unit) extends CodeGenerator(a) {
+  override val useFirmBackend = true
 }
