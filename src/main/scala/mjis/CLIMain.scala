@@ -22,7 +22,9 @@ object CLIMain extends App {
     opt[Unit]("check") action { (phase, config) =>
       config.copy(stopAfter = "semantics")
     } text ("Run all semantics checks and exit")
-    opt[Unit]("compile-firm") action {(_,x) => x} text ("Compiles the given file using the libFirm backend")
+    opt[Unit]("compile-firm") action { (phase, config) =>
+      config.copy(useFirmBackend = true)
+    } text ("Compiles the given file using the libFirm backend")
     opt[Unit]("generate-c") action { (phase, config) =>
       config.copy(stopAfter = "ccodegen")
     } text ("Converts the input to C and outputs the result")

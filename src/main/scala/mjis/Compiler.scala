@@ -12,8 +12,11 @@ import firm.Backend
 import mjis.util.CCodeGenerator
 
 object Compiler {
-  private val pipeline: List[Class[_ <: Phase[_]]] = List(classOf[Lexer], classOf[Parser], classOf[Namer], classOf[Typer],
-    classOf[FirmConstructor], classOf[Optimizer], classOf[CodeGenerator])
+  type Pipeline = List[Class[_ <: Phase[_]]]
+  private val defaultPipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
+    classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[CodeGenerator])
+  private val firmCompilePipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
+    classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[FirmCodeGenerator])
 
   private val stopAfterTargets = Map[String, Class[_ <: Phase[_]]](
     "lexer" -> classOf[Lexer],
@@ -32,7 +35,7 @@ object Compiler {
    * and you'll have to check for success yourself. This is because the lexer's result
    * is only iterable once.
    */
-  def exec(input: Reader, until: Class[_ <: Phase[_]]): Either[Phase[_], List[Finding]] = {
+  def exec(input: Reader, until: Class[_ <: Phase[_]], pipeline: Pipeline = defaultPipeline): Either[Phase[_], List[Finding]] = {
     val phases = ListBuffer[Phase[AnyRef]]()
     for (cls <- pipeline) {
       if (phases.isEmpty)
@@ -63,6 +66,7 @@ object Compiler {
     exec(input, classTag[P].runtimeClass.asInstanceOf[Class[_ <: Phase[_]]]).asInstanceOf[Either[P, List[Finding]]]
 
   def compile(config: Config): Boolean = {
+    val pipeline = if (config.useFirmBackend) firmCompilePipeline else defaultPipeline
     Firm.init()
 
     val fileOrStdIn = config.file.map(f => new FileInputStream(f.toFile)).getOrElse(System.in)
@@ -86,7 +90,7 @@ object Compiler {
         System.out.println("error")
     }
 
-    exec(input, target) match {
+    exec(input, target, pipeline) match {
       case Left(phase) =>
         if (config.stopAfter != "") {
           val out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(java.io.FileDescriptor.out), "ASCII"))

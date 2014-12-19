@@ -4,13 +4,15 @@ import firm.Graph
 import mjis.util.CCodeGenerator
 
 import org.scalatest.Assertions
-import org.scalatest.matchers.{ MatchResult, Matcher }
+import org.scalatest.matchers.{ MatchResult, Matcher, BeMatcher }
+import org.scalatest.words.MatcherWords.be
 import mjis.ast._
 import mjis.opt.Optimization
 import mjis.CompilerTestHelper._
 import System.{ lineSeparator => n }
 import java.io._
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.io.Source
 import scala.sys.process._
 
@@ -160,11 +162,28 @@ trait CompilerTestMatchers {
     }
   }
 
+  class CodeGeneratorMatcher(expected: String) extends Matcher[String] {
+    override def apply(code: String): MatchResult = {
+      val codeGenerator = assertExec[CodeGenerator](code)
+      // Remove comments (the regex is evaluated line-wise)
+      val resultWithoutComments = "\\s*#.*".r.replaceAllIn(codeGenerator.getResult(), "")
+      var labels = mutable.HashMap[Int, Int]()
+      val resultWithNormalizedLabels = "(?m)^\\.L(\\d+)".r.replaceAllIn(resultWithoutComments, m => {
+        val currentLabel = labels.size
+        labels += m.group(1).toInt -> currentLabel
+        s".L$currentLabel" })
+      val resultWithNormalizedJumps = " \\.L(\\d+)".r.replaceAllIn(resultWithNormalizedLabels, m => {
+        val newLabel = labels(m.group(1).toInt)
+        s" .L$newLabel" })
+      BeMatcher(be(expected)).apply(resultWithNormalizedJumps)
+    }
+  }
+
   lazy val ClassPath: String = Seq("sbt", "export compile:fullClasspath").lineStream.last
 
   class IntegrationTestMatcher() extends Matcher[String] {
 
-    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", path)
+    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", "--compile-firm", path)
 
     def apply(path: String) = {
       val p = Process(compileCmd(path), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"
@@ -199,6 +218,7 @@ trait CompilerTestMatchers {
   def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
+  def succeedGeneratingAssemblerWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
   def passIntegrationTest() = new IntegrationTestMatcher()
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, before, to)
