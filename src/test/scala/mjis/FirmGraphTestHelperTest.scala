@@ -160,4 +160,28 @@ class FirmGraphTestHelperTest extends FlatSpec with Matchers with BeforeAndAfter
     left.get should beIsomorphicTo(right.get)
   }
 
+  it should "compare nodes twice if necessary" in {
+    val methodEntity1 = new Entity(GlobalType, "f1", MethodTypes("int(int,int)"))
+    val methodEntity2 = new Entity(GlobalType, "f2", MethodTypes("int(int,int)"))
+
+    new Entity(GlobalType, "two_ints", MethodTypes("int(int,int)"))
+
+    def testCode(str: String) =
+      s"""
+      |start = Start
+      |args = Proj T T_args, start
+      |arg1 = Proj Is Arg 0, args
+      |arg2 = Proj Is Arg 1, args
+      |mem1 = Proj M M, start
+      |addr = Addr two_ints
+      |call = Call two_ints, mem1, addr, arg1, arg2
+      |mem2 = Proj M M, call
+      |return = Return, mem2, $str
+      |end = End, return
+      """.stripMargin
+
+    val g1 = FirmGraphTestHelper.buildFirmGraph(methodEntity1, testCode("arg1"))
+    val g2 = FirmGraphTestHelper.buildFirmGraph(methodEntity2, testCode("arg2"))
+    g1 shouldNot beIsomorphicTo(g2)
+  }
 }
