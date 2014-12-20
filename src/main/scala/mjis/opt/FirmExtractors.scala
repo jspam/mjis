@@ -28,6 +28,13 @@ object FirmExtractors {
     }
   }
 
+  object CondExtr {
+    def unapply(node: Node): Option[Node] = node match {
+      case cond: Cond => Some(cond.getSelector)
+      case _ => None
+    }
+  }
+
   object SubExtr {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case sub: Sub => Some((sub.getLeft, sub.getRight))
@@ -52,6 +59,16 @@ object FirmExtractors {
   object PhiExtr {
     def unapply(node: Node): Option[Seq[Node]] = node match {
       case phi: Phi => Some(phi.getPreds.toList)
+      case _ => None
+    }
+  }
+
+  object ReturnExtr {
+    def unapply(node: Node): Option[Option[Node]] = node match {
+      case ret: Return => Some(
+        // >= 2 because the Mem predecessor always exists
+        if (ret.getPredCount >= 2)  Some(ret.getPred(1)) else None
+      )
       case _ => None
     }
   }

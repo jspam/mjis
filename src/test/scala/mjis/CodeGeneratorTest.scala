@@ -180,4 +180,30 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  addq $48, %rsp
         |  ret""", 1))
   }
+
+  it should "generate code for Phis" in {
+    fromMembers("public int foo(int argI, boolean argB) { if (argB) argI = 0; return argI; }") should succeedGeneratingAssemblerWith(template(
+    """_4Test_foo:
+      |  subq $8, %rsp
+      |.L0:
+      |  movq %rdx, %rax
+      |  movq $1, %rbx
+      |  cmpq %rbx, %rax
+      |  jne .L1
+      |  jmp .L2
+      |.L1:
+      |  movq %rsi, %rax
+      |  movq %rax, 0(%rsp)
+      |  jmp .L3
+      |.L2:
+      |  movq $0, %rax
+      |  movq %rax, 0(%rsp)
+      |  jmp .L3
+      |.L3:
+      |  movq 0(%rsp), %rax
+      |  jmp .L4
+      |.L4:
+      |  addq $8, %rsp
+      |  ret""", 4))
+  }
 }
