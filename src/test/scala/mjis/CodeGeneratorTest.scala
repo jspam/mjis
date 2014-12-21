@@ -180,5 +180,4 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  addq $48, %rsp
         |  ret""", 1))
   }
-
 }

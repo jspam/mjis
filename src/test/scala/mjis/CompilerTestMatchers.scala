@@ -165,19 +165,12 @@ trait CompilerTestMatchers {
   class CodeGeneratorMatcher(expected: String) extends Matcher[String] {
     override def apply(code: String): MatchResult = {
       val codeGenerator = assertExec[CodeGenerator](code)
-      // Remove comments (the regex is evaluated line-wise)
-      val resultWithoutComments = "\\s*#.*".r.replaceAllIn(codeGenerator.result, "")
-      val expectedWithoutComments = "\\s*#.*".r.replaceAllIn(expected, "")
-      var labels = mutable.HashMap[Int, Int]()
-      val resultWithNormalizedLabels = "(?m)^\\.L(\\d+)".r.replaceAllIn(resultWithoutComments, m => {
-        val currentLabel = labels.size
-        labels += m.group(1).toInt -> currentLabel
-        s".L$currentLabel" })
-      val resultWithNormalizedJumps = " \\.L(\\d+)".r.replaceAllIn(resultWithNormalizedLabels, m => {
-        val newLabel = labels(m.group(1).toInt)
-        s" .L$newLabel" })
-      BeMatcher(be(expectedWithoutComments)).apply(resultWithNormalizedJumps)
+      AsmTestHelper.isIsomorphic(codeGenerator.result, expected)
     }
+  }
+
+  class AsmIsomorphismMatcher(expected: String) extends Matcher[String] {
+    override def apply(left: String): MatchResult = AsmTestHelper.isIsomorphic(left, expected)
   }
 
   lazy val ClassPath: String = Seq("sbt", "export compile:fullClasspath").lineStream.last
@@ -222,6 +215,7 @@ trait CompilerTestMatchers {
   def succeedGeneratingAssemblerWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
   def passIntegrationTest() = new IntegrationTestMatcher()
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
+  def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)
   def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, before, to)
 }
 
