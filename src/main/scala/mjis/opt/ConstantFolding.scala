@@ -3,7 +3,7 @@ package mjis.opt
 import firm._
 import firm.nodes._
 import mjis.opt.FirmExtractors._
-import mjis.opt.GraphExtensions._
+import mjis.opt.FirmExtensions._
 
 
 object ConstantFolding extends Optimization {

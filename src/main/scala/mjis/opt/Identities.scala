@@ -3,7 +3,7 @@ package mjis.opt
 import firm._
 import firm.nodes._
 import mjis.opt.FirmExtractors._
-import mjis.opt.GraphExtensions._
+import mjis.opt.FirmExtensions._
 
 object Identities extends Optimization {
 
@@ -33,7 +33,6 @@ object Identities extends Optimization {
         g.deleteDivOrMod(div)
         x
       case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
-        // The new node won't participate in CSE, but it shouldn't matter for a Const node.
         g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode)
     }
 

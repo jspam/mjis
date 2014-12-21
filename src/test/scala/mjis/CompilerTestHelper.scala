@@ -5,6 +5,7 @@ import System.{ lineSeparator => n }
 import mjis.ast._
 import org.scalatest._
 import scala.reflect._
+import scala.collection.JavaConversions._
 
 object CompilerTestHelper {
   def fromMembers(member: String, mainMethod: Boolean = true): String = s"class Test {$n$member$n" +
@@ -24,5 +25,12 @@ object CompilerTestHelper {
   def assertExecFailure[P <: Phase[_]: ClassTag](input: String): List[Finding] = Compiler.exec(new StringReader(input)) match {
     case Left(phase) => Assertions.fail(s"Compilation up to ${classTag[P].runtimeClass.getName} succeeded, expected it to fail.")
     case Right(findings) => findings
+  }
+
+  def getGraph(method: String, methodName: String = "test"): firm.Graph = {
+    assertExec[FirmConstructor](fromMembers(method))
+    val g = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_" + methodName)
+    assert(g.isDefined)
+    g.get
   }
 }
