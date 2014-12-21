@@ -27,7 +27,6 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
   private val firmType = new mutable.HashMap[TypeDef, firm.Type]().withPersistentDefault {
     case Builtins.BooleanType => new PrimitiveType(Mode.getBu)
     case Builtins.IntType => new PrimitiveType(Mode.getIs)
-    case Builtins.ExtendedIntType => new PrimitiveType(Mode.getIu)
     case Builtins.VoidType => throw new IllegalArgumentException("void doesn't have a runtime type")
     /* array and class types */
     case _ => new PrimitiveType(Mode.getP)
@@ -241,7 +240,6 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     override def postVisit(expr: IntLiteral): ExprResult = {
       Value(Typer.getType(expr) match {
         case Builtins.IntType => constr.newConst(expr.value.toInt, Mode.getIs)
-        case Builtins.ExtendedIntType => constr.newConst(new TargetValue(expr.value.toLong, Mode.getIu))
         case _ => throw new IllegalArgumentException("Invalid type for IntLiteral")
       })
     }
@@ -302,13 +300,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
                 constr.setCurrentMem(constr.newProj(modNode, Mode.getM, firm.nodes.Mod.pnM))
                 constr.newProj(modNode, Mode.getIs, firm.nodes.Mod.pnRes)
 
-              case Builtins.ExtendedIntMinusDecl =>
-                val minusNode = constr.newMinus(args(0), args(0).getMode)
-                if (args(0).getMode == Mode.getIu) {
-                  constr.newConv(minusNode, Mode.getIs)
-                } else {
-                  minusNode
-                }
+              case Builtins.IntMinusDecl =>
+                constr.newMinus(args(0), args(0).getMode)
 
               case Builtins.ArrayAccessDecl =>
                 val sel = createArrayAccess(expr, args)
@@ -353,8 +346,8 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     }
 
     private val callocType = {
-      val Iu = firmType(Builtins.ExtendedIntType)
-      val params: Array[Type] = List(Iu, Iu).toArray
+      val Is = firmType(Builtins.IntType)
+      val params: Array[Type] = Array(Is, Is)
       // we can't construct a void*, so we take the next best thing: char*
       val result: Array[Type] = Array(new PointerType(new PrimitiveType(Mode.getBu)))
       new MethodType(params, result)
@@ -381,15 +374,15 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       val baseType = firmArrayType(arrayType).getElementType
 
       // evaluate elems first since it could introduce new blocks
-      val elems = constr.newConv(exprResultToValue(firstDimSize).node, Mode.getIu)
-      val size = constr.newConst(baseType.getSizeBytes, Mode.getIu)
+      val elems = exprResultToValue(firstDimSize).node
+      val size = constr.newConst(baseType.getSizeBytes, Mode.getIs)
       Value(call(calloc, Array[Node](elems, size)))
     }
 
     override def postVisit(expr: NewObject, _1: Unit): ExprResult = {
       val classType = firmClassEntity(expr.typ.decl).getType
-      val size = constr.newConst(new PrimitiveType(Mode.getP).getSizeBytes, Mode.getIu)
-      val num_elems = constr.newConst(1, Mode.getIu)
+      val size = constr.newConst(new PrimitiveType(Mode.getP).getSizeBytes, Mode.getIs)
+      val num_elems = constr.newConst(1, Mode.getIs)
       Value(call(calloc, Array[Node](num_elems, size)))
     }
 

@@ -295,9 +295,9 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
     })
 
     fromStatements("-42;") should succeedTyping
-    fromStatements("-true;") should failTypingWith(InvalidTypeError(ExtendedIntType, BooleanType, NoPosition))
-    fromStatements("-new Test();") should failTypingWith(InvalidTypeError(ExtendedIntType, TypeBasic("Test"), NoPosition))
-    fromStatements("-new int[42][];") should failTypingWith(InvalidTypeError(ExtendedIntType, TypeArray(IntType, 2), NoPosition))
+    fromStatements("-true;") should failTypingWith(InvalidTypeError(IntType, BooleanType, NoPosition))
+    fromStatements("-new Test();") should failTypingWith(InvalidTypeError(IntType, TypeBasic("Test"), NoPosition))
+    fromStatements("-new int[42][];") should failTypingWith(InvalidTypeError(IntType, TypeArray(IntType, 2), NoPosition))
 
     fromStatements("!true;") should succeedTyping
     fromStatements("!42;") should failTypingWith(InvalidTypeError(BooleanType, IntType, NoPosition))
@@ -326,21 +326,22 @@ class TyperTest extends FlatSpec with Matchers with Inspectors {
 
   it should "disallow big Integer literals" in {
     var value = "13456712834576298365798347569834756234523864759486734857320854032543252342342344"
-    fromStatements(s"int x = $value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,89)))
-    fromStatements(s"int x = -$value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,90)))
+    fromStatements(s"$value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,81)))
+    fromStatements(s"-$value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,82)))
 
     value = "2147483649"
-    fromStatements(s"int x = $value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,19)))
-    fromStatements(s"int x = -$value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,20)))
+    fromStatements(s"$value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,11)))
+    fromStatements(s"-$value;") should failTypingWith(IntLiteralOutOfRangeError(value, Position(3,12)))
 
     value = "2147483648"
-    fromStatements(s"int x = $value;") shouldNot succeedTyping
-    fromStatements(s"int x = -$value;") should succeedTyping
-    fromStatements(s"int x = -(-$value);") should succeedTyping
+    fromStatements(s"$value;") shouldNot succeedTyping
+    fromStatements(s"-$value;") should succeedTyping
+    fromStatements(s"-($value);") shouldNot succeedTyping
+    fromStatements(s"-(-$value);") should succeedTyping
 
     value = "2147483647"
-    fromStatements(s"int x = $value;") should succeedTyping
-    fromStatements(s"int x = -$value;") should succeedTyping
+    fromStatements(s"$value;") should succeedTyping
+    fromStatements(s"-$value;") should succeedTyping
   }
 
   it should "properly count the number of declared vars in a main method" in {

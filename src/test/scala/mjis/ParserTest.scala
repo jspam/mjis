@@ -150,6 +150,10 @@ class ParserTest extends FlatSpec with Matchers with Inspectors {
     ))
   }
 
+  it should "accept and transform MinInt" in {
+    fromStatements("-2147483648;") should succeedParsingWith(expressionsAST(IntLiteral("-2147483648")))
+  }
+
   it should "accept assignments" in {
     fromStatements("a=a;\na=a=a;") should succeedParsingWith(expressionsAST(
       Assignment(Ident("a"), Ident("a")),
