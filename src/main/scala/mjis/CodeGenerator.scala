@@ -7,7 +7,8 @@ import firm._
 import firm.nodes._
 import mjis.asm._
 import mjis.CodeGenerator._
-import mjis.opt.FirmExtractors.ProjExtr
+import mjis.opt.FirmExtractors._
+import mjis.opt.NodeCollector
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
 
@@ -34,9 +35,17 @@ object CodeGenerator {
   }
 
   def createsValue(n: Node): Boolean = {
-    assignsVariable(n) || n.getOpCode == ir_opcode.iro_Return || n.getOpCode == ir_opcode.iro_Call /* calls create a
+    assignsVariable(n) || n.getOpCode == ir_opcode.iro_Call /* calls create a
       value (modify global state) even if they don't assign a variable */
   }
+
+  def createsControlFlow(n: Node): Boolean = (n.getMode == Mode.getX && n.getOpCode != ir_opcode.iro_Proj) ||
+    (n.getOpCode == ir_opcode.iro_Cond)
+}
+
+class AsmBasicBlock {
+  val instructions = ListBuffer[Instruction]()
+  val controlFlowInstructions = ListBuffer[Instruction]()
 }
 
 class CodeGenerator(a: Unit) extends Phase[String] {
@@ -99,7 +108,8 @@ class CodeGenerator(a: Unit) extends Phase[String] {
         def emitInstr(instr: Instruction): Unit = { convertRspToRbpRelative(instr); emit(instrToString(instr)) }
         def emitBlock(block: Block): Unit = {
           emit(s".L${block.getNr}: # Block ${block.getNr}", indent = false)
-          blocks(block).foreach (emitInstr)
+          blocks(block).instructions.foreach(emitInstr)
+          blocks(block).controlFlowInstructions.foreach(emitInstr)
         }
 
         generator.prologue.foreach(emitInstr)
@@ -149,25 +159,26 @@ class CodeGenerator(a: Unit) extends Phase[String] {
 
     val prologue = ListBuffer[Instruction]()
     val epilogue = ListBuffer[Instruction]()
+    val basicBlocks = mutable.HashMap[Block, AsmBasicBlock]().withPersistentDefault(_ => new AsmBasicBlock())
 
-    def getResult(): mutable.Map[Block, ListBuffer[Instruction]] = {
-      val linearizedNodes = mutable.HashMap[Block, ListBuffer[Node]]().withPersistentDefault(_ => new ListBuffer[Node]())
-      val result = mutable.HashMap[Block, ListBuffer[Instruction]]().withPersistentDefault(_ => new ListBuffer[Instruction]())
+    def getResult(): mutable.Map[Block, AsmBasicBlock] = {
+      val backEdgesWereEnabled = BackEdges.enabled(g)
+      BackEdges.enable(g)
 
-      g.walkTopological(new NodeVisitor.Default {
-        override def defaultVisit(n: Node): Unit = linearizedNodes(n.getBlock.asInstanceOf[Block]) += n
-      })
-
-      linearizedNodes.foreach {
-        case (block, nodes) => nodes.foreach{ n =>
-          if (createsValue(n)) {
-            result(block) ++= createValue(n, RAX)
-            if (assignsVariable(n)) {
-              result(block) += Movq(RAX, activationRecordOperand(n)).withComment(s"Spill for $n")
-            }
+      for (n <- NodeCollector.fromWalk(g.walkTopological)) {
+        val basicBlock = basicBlocks(n.getBlock.asInstanceOf[Block])
+        if (createsValue(n)) {
+          basicBlock.instructions ++= createValue(n, RAX)
+          if (assignsVariable(n)) {
+            basicBlock.instructions += Movq(RAX, activationRecordOperand(n)).withComment(s"Spill for $n")
           }
         }
+        if (createsControlFlow(n)) {
+          basicBlock.controlFlowInstructions ++= createControlFlow(n)
+        }
       }
+
+      if (!backEdgesWereEnabled) BackEdges.disable(g)
 
       if (activationRecordSize > 0) {
         prologue += Subq(intConstOp(activationRecordSize), RSP).withComment("Build stack frame")
@@ -176,7 +187,7 @@ class CodeGenerator(a: Unit) extends Phase[String] {
 
       epilogue += Ret()
 
-      result
+      basicBlocks
     }
 
     private val paramSizes: Seq[Int] = {
@@ -193,6 +204,46 @@ class CodeGenerator(a: Unit) extends Phase[String] {
         val regParams = paramSizes.drop(ParamRegisters.length)
         regParams.tail.scanLeft(align(regParams(0)))(_ + align(_))
       }
+
+    private def createControlFlow(node: Node): Seq[Instruction] = {
+      def loadValueComment: Instruction => Instruction = instr => { instr.comment += s" - load argument of $node"; instr }
+      val result = mutable.ListBuffer[Instruction]()
+      def successorBlockOperand(node: Node) = new LabelOperand(
+        BackEdges.getOuts(node).iterator().next().node.asInstanceOf[Block].getNr)
+
+      node match {
+        case _ : firm.nodes.Jmp =>
+          result += mjis.asm.Jmp(successorBlockOperand(node)).withComment(node.toString)
+
+        case ReturnExtr(retvalOption) =>
+          retvalOption match {
+            case Some(retval) =>
+              val returnValue = getValue(retval, RAX)
+              assert(returnValue.length >= 1)
+              result ++= returnValue map loadValueComment
+            case None =>
+          }
+          result += mjis.asm.Jmp(successorBlockOperand(node)).withComment(node.toString)
+
+        case CondExtr(cmp: Cmp) =>
+          result ++= getValue(cmp.getLeft, RAX) map loadValueComment
+          result ++= getValue(cmp.getRight, RBX) map loadValueComment
+          result += Cmpq(RBX, RAX).withComment(s"Evalulate $cmp for $node")
+
+          val successors = BackEdges.getOuts(node).map(_.node.asInstanceOf[Proj]).toList
+          val projTrue = successors.find(_.getNum == Cond.pnTrue)
+          val projFalse = successors.find(_.getNum == Cond.pnFalse)
+          assert (projTrue.isDefined && projFalse.isDefined)
+          result += JmpConditional(successorBlockOperand(projFalse.get), cmp.getRelation, negate = false).
+            withComment(projFalse.get.toString)
+          result += mjis.asm.Jmp(successorBlockOperand(projTrue.get)).
+            withComment(projTrue.get.toString)
+
+        case _ : End =>
+      }
+
+      result
+    }
 
     private def createValue(node: Node, destRegNo: Int): Seq[Instruction] = {
       def loadValueComment: Instruction => Instruction = instr => { instr.comment += s" - load argument of $node"; instr }
@@ -253,48 +304,37 @@ class CodeGenerator(a: Unit) extends Phase[String] {
           result += Mulq(RBX).withComment(node.toString)
           result += Movq(RAX, destRegNo).withComment(node.toString)
 
-        case n : firm.nodes.Return =>
-          if (n.getPredCount == 2) { // 2 because the Mem predecessor always exists
-            val returnValue = getValue(n.getPred(1), RAX)
-            assert(returnValue.length >= 1)
-            result ++= returnValue map loadValueComment
+        case n : firm.nodes.Phi =>
+          n.getPreds.zipWithIndex.foreach { case (pred, idx) =>
+            val predBB = basicBlocks(n.getBlock.getPred(idx).getBlock.asInstanceOf[Block])
+            predBB.instructions ++= getValue(pred, RAX)
+            predBB.instructions += Movq(RAX, activationRecordOperand(n)).withComment(s"Store value of $n for predecessor $idx")
           }
-          result += mjis.asm.Jmp(new LabelOperand(g.getEndBlock.getNr)).withComment(node.toString)
+          result += Movq(activationRecordOperand(n), destRegNo).withComment(n.toString)
 
-        case n : firm.nodes.Proj =>
-          if (node.getPredCount > 0 && node.getPred(0).getOpCode == ir_opcode.iro_Proj) {
-            new Proj(node.getPred(0).ptr).getNum match {
-              // Arguments
-              case Start.pnTArgs =>
-                result += Movq(
-                  if (n.getNum < ParamRegisters.length) ParamRegisters(n.getNum)
-                    else new RegisterOffsetOperand(RBP, paramOffsets(n.getNum), paramSizes(n.getNum)),
-                  destRegNo
-                ).withComment(s"Load parameter ${n.getNum}")
+        case ProjExtr(ProjExtr(n, Start.pnTArgs), num) =>
+          result += Movq(
+            if (num < ParamRegisters.length) ParamRegisters(num)
+              else new RegisterOffsetOperand(RBP, paramOffsets(num), paramSizes(num)),
+            destRegNo
+          ).withComment(s"Load parameter $num")
 
-              case _ =>
-            }
-          }
-
-        case _ : firm.nodes.End =>
-        case _ : firm.nodes.Start =>
-        case _ : firm.nodes.Block =>
+        case _ : firm.nodes.Cmp =>
         case _ : firm.nodes.Address =>
       }
 
       result
     }
 
-    private def getValue(node: Node, destRegNo: Int): Seq[Instruction] = {
-      // Call results are stored in the AR under the Call node, but accessed via Proj nodes
-      val arNode = node match {
-        case _: Proj => node.getPred(0) match {
-          case ProjExtr(call: firm.nodes.Call, firm.nodes.Call.pnTResult) => call
-          case _ => node
-        }
-        case _ => node
-      }
+    /** Gets the node under which the current node's value is saved in the AR.
+      * e.g. Call results are stored in the AR under the Call node, but accessed via Proj nodes. */
+    private def getArNode(node: Node) = node match {
+      case ProjExtr(ProjExtr(call: firm.nodes.Call, firm.nodes.Call.pnTResult), _) => call
+      case _ => node
+    }
 
+    private def getValue(node: Node, destRegNo: Int): Seq[Instruction] = {
+      val arNode = getArNode(node)
       if (activationRecord.contains(arNode)) {
         Seq(Movq(activationRecordOperand(arNode), destRegNo).withComment(s"Reload for $arNode"))
       } else {

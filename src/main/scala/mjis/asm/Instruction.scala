@@ -1,6 +1,6 @@
 package mjis.asm
 
-import firm.TargetValue
+import firm.{Relation, TargetValue}
 import AMD64Registers._
 
 case class Register(name: String, sizeBytes: Int)
@@ -60,10 +60,25 @@ abstract class TwoOperandsInstruction(op1: Operand, op2: Operand) extends Instru
 
 case class Addq(left: Operand, rightAndResult: RegisterOperand) extends TwoOperandsInstruction(left, rightAndResult)
 case class Call(method: LabelOperand) extends OneOperandInstruction(method)
+case class Cmpq(left: Operand, right: Operand) extends TwoOperandsInstruction(left, right)
 case class Movq(src: Operand, dest: Operand) extends TwoOperandsInstruction(src, dest)
 case class Mulq(left: Operand) extends OneOperandInstruction(left)
 case class Popq(dest: RegisterOperand) extends OneOperandInstruction(dest)
 case class Jmp(dest: LabelOperand) extends OneOperandInstruction(dest)
+case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolean) extends OneOperandInstruction(dest) {
+  override def opcode: String = relation match {
+    case Relation.Less => if (negate) "jge" else "jl"
+    case Relation.GreaterEqual => if (negate) "jl" else "jge"
+
+    case Relation.Greater => if (negate) "jle" else "jg"
+    case Relation.LessEqual => if (negate) "jg" else "jle"
+
+    case Relation.Equal => if (negate) "je" else "jne"
+    case Relation.UnorderedLessGreater => if (negate) "jne" else "je"
+
+    case _ => ???
+  }
+}
 case class Pushq(src: Operand) extends OneOperandInstruction(src)
 case class Ret() extends ZeroOperandsInstruction
 case class Subq(subtrahend: Operand, minuendAndResult: RegisterOperand) extends TwoOperandsInstruction(subtrahend, minuendAndResult)
