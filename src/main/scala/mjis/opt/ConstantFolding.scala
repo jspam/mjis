@@ -3,6 +3,8 @@ package mjis.opt
 import firm._
 import firm.nodes._
 import mjis.opt.FirmExtractors._
+import mjis.opt.FirmExtensions._
+
 
 object ConstantFolding extends Optimization {
 
@@ -77,7 +79,7 @@ object ConstantFolding extends Optimization {
           case _: Div | _: Mod =>
             // the Div / Mod node itself is not exchanged, instead its result Proj
             // will be replaced
-            Optimization.deleteDivOrMod(node)
+            g.deleteDivOrMod(node)
           case _: Proj if node.getMode == Mode.getX =>
             if (tarval == TargetValue.getBTrue)
               GraphBase.exchange(node, g.newJmp(node.getBlock))

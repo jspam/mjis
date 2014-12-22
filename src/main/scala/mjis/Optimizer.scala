@@ -19,9 +19,11 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     Normalization.optimize()
     CommonSubexpressionElimination.optimize()
     TrivialPhiElimination.optimize()
+    LoopStrengthReduction.optimize()
 
     Util.lowerSels()
     Identities.optimize()
+    CommonSubexpressionElimination.optimize()
   }
 
 }

@@ -5,7 +5,19 @@ import firm.nodes._
 
 import scala.collection.JavaConversions._
 
+/**
+ * Constant, pattern-matchable modes
+ */
+object Modes {
+  lazy val M = Mode.getM
+  lazy val Is = Mode.getIs
+}
+
 object FirmExtractors {
+
+  object NodeExtr {
+    def unapplySeq(node: Node): Option[Seq[Node]] = Some(node.getPreds.toList)
+  }
 
   object ConstExtr {
     def unapply(node: Node): Option[Long] = node match {
@@ -57,7 +69,7 @@ object FirmExtractors {
   }
 
   object PhiExtr {
-    def unapply(node: Node): Option[Seq[Node]] = node match {
+    def unapplySeq(node: Node): Option[Seq[Node]] = node match {
       case phi: Phi => Some(phi.getPreds.toList)
       case _ => None
     }
