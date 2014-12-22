@@ -398,7 +398,13 @@ class Parser(tokens: LookaheadIterator[Token]) extends AnalysisPhase[Program] {
       tailcall(parseUnaryExpression()).map(e => Apply("!", List(e), isOperator=true))
     case Minus =>
       consume()
-      tailcall(parseUnaryExpression()).map(e => Apply("-", List(e), isOperator=true))
+      val ExtendedInt = "2147483648"
+      if (currentToken.data == IntegerLiteral(ExtendedInt)) {
+        consume()
+        done(IntLiteral("-" + ExtendedInt))
+      } else {
+        tailcall(parseUnaryExpression()).map(e => Apply("-", List(e), isOperator = true))
+      }
     case _ =>
       parsePostfixExpression()
   }

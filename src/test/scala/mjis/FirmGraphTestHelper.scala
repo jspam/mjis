@@ -25,7 +25,6 @@ object FirmGraphTestHelper {
       "b" -> Mode.getb,
       "Bu" -> Mode.getBu,
       "Is" -> Mode.getIs,
-      "Iu" -> Mode.getIu,
       "M" -> Mode.getM,
       "P" -> Mode.getP,
       "T" -> Mode.getT
@@ -56,12 +55,12 @@ object FirmGraphTestHelper {
         val args = definitionAndArgs.tail.map(nodes).toArray
 
         val s = "(\\w+)"
-        val i = "(\\d+)"
+        val i = "(-?\\d+)"
 
         val addRegex = s"Add $s".r
         val addrRegex = s"Addr $s".r
         val callRegex = s"Call $s".r
-        val constRegex = s"Const $s $s".r
+        val constRegex = s"Const $i $s".r
         val convRegex = s"Conv $s".r
         val cmpRegex = s"Cmp $s".r
         val divRegex = s"Div $s".r
@@ -95,7 +94,6 @@ object FirmGraphTestHelper {
           case constRegex(value, mode) =>
             assert(args.length == 0, s"Const needs zero arguments: $line")
             curNode = mode match {
-              case "Iu" => constr.newConst(new TargetValue(value.toLong, modes(mode)))
               case "Is" | "Bu" | "P" => constr.newConst(value.toInt, modes(mode))
               case "b" => constr.newConst(value match {
                 case "true" => 1

@@ -5,7 +5,6 @@ import mjis.CompilerTestMatchers._
 import mjis.Namer._
 import mjis.ast._
 import mjis.Builtins._
-import mjis.Position.NoPosition
 import org.scalatest._
 
 class NamerTest extends FlatSpec with Matchers with Inspectors {
@@ -60,7 +59,7 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
       getMethod(IntDecl, "/"), getMethod(IntDecl, "%"), getMethod(IntDecl, "<="),
       getMethod(IntDecl, "<"), EqualsDecl, UnequalDecl, getMethod(IntDecl, ">"),
       getMethod(IntDecl, ">="), getMethod(BooleanDecl, "||"), getMethod(BooleanDecl, "&&"),
-      getMethod(ExtendedIntDecl, "- (unary)"), getMethod(BooleanDecl, "!"))
+      getMethod(IntDecl, "- (unary)"), getMethod(BooleanDecl, "!"))
     for ((expected, idx) <- expected.zipWithIndex) getRefDecl(statements(idx)) shouldBe expected
   }
 
@@ -210,9 +209,6 @@ class NamerTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "disallow accessing fields/methods of Literals" in {
-    fromStatements(s"int x = 2147483648.x;") should failNamingWith(DefNotFoundError("x", "field", Position(3,21)))
-    fromStatements(s"int x = 2147483648.x();") should failNamingWith(DefNotFoundError("x", "method", Position(3,23)))
-
     fromStatements(s"int x = 42.x;") should failNamingWith(DefNotFoundError("x", "field", Position(3,13)))
     fromStatements(s"int x = 42.x();") should failNamingWith(DefNotFoundError("x", "method", Position(3,15)))
 

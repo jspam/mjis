@@ -50,7 +50,7 @@ object Typer {
   }
 
   def getType(t: Expression) = getTypeRec(t).result
-  def getTypeRec(t: Expression): TailRec[TypeDef] = {
+  private def getTypeRec(t: Expression): TailRec[TypeDef] = {
     t match {
       case Assignment(lhs, _) => tailcall(getTypeRec(lhs))
       case NewObject(typ) => done(typ)
@@ -67,14 +67,11 @@ object Typer {
       case r: Ref[_] => done(r.decl.asInstanceOf[TypedDecl].typ)
       case NullLiteral() => done(NullType)
       case IntLiteral(value) =>
-        val MaxInt = 2147483648L
-        if (value.length > MaxInt.toString.length) {
-          throw new TypecheckException(new IntLiteralOutOfRangeError(value, t.pos))
-        } else {
-          val valueAsLong = value.toLong
-          if (valueAsLong < MaxInt) done(IntType)
-          else if (valueAsLong == MaxInt) done(ExtendedIntType)
-          else throw new TypecheckException(new IntLiteralOutOfRangeError(value, t.pos))
+        try {
+          value.toInt
+          done(IntType)
+        } catch {
+          case _: NumberFormatException => throw new TypecheckException(new IntLiteralOutOfRangeError(value, t.pos))
         }
       case _: BooleanLiteral => done(BooleanType)
     }
@@ -94,8 +91,6 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
     if (from == NullType)
       // null is convertible to every reference type
       to != VoidType && !ValueTypes.contains(to)
-    else if (from == IntType && to == ExtendedIntType)
-      true
     else
       // we don't have any other subtype relations
       from == to
@@ -176,6 +171,11 @@ class Typer(val input: Program) extends AnalysisPhase[Program] {
             throw new TypecheckException(MissingReturnValueError(stmt.pos))
       }
       stmt.isEndReachable = false
+    }
+
+    override def postVisit(stmt: ExpressionStatement, _1: Unit): Unit = {
+      // check type
+      getType(stmt.expr)
     }
 
     override def postVisit(expr: Assignment, _1: Unit, _2: Unit) = {

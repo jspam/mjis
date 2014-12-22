@@ -8,7 +8,6 @@ import org.scalatest._
 class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   var IntType: PrimitiveType = null
-  var UnsignedIntType: PrimitiveType = null
   var BooleanType: PrimitiveType = null
   var RefType: PrimitiveType = null
 
@@ -20,7 +19,6 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     Mode.setDefaultModeP(modeP)
 
     IntType = new PrimitiveType(Mode.getIs)
-    UnsignedIntType = new PrimitiveType(Mode.getIu)
     BooleanType = new PrimitiveType(Mode.getBu)
     RefType = new PrimitiveType(Mode.getP)
   }
@@ -163,7 +161,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     reinitFirm()
     val mExtendedIntLiteralMethodEntity = methodEntity("__expected__4Test_m_extended_int_literal", IntType, Seq())
     val mExtendedIntLiteral = FirmGraphTestHelper.buildFirmGraph(mExtendedIntLiteralMethodEntity,
-      progTemplate("temp1 = Const 2147483648 Iu\ntemp2 = Minus Iu, temp1\nretval = Conv Is, temp2"))
+      progTemplate("retval = Const -2147483648 Is"))
     fromMembers("public int m_extended_int_literal() { return -2147483648; }") should
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mExtendedIntLiteral))
   }
@@ -200,13 +198,13 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   it should "create FIRM graphs for calloc" in {
     val callocMethodEntity = new Entity(Program.getGlobalType, "calloc",
-      new MethodType(Array[Type](UnsignedIntType, UnsignedIntType), Array[Type](new PrimitiveType(Mode.getP))))
+      new MethodType(Array[Type](IntType, IntType), Array[Type](new PrimitiveType(Mode.getP))))
     val mCalloc = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_m_calloc", null, Seq()),
       """
         |start = Start
         |mem_before_call = Proj M M, start
-        |const8 = Const 8 Iu
-        |const1 = Const 1 Iu
+        |const8 = Const 8 Is
+        |const1 = Const 1 Is
         |addr_calloc = Addr calloc
         |call = Call calloc, mem_before_call, addr_calloc, const1, const8
         |mem_after_call = Proj M M, call
