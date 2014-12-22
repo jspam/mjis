@@ -23,11 +23,6 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     RefType = new PrimitiveType(Mode.getP)
   }
 
-  def reinitFirm(): Unit = {
-    Firm.finish()
-    initFirm()
-  }
-
   before { initFirm() }
   after { Firm.finish() }
 
@@ -50,7 +45,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   def methodEntity(name: String, returnType: Type, paramTypes: Seq[Type], thisPointer: Boolean = true) = {
     new Entity(Program.getGlobalType, name,
-      new MethodType((if (thisPointer) (Seq(RefType) ++ paramTypes) else paramTypes).toArray,
+      new MethodType((if (thisPointer) Seq(RefType) ++ paramTypes else paramTypes).toArray,
       returnType match {
         case null => Array[Type]()
         case t => Array[Type](t)
@@ -66,102 +61,103 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fromMembers("") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph))
   }
 
-  it should "create methods with the correct types" in {
+  it should "create methods with the correct types: void(void)" in {
     val m1MethodEntity = methodEntity("__expected__4Test_m1", null, Seq())
     val m1 = FirmGraphTestHelper.buildFirmGraph(m1MethodEntity, emptyMethodFirm)
     fromMembers("public void m1() {}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m1))
+  }
 
-    reinitFirm()
+  it should "create methods with the correct types: int(void)" in {
     val m2MethodEntity = methodEntity("__expected__4Test_m2", IntType, Seq())
     val m2 = FirmGraphTestHelper.buildFirmGraph(m2MethodEntity, returnConstMethodFirm())
     fromMembers("public int m2() {return 0;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m2))
+  }
 
-    reinitFirm()
+  it should "create methods with the correct types: int(int)" in {
     val m3MethodEntity = methodEntity("__expected__4Test_m3", IntType, Seq(IntType))
     val m3 = FirmGraphTestHelper.buildFirmGraph(m3MethodEntity, returnConstMethodFirm())
     fromMembers("public int m3(int p1) {return 0;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m3))
+  }
 
-    reinitFirm()
+  it should "create methods with the correct types: boolean(void)" in {
     val m4MethodEntity = methodEntity("__expected__4Test_m4", BooleanType, Seq())
     val m4 = FirmGraphTestHelper.buildFirmGraph(m4MethodEntity, returnConstMethodFirm("Const 0 Bu"))
     fromMembers("public boolean m4() {return false;}") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, m4))
   }
 
-  it should "create FIRM graphs for Integer arithmetic expressions" in {
-    def progTemplate(op: String) = s"""
-        |start = Start
-        |const1 = Const 1 Is
-        |const2 = Const 2 Is
-        |$op
-        |return = Return, mem_before_return, retval
-        |end = End, return
-      """.stripMargin
+  def intArithmeticFirm(op: String) = s"""
+    |start = Start
+    |const1 = Const 1 Is
+    |const2 = Const 2 Is
+    |$op
+    |return = Return, mem_before_return, retval
+    |end = End, return
+  """.stripMargin
 
+  it should "create FIRM graphs for addition" in {
     val mPlusMethodEntity = methodEntity("__expected__4Test_m_plus", IntType, Seq())
     val mPlus = FirmGraphTestHelper.buildFirmGraph(mPlusMethodEntity,
-      progTemplate("retval = Add Is, const1, const2\nmem_before_return = Proj M M, start"))
+      intArithmeticFirm("retval = Add Is, const1, const2\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_plus() { return 1 + 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mPlus))
+  }
 
-    reinitFirm()
+  it should "create FIRM graphs for subtraction" in {
     val mMinusMethodEntity = methodEntity("__expected__4Test_m_minus", IntType, Seq())
     val mMinus = FirmGraphTestHelper.buildFirmGraph(mMinusMethodEntity,
-      progTemplate("retval = Sub Is, const1, const2\nmem_before_return = Proj M M, start"))
+      intArithmeticFirm("retval = Sub Is, const1, const2\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_minus() { return 1 - 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMinus))
+  }
 
-    reinitFirm()
+  it should "create FIRM graphs for multiplication" in {
     val mMultMethodEntity = methodEntity("__expected__4Test_m_mult", IntType, Seq())
     val mMult = FirmGraphTestHelper.buildFirmGraph(mMultMethodEntity,
-      progTemplate("retval = Mul Is, const1, const2\nmem_before_return = Proj M M, start"))
+      intArithmeticFirm("retval = Mul Is, const1, const2\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_mult() { return 1 * 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMult))
+  }
 
-    reinitFirm()
+  it should "create FIRM graphs for division" in {
     val mDivMethodEntity = methodEntity("__expected__4Test_m_div", IntType, Seq())
     val mDiv = FirmGraphTestHelper.buildFirmGraph(mDivMethodEntity,
-      progTemplate(
+      intArithmeticFirm(
         """mem = Proj M M, start
           |divmod = Div Is, mem, const1, const2
           |retval = Proj Is ResDiv, divmod
           |mem_before_return = Proj M M, divmod
         """.stripMargin))
     fromMembers("public int m_div() { return 1 / 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mDiv))
+  }
 
-    reinitFirm()
+  it should "create FIRM graphs for modulo" in {
     val mModMethodEntity = methodEntity("__expected__4Test_m_mod", IntType, Seq())
     val mMod = FirmGraphTestHelper.buildFirmGraph(mModMethodEntity,
-      progTemplate(
+      intArithmeticFirm(
         """mem = Proj M M, start
           |divmod = Mod Is, mem, const1, const2
           |retval = Proj Is ResMod, divmod
           |mem_before_return = Proj M M, divmod
         """.stripMargin))
     fromMembers("public int m_mod() { return 1 % 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMod))
+  }
 
-    reinitFirm()
+  it should "create FIRM graphs for unary minus" in {
     val mUnaryMinusMethodEntity = methodEntity("__expected__4Test_m_unary_minus", IntType, Seq())
     val mUnaryMinus = FirmGraphTestHelper.buildFirmGraph(mUnaryMinusMethodEntity,
-      progTemplate("retval = Minus Is, const1\nmem_before_return = Proj M M, start".stripMargin))
+      intArithmeticFirm("retval = Minus Is, const1\nmem_before_return = Proj M M, start".stripMargin))
     fromMembers("public int m_unary_minus() { return -1; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mUnaryMinus))
-    // an additional test for unary minus is in test "create FIRM graphs for Integer literals"
   }
 
   it should "create FIRM graphs for Integer literals" in {
-    def progTemplate(retval: String) =
-      s"""start = Start
-        |mem = Proj M M, start
-        |$retval
-        |return = Return, mem, retval
-        |end = End, return
-      """.stripMargin
     val mIntLiteralMethodEntity = methodEntity("__expected__4Test_m_int_literal", IntType, Seq())
     val mIntLiteral = FirmGraphTestHelper.buildFirmGraph(mIntLiteralMethodEntity,
-      progTemplate("retval = Const 2147483647 Is"))
+      intArithmeticFirm("retval = Const 2147483647 Is\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_int_literal() { return 2147483647; }") should
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mIntLiteral))
+  }
 
-    reinitFirm()
+  it should "create FIRM graphs for the Integer literal -2147483648" in {
     val mExtendedIntLiteralMethodEntity = methodEntity("__expected__4Test_m_extended_int_literal", IntType, Seq())
     val mExtendedIntLiteral = FirmGraphTestHelper.buildFirmGraph(mExtendedIntLiteralMethodEntity,
-      progTemplate("retval = Const -2147483648 Is"))
+      intArithmeticFirm("retval = Const -2147483648 Is\nmem_before_return = Proj M M, start"))
     fromMembers("public int m_extended_int_literal() { return -2147483648; }") should
       succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mExtendedIntLiteral))
   }
