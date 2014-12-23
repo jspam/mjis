@@ -159,7 +159,7 @@ class CodeGenerator(a: Unit) extends Phase[String] {
 
     val prologue = ListBuffer[Instruction]()
     val epilogue = ListBuffer[Instruction]()
-    val basicBlocks = mutable.HashMap[Block, AsmBasicBlock]().withPersistentDefault(_ => new AsmBasicBlock())
+    val basicBlocks = new mutable.ListMap[Block, AsmBasicBlock]().withPersistentDefault(_ => new AsmBasicBlock())
 
     def getResult(): mutable.Map[Block, AsmBasicBlock] = {
       val backEdgesWereEnabled = BackEdges.enabled(g)

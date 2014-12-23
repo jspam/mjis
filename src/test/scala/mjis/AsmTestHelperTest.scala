@@ -88,37 +88,4 @@ class AsmTestHelperTest extends FlatSpec with Matchers {
 
     left shouldNot beIsomorphicAsmTo(right)
   }
-
-  it should "detect isomorphic assembler code when blocks are swapped" in {
-    val left =
-      """
-        |.L55:
-        |  jne .L76
-        |  jmp .L78
-        |.L78:
-        |  jmp .L75
-        |.L75:
-        |  jmp .L53
-        |.L76:
-        |  jmp .L75
-        |.L53:
-        |  ret
-      """.replace("  ", "\t").stripMargin
-    val right =
-      """
-        |.L0:
-        |  jne .L1
-        |  jmp .L2
-        |.L1:
-        |  jmp .L3
-        |.L2:
-        |  jmp .L3
-        |.L3:
-        |  jmp .L4
-        |.L4:
-        |  ret
-      """.replace("  ", "\t").stripMargin
-
-    left should beIsomorphicAsmTo(right)
-  }
 }

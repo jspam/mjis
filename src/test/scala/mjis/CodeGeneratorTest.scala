@@ -21,16 +21,16 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
     Firm.finish()
   }
 
-  def template(code: String, lastLabel: Int) =
+  def template(code: String) =
     s"""  .text
       |  .p2align 4,,15
       |
       |$code
       |
       |__main:
-      |.L${lastLabel + 1}:
-      |  jmp .L${lastLabel + 2}
-      |.L${lastLabel + 2}:
+      |.L9000:
+      |  jmp .L9001
+      |.L9001:
       |  ret
       |""".replace("  ", "\t").stripMargin
 
@@ -41,7 +41,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq $42, %rax
         |  jmp .L1
         |.L1:
-        |  ret""", 1))
+        |  ret"""))
   }
 
   it should "generate code for parameters" in {
@@ -51,7 +51,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq %rsi, %rax
         |  jmp .L1
         |.L1:
-        |  ret""", 1))
+        |  ret"""))
   }
 
   it should "generate code for an arithmetic expression" in {
@@ -67,7 +67,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  jmp .L1
         |.L1:
         |  addq $8, %rsp
-        |  ret""", 1))
+        |  ret"""))
   }
 
   it should "generate code for a more complex arithmetic expression" in {
@@ -92,7 +92,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  jmp .L1
         |.L1:
         |  addq $24, %rsp
-        |  ret""", 1))
+        |  ret"""))
   }
 
   it should "generate code for a method call" in {
@@ -117,7 +117,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  jmp .L3
         |.L3:
         |  addq $16, %rsp
-        |  ret""", 3))
+        |  ret"""))
   }
 
   it should "generate code for System.out.println" in {
@@ -132,7 +132,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  jmp .L1
         |.L1:
         |  addq $8, %rsp
-        |  ret""", 1))
+        |  ret"""))
   }
 
   it should "generate code for calloc" in {
@@ -153,7 +153,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  jmp .L1
         |.L1:
         |  addq $16, %rsp
-        |  ret""", 1))
+        |  ret"""))
   }
 
   it should "save registers upon method calls" in {
@@ -178,7 +178,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  jmp .L1
         |.L1:
         |  addq $48, %rsp
-        |  ret""", 1))
+        |  ret"""))
   }
 
   it should "generate code for Phis" in {
@@ -189,14 +189,14 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  movq %rdx, %rax
       |  movq $1, %rbx
       |  cmpq %rbx, %rax
-      |  jne .L1
-      |  jmp .L2
+      |  jne .L2
+      |  jmp .L1
       |.L1:
-      |  movq %rsi, %rax
+      |  movq $0, %rax
       |  movq %rax, 0(%rsp)
       |  jmp .L3
       |.L2:
-      |  movq $0, %rax
+      |  movq %rsi, %rax
       |  movq %rax, 0(%rsp)
       |  jmp .L3
       |.L3:
@@ -204,6 +204,6 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  jmp .L4
       |.L4:
       |  addq $8, %rsp
-      |  ret""", 4))
+      |  ret"""))
   }
 }
