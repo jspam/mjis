@@ -189,8 +189,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  movq %rdx, %rax
       |  movq $1, %rbx
       |  cmpq %rbx, %rax
-      |  jne .L2
-      |  jmp .L1
+      |  je .L1
+      |  jmp .L2
       |.L1:
       |  movq $0, %rax
       |  movq %rax, 0(%rsp)
@@ -205,5 +205,25 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |.L4:
       |  addq $8, %rsp
       |  ret"""))
+  }
+
+  it should "generate code for comparisons" in {
+    fromMembers("public int foo(int argI) { if (argI > 0) return 1; else return 0; }") should succeedGeneratingAssemblerWith(template(
+    """_4Test_foo:
+      |.L0:
+      |  movq %rsi, %rax
+      |  movq $0, %rbx
+      |  cmpq %rbx, %rax
+      |  jg .L2
+      |  jmp .L1
+      |.L1:
+      |  movq $0, %rax
+      |  jmp .L3
+      |.L2:
+      |  movq $1, %rax
+      |  jmp .L3
+      |.L3:
+      |  ret""".stripMargin
+    ))
   }
 }

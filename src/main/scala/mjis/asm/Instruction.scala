@@ -67,14 +67,14 @@ case class Popq(dest: RegisterOperand) extends OneOperandInstruction(dest)
 case class Jmp(dest: LabelOperand) extends OneOperandInstruction(dest)
 case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolean) extends OneOperandInstruction(dest) {
   override def opcode: String = relation match {
-    case Relation.Less => if (negate) "jge" else "jl"
-    case Relation.GreaterEqual => if (negate) "jl" else "jge"
+    case Relation.Less => if (!negate) "jl" else "jge"
+    case Relation.GreaterEqual => if (!negate) "jge" else "jl"
 
-    case Relation.Greater => if (negate) "jle" else "jg"
-    case Relation.LessEqual => if (negate) "jg" else "jle"
+    case Relation.Greater => if (!negate) "jg" else "jle"
+    case Relation.LessEqual => if (!negate) "jle" else "jg"
 
-    case Relation.Equal => if (negate) "je" else "jne"
-    case Relation.UnorderedLessGreater => if (negate) "jne" else "je"
+    case Relation.Equal => if (!negate) "je" else "jne"
+    case Relation.UnorderedLessGreater => if (!negate) "jne" else "je"
 
     case _ => ???
   }
