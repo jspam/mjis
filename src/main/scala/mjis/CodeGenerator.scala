@@ -234,10 +234,10 @@ class CodeGenerator(a: Unit) extends Phase[String] {
           val projTrue = successors.find(_.getNum == Cond.pnTrue)
           val projFalse = successors.find(_.getNum == Cond.pnFalse)
           assert (projTrue.isDefined && projFalse.isDefined)
-          result += JmpConditional(successorBlockOperand(projFalse.get), cmp.getRelation, negate = false).
-            withComment(projFalse.get.toString)
-          result += mjis.asm.Jmp(successorBlockOperand(projTrue.get)).
+          result += JmpConditional(successorBlockOperand(projTrue.get), cmp.getRelation, negate = false).
             withComment(projTrue.get.toString)
+          result += mjis.asm.Jmp(successorBlockOperand(projFalse.get)).
+            withComment(projFalse.get.toString)
 
         case _ : End =>
       }
