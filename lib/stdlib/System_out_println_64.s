@@ -1,3 +1,8 @@
+
+
+	/* MJIS Standard Library (C) 1970-2038 The MiniJavaInScala Creators */
+
+
 	.text
 	.p2align 4,,15
 	.globl System_out_println
