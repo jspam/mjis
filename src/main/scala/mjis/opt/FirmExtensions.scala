@@ -62,6 +62,8 @@ object FirmExtensions {
 
     def block: Block = node.getBlock.asInstanceOf[Block]
 
+    def idx: Int = bindings.binding_irnode.get_irn_idx(node.ptr)
+
   }
 
 }

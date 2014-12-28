@@ -35,7 +35,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |""".replace("  ", "\t").stripMargin
 
   "The code generator" should "generate code for a simple method" in {
-    fromMembers("public int foo() { return 42; }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public int foo() { return 42; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
         |.L0:
         |  movq $42, %rax
@@ -45,185 +45,159 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "generate code for parameters" in {
-    fromMembers("public int foo(int x) { return x; }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public int foo(int x) { return x; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
+        |  movq %rsi, %REG0
         |.L0:
-        |  movq %rsi, %rax
+        |  movq %REG0, %rax
         |  jmp .L1
         |.L1:
         |  ret"""))
   }
 
   it should "generate code for an arithmetic expression" in {
-    fromMembers("public int foo(int x) { return x + 3; }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public int foo(int x) { return x + 3; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
-        |  subq $8, %rsp
+        |  movq %rsi, %REG0
         |.L0:
-        |  movq %rsi, %rax
-        |  movq $3, %rbx
-        |  addq %rbx, %rax
-        |  movq %rax, 0(%rsp)
-        |  movq 0(%rsp), %rax
+        |  movq %REG0, %REG1
+        |  addq $3, %REG1
+        |  movq %REG1, %rax
         |  jmp .L1
         |.L1:
-        |  addq $8, %rsp
         |  ret"""))
   }
 
   it should "generate code for a more complex arithmetic expression" in {
-    fromMembers("public int foo(int x, int y) { return (x + 3) * (y + 4); }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public int foo(int x, int y) { return (x + 3) * (y + 4); }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
-        |  subq $24, %rsp
+        |  movq %rsi, %REG0
+        |  movq %rdx, %REG1
         |.L0:
-        |  movq %rsi, %rax
-        |  movq $3, %rbx
-        |  addq %rbx, %rax
-        |  movq %rax, 16(%rsp)
-        |  movq %rdx, %rax
-        |  movq $4, %rbx
-        |  addq %rbx, %rax
-        |  movq %rax, 8(%rsp)
-        |  movq 16(%rsp), %rax
-        |  movq 8(%rsp), %rbx
-        |  mulq %rbx
-        |  movq %rax, %rax
-        |  movq %rax, 0(%rsp)
-        |  movq 0(%rsp), %rax
+        |  movq %REG0, %REG2
+        |  addq $3, %REG2
+        |  movq %REG1, %REG3
+        |  addq $4, %REG3
+        |  movq %REG2, %rax
+        |  mulq %REG3
+        |  movq %rax, %REG4
+        |  movq %REG4, %rax
         |  jmp .L1
         |.L1:
-        |  addq $24, %rsp
         |  ret"""))
   }
 
   it should "generate code for a method call" in {
-    fromMembers("public int foo(int x) { return x; } public int bar() { return foo(42); }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public int foo(int x) { return x; } public int bar() { return foo(42); }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
+        |  movq %rsi, %REG0
         |.L0:
-        |  movq %rsi, %rax
+        |  movq %REG0, %rax
         |  jmp .L1
         |.L1:
         |  ret
         |
         |_4Test_bar:
-        |  subq $16, %rsp
+        |  movq %rdi, %REG2
         |.L2:
-        |  movq %rdi, 8(%rsp)
-        |  movq %rdi, %rdi
+        |  movq %REG2, %rdi
         |  movq $42, %rsi
         |  call _4Test_foo
-        |  movq 8(%rsp), %rdi
-        |  movq %rax, 0(%rsp)
-        |  movq 0(%rsp), %rax
+        |  movq %rax, %REG3
+        |  movq %REG3, %rax
         |  jmp .L3
         |.L3:
-        |  addq $16, %rsp
         |  ret"""))
   }
 
   it should "generate code for System.out.println" in {
-    fromMembers("public void foo() { System.out.println(42); }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public void foo() { System.out.println(42); }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
-        |  subq $8, %rsp
         |.L0:
-        |  movq %rdi, 0(%rsp)
         |  movq $42, %rdi
         |  call System_out_println
-        |  movq 0(%rsp), %rdi
         |  jmp .L1
         |.L1:
-        |  addq $8, %rsp
         |  ret"""))
   }
 
   it should "generate code for calloc" in {
-    fromMembers("public void foo() { new Test().foo(); }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public void foo() { new Test().foo(); }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
-        |  subq $16, %rsp
         |.L0:
-        |  movq %rdi, 8(%rsp)  # Save rdi (it contains the this parameter)
         |  movq $1, %rdi
         |  movq $8, %rsi       # rsi doesn't need to be saved
         |  call calloc
-        |  movq 8(%rsp), %rdi  # Restore rdi
-        |  movq %rax, 0(%rsp)
-        |  movq %rdi, 8(%rsp)  # Save rdi (again)
-        |  movq 0(%rsp), %rdi
+        |  movq %rax, %REG0
+        |  movq %REG0, %rdi
         |  call _4Test_foo
-        |  movq 8(%rsp), %rdi  # Restore rdi
         |  jmp .L1
         |.L1:
-        |  addq $16, %rsp
-        |  ret"""))
-  }
-
-  it should "save registers upon method calls" in {
-    fromMembers("public void foo(int arg1, int arg2, int arg3, int arg4, int arg5, int arg6, int arg7) { System.out.println(42); } ") should succeedGeneratingAssemblerWith(template(
-      """_4Test_foo:
-        |  subq $48, %rsp
-        |.L0:
-        |  movq %rdi, 40(%rsp)
-        |  movq %rsi, 32(%rsp)
-        |  movq %rdx, 24(%rsp)
-        |  movq %rcx, 16(%rsp)
-        |  movq %r8, 8(%rsp)
-        |  movq %r9, 0(%rsp)
-        |  movq $42, %rdi
-        |  call System_out_println
-        |  movq 40(%rsp), %rdi
-        |  movq 32(%rsp), %rsi
-        |  movq 24(%rsp), %rdx
-        |  movq 16(%rsp), %rcx
-        |  movq 8(%rsp), %r8
-        |  movq 0(%rsp), %r9
-        |  jmp .L1
-        |.L1:
-        |  addq $48, %rsp
         |  ret"""))
   }
 
   it should "generate code for Phis" in {
-    fromMembers("public int foo(int argI, boolean argB) { if (argB) argI = 0; return argI; }") should succeedGeneratingAssemblerWith(template(
+    fromMembers("public int foo(int argI, boolean argB) { if (argB) argI = 0; return argI; }") should succeedGeneratingCodeWith(template(
     """_4Test_foo:
-      |  subq $8, %rsp
+      |  movq %rdx, %REG0  # argB
+      |  movq %rsi, %REG1  # argI
       |.L0:
-      |  movq %rdx, %rax
-      |  movq $1, %rbx
-      |  cmpq %rbx, %rax
-      |  je .L1
-      |  jmp .L2
+      |  cmpq $1, %REG0
+      |  je .L2
+      |  jmp .L1
       |.L1:
-      |  movq $0, %rax
-      |  movq %rax, 0(%rsp)
+      |  movq %REG1, %REG2
       |  jmp .L3
       |.L2:
-      |  movq %rsi, %rax
-      |  movq %rax, 0(%rsp)
+      |  movq $0, %REG2
       |  jmp .L3
       |.L3:
-      |  movq 0(%rsp), %rax
+      |  movq %REG2, %rax
       |  jmp .L4
       |.L4:
-      |  addq $8, %rsp
       |  ret"""))
   }
 
   it should "generate code for comparisons" in {
-    fromMembers("public int foo(int argI) { if (argI > 0) return 1; else return 0; }") should succeedGeneratingAssemblerWith(template(
-    """_4Test_foo:
+    fromMembers("public int foo(int argI) { if (argI > 0) return 1; else return 0; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+      |  movq %rsi, %REG0
       |.L0:
-      |  movq %rsi, %rax
-      |  movq $0, %rbx
-      |  cmpq %rbx, %rax
-      |  jg .L2
-      |  jmp .L1
+      |  cmpq $0, %REG0
+      |  jg .L1
+      |  jmp .L2
       |.L1:
-      |  movq $0, %rax
-      |  jmp .L3
-      |.L2:
       |  movq $1, %rax
       |  jmp .L3
+      |.L2:
+      |  movq $0, %rax
+      |  jmp .L3
       |.L3:
-      |  ret""".stripMargin
-    ))
+      |  ret"""))
+  }
+
+  it should "circumvent the Swap problem when generating code for Phis" in {
+    fromMembers("public int foo(int x) { int y = 42; while (x < 5) { int tmp = x; x = y; y = tmp; } return y; }") should
+      succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rsi, %REG0
+        |.L0:
+        |  movq $42, %REG1      # y => REG1
+        |  movq %REG0, %REG2    # x => REG2
+        |  jmp .L2
+        |.L1:
+        |  movq %REG1, %REG3    # tmp = y
+        |  movq %REG2, %REG1    # y = x
+        |  movq %REG3, %REG2    # x = tmp
+        |  jmp .L2
+        |.L2:
+        |  cmpq $5, %REG2
+        |  jl .L1
+        |  jmp .L3
+        |.L3:
+        |  movq %REG1, %rax
+        |  jmp .L4
+        |.L4:
+        |  ret"""))
   }
 }
