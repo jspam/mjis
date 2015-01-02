@@ -1,21 +1,23 @@
 package mjis.asm
 
-import firm.{Relation, TargetValue}
-import AMD64Registers._
+import firm.Relation
+import mjis.asm.OperandSpec._
+
+import scala.collection.mutable.ListBuffer
 
 case class Register(name: String, sizeBytes: Int)
 
 object AMD64Registers {
-  def RSP = -1
-  def RBP = -2
-  def RAX = -3
-  def RBX = -4
-  def RDI = -5
-  def RSI = -6
-  def RDX = -7
-  def RCX = -8
-  def R8  = -9
-  def R9  = -10
+  val RSP = -1
+  val RBP = -2
+  val RAX = -3
+  val RBX = -4
+  val RDI = -5
+  val RSI = -6
+  val RDX = -7
+  val RCX = -8
+  val R8  = -9
+  val R9  = -10
 
   val Registers = Map[Int, Register] (
     RSP -> Register("rsp", 8),
@@ -34,38 +36,52 @@ object AMD64Registers {
   val ParamRegisters = List(RDI, RSI, RDX, RCX, R8, R9)
 }
 
-abstract class Operand(val sizeBytes: Int)
-case class RegisterOperand(var regNo: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class RegisterOffsetOperand(var regNr: Int, var offset: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class ConstOperand(value: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class LabelOperand(name: String) extends Operand(0) {
+sealed trait Operand
+case class RegisterOperand(regNo: Int, sizeBytes: Int) extends Operand
+case class RegisterOffsetOperand(regNr: Int, offset: Int, sizeBytes: Int) extends Operand
+case class ConstOperand(value: Int, sizeBytes: Int) extends Operand
+case class LabelOperand(name: String) extends Operand {
   def this(name: Int) = this(s".L$name")
 }
 
-abstract class Instruction {
+case class OperandSpec(value: Int) extends AnyVal {
+  def |(that: OperandSpec) = OperandSpec(this.value | that.value)
+  def &(that: OperandSpec) = OperandSpec(this.value & that.value)
+  def contains(that: OperandSpec) = (this & that) == that
+}
+
+object OperandSpec {
+  def apply(mods: OperandSpec*): OperandSpec = mods.fold(OperandSpec.NONE)(_ | _)
+
+  final val NONE = OperandSpec(1 << 0)
+  final val READ = OperandSpec(1 << 1)
+  final val WRITE = OperandSpec(1 << 2)
+
+  final val MEMORY = OperandSpec(1 << 3) // operand can be a memory location
+  final val CONST = OperandSpec(1 << 4) // operand can be a constant
+}
+
+abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*) {
   var comment = ""
-  def operands: Seq[Operand] = Seq()
   def opcode: String = this.getClass.getSimpleName.toLowerCase
   def withComment(comment: String) = { this.comment = comment; this }
   var stackPointerDisplacement: Int = 0
+  val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)
+  val operandSpecs = Seq[OperandSpec](operandsWithSpec.map(_._2):_*)
 }
 
-abstract class ZeroOperandsInstruction extends Instruction
-abstract class OneOperandInstruction(op1: Operand) extends Instruction {
-  override def operands = Seq(op1)
+case class Addq(left: Operand, rightAndResult: RegisterOperand) extends Instruction((left, READ | CONST), (rightAndResult, READ | WRITE))
+case class Call(method: LabelOperand) extends Instruction((method, READ))
+case class Cmpq(left: Operand, right: Operand) extends Instruction((left, READ | CONST), (right, READ | MEMORY))
+// Forget: the register contents are not needed any more -- forced end of liveness interval
+case class Forget(reg: RegisterOperand) extends Instruction((reg, NONE)) {
+  override def opcode: String = "# forget"
 }
-abstract class TwoOperandsInstruction(op1: Operand, op2: Operand) extends Instruction {
-  override def operands = Seq(op1, op2)
-}
-
-case class Addq(left: Operand, rightAndResult: RegisterOperand) extends TwoOperandsInstruction(left, rightAndResult)
-case class Call(method: LabelOperand) extends OneOperandInstruction(method)
-case class Cmpq(left: Operand, right: Operand) extends TwoOperandsInstruction(left, right)
-case class Movq(src: Operand, dest: Operand) extends TwoOperandsInstruction(src, dest)
-case class Mulq(left: Operand) extends OneOperandInstruction(left)
-case class Popq(dest: RegisterOperand) extends OneOperandInstruction(dest)
-case class Jmp(dest: LabelOperand) extends OneOperandInstruction(dest)
-case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolean) extends OneOperandInstruction(dest) {
+case class Movq(src: Operand, dest: Operand) extends Instruction((src, READ | CONST), (dest, WRITE))
+case class Mulq(left: Operand) extends Instruction((left, READ))
+case class Popq(dest: RegisterOperand) extends Instruction((dest, WRITE))
+case class Jmp(dest: LabelOperand) extends Instruction((dest, READ))
+case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolean) extends Instruction((dest, READ)) {
   override def opcode: String = relation match {
     case Relation.Less => if (!negate) "jl" else "jge"
     case Relation.GreaterEqual => if (!negate) "jge" else "jl"
@@ -79,6 +95,6 @@ case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolea
     case _ => ???
   }
 }
-case class Pushq(src: Operand) extends OneOperandInstruction(src)
-case class Ret() extends ZeroOperandsInstruction
-case class Subq(subtrahend: Operand, minuendAndResult: RegisterOperand) extends TwoOperandsInstruction(subtrahend, minuendAndResult)
+case class Pushq(src: Operand) extends Instruction((src, READ))
+case class Ret() extends Instruction
+case class Subq(subtrahend: Operand, minuendAndResult: RegisterOperand) extends Instruction((subtrahend, READ), (minuendAndResult, READ | WRITE))

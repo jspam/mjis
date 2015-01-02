@@ -4,15 +4,13 @@ import firm.Graph
 import mjis.util.CCodeGenerator
 
 import org.scalatest.Assertions
-import org.scalatest.matchers.{ MatchResult, Matcher, BeMatcher }
-import org.scalatest.words.MatcherWords.be
+import org.scalatest.matchers.{ MatchResult, Matcher }
 import mjis.ast._
 import mjis.opt.Optimization
 import mjis.CompilerTestHelper._
 import System.{ lineSeparator => n }
 import java.io._
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 import scala.io.Source
 import scala.sys.process._
 
@@ -165,7 +163,14 @@ trait CompilerTestMatchers {
   class CodeGeneratorMatcher(expected: String) extends Matcher[String] {
     override def apply(code: String): MatchResult = {
       val codeGenerator = assertExec[CodeGenerator](code)
-      AsmTestHelper.isIsomorphic(codeGenerator.result, expected)
+      val asmGenerator = new MjisAssemblerFileGenerator(codeGenerator.resultProgram)
+      val generatedCode = asmGenerator.generateCode()
+
+      val fw = new BufferedWriter(new FileWriter("codegen.s", /* append */ false))
+      fw.write(generatedCode)
+      fw.close()
+
+      AsmTestHelper.isIsomorphic(generatedCode, expected)
     }
   }
 
@@ -212,7 +217,7 @@ trait CompilerTestMatchers {
   def failNamingWith(expectedFinding: Finding) = new AnalysisPhaseFailureWithMatcher[Namer](expectedFinding)
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
-  def succeedGeneratingAssemblerWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
+  def succeedGeneratingCodeWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
   def passIntegrationTest() = new IntegrationTestMatcher()
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)

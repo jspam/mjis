@@ -14,9 +14,11 @@ import mjis.util.CCodeGenerator
 object Compiler {
   type Pipeline = List[Class[_ <: Phase[_]]]
   private val defaultPipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
-    classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[CodeGenerator])
+    classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[CodeGenerator],
+    classOf[MjisAssemblerFileGenerator], classOf[GccRunner])
   private val firmCompilePipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
-    classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[FirmCodeGenerator])
+    classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[FirmAssemblerFileGenerator],
+    classOf[GccRunner])
 
   private val stopAfterTargets = Map[String, Class[_ <: Phase[_]]](
     "lexer" -> classOf[Lexer],
