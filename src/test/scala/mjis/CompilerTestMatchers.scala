@@ -180,12 +180,13 @@ trait CompilerTestMatchers {
 
   lazy val ClassPath: String = Seq("sbt", "export compile:fullClasspath").lineStream.last
 
-  class IntegrationTestMatcher() extends Matcher[String] {
+  class IntegrationTestMatcher(useFirmBackend: Boolean) extends Matcher[String] {
 
-    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", "--compile-firm", path)
+    def compileCmd(path: String, useFirmBackend: Boolean) = Seq("java", "-cp", ClassPath, "mjis/CLIMain") ++
+      (if (useFirmBackend) Seq("--compile-firm", path) else Seq(path))
 
     def apply(path: String) = {
-      val p = Process(compileCmd(path), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"
+      val p = Process(compileCmd(path, useFirmBackend), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"
       var err = ""
       val out = try {
         p.!!(ProcessLogger(err += _ + "\n"))
@@ -218,7 +219,7 @@ trait CompilerTestMatchers {
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def succeedGeneratingCodeWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
-  def passIntegrationTest() = new IntegrationTestMatcher()
+  def passIntegrationTest(useFirmBackend: Boolean) = new IntegrationTestMatcher(useFirmBackend)
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)
   def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, before, to)
