@@ -36,11 +36,11 @@ object AMD64Registers {
   val ParamRegisters = List(RDI, RSI, RDX, RCX, R8, R9)
 }
 
-abstract class Operand(val sizeBytes: Int)
-case class RegisterOperand(var regNo: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class RegisterOffsetOperand(var regNr: Int, var offset: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class ConstOperand(value: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class LabelOperand(name: String) extends Operand(0) {
+sealed trait Operand
+case class RegisterOperand(regNo: Int, sizeBytes: Int) extends Operand
+case class RegisterOffsetOperand(regNr: Int, offset: Int, sizeBytes: Int) extends Operand
+case class ConstOperand(value: Int, sizeBytes: Int) extends Operand
+case class LabelOperand(name: String) extends Operand {
   def this(name: Int) = this(s".L$name")
 }
 
