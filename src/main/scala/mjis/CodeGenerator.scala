@@ -11,7 +11,6 @@ import mjis.opt.NodeCollector
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions._
@@ -91,6 +90,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         usedParamRegisters.get(reg).foreach {
           n => function.prologue.instructions += Mov(RegisterOperand(reg, n.getMode.getSizeBytes), regOp(n))
         }
+
       function.epilogue.controlFlowInstructions +=
         (if (g.methodType.getNRess > 0) Ret(g.methodType.getResType(0).getSizeBytes) else Ret)
       function
@@ -98,7 +98,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createControlFlow(node: Node, nextBlock: Option[AsmBasicBlock]): Seq[Instruction] = {
       def successorBlock(node: Node) = BackEdges.getOuts(node).iterator().next().node.asInstanceOf[Block]
-      def successorBlockOperand(node: Node) = new LabelOperand(successorBlock(node).getNr)
+      def successorBlockOperand(node: Node) = new BasicBlockOperand(basicBlocks(successorBlock(node)))
       def isFallthrough(node: Node) = Some(successorBlock(node).getNr) == nextBlock.map(_.nr)
       def jmp(node: Node) =
         if (isFallthrough(node)) Seq()

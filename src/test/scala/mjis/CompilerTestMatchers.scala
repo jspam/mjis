@@ -1,6 +1,7 @@
 package mjis
 
 import firm.Graph
+import mjis.asm.{AsmFunction, AsmBasicBlock, AsmProgram, Instruction}
 import mjis.util.CCodeGenerator
 
 import org.scalatest.Assertions
@@ -174,6 +175,38 @@ trait CompilerTestMatchers {
     }
   }
 
+  class RegisterAllocatorMatcher(expected: String) extends Matcher[AsmFunction] {
+    override def apply(function: AsmFunction): MatchResult = {
+      val program = new AsmProgram()
+      program.functions += function
+
+      val regAllocator = new RegisterAllocator(program)
+      val asmGenerator = new MjisAssemblerFileGenerator(regAllocator.getResult())
+      val generatedCode = asmGenerator.generateCode()
+
+      // output the whole code for debugging purposes
+      val fw = new BufferedWriter(new FileWriter("regalloc.s", /* append */ false))
+      fw.write(generatedCode)
+      fw.close()
+
+      AsmTestHelper.isIsomorphic(generatedCode,
+        s"""  .text
+          |  .p2align 4,,15
+          |
+          |test:
+          |$expected
+          |""".replace("  ", "\t").stripMargin)
+    }
+  }
+
+  class RegisterAllocatorInstrSeqMatcher(expected: String) extends Matcher[Seq[Instruction]] {
+    override def apply(instrs: Seq[Instruction]): MatchResult = {
+      val function = new AsmFunction("test")
+      function.prologue.instructions.appendAll(instrs)
+      new RegisterAllocatorMatcher(expected).apply(function)
+    }
+  }
+
   class AsmIsomorphismMatcher(expected: String) extends Matcher[String] {
     override def apply(left: String): MatchResult = AsmTestHelper.isIsomorphic(left, expected)
   }
@@ -219,6 +252,8 @@ trait CompilerTestMatchers {
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def succeedGeneratingCodeWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
+  def succeedAllocatingRegistersInstrSeqWith(expectedString: String) = new RegisterAllocatorInstrSeqMatcher(expectedString)
+  def succeedAllocatingRegistersWith(expectedString: String) = new RegisterAllocatorMatcher(expectedString)
   def passIntegrationTest(useFirmBackend: Boolean) = new IntegrationTestMatcher(useFirmBackend)
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)
