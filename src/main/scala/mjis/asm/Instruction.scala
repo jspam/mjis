@@ -6,16 +6,16 @@ import AMD64Registers._
 case class Register(name: String, sizeBytes: Int)
 
 object AMD64Registers {
-  def RSP = -1
-  def RBP = -2
-  def RAX = -3
-  def RBX = -4
-  def RDI = -5
-  def RSI = -6
-  def RDX = -7
-  def RCX = -8
-  def R8  = -9
-  def R9  = -10
+  val RSP = -1
+  val RBP = -2
+  val RAX = -3
+  val RBX = -4
+  val RDI = -5
+  val RSI = -6
+  val RDX = -7
+  val RCX = -8
+  val R8  = -9
+  val R9  = -10
 
   val Registers = Map[Int, Register] (
     RSP -> Register("rsp", 8),
