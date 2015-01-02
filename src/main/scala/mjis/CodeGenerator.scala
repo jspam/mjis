@@ -24,7 +24,9 @@ object CodeGenerator {
 
 class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
   def findings = List()
-  def dumpResult(a: BufferedWriter) = {}
+  def dumpResult(a: BufferedWriter) = {
+    a.write(new MjisAssemblerFileGenerator(result).generateCode())
+  }
   val resultProgram = new AsmProgram()
 
   override def getResult(): AsmProgram = {
