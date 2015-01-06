@@ -242,8 +242,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     private def getOperand(node: Node): Operand = getCanonicalNode(node) match {
       case n : firm.nodes.Const => ConstOperand(n.getTarval.asInt(), n.getMode.getSizeBytes)
       case n @ ProjExtr(ProjExtr(_, Start.pnTArgs), argNum) =>
-        if (argNum < ParamRegisters.length) regOp(n) else new RegisterOffsetOperand(
-          RBP, paramOffsets(argNum - ParamRegisters.length), paramSizes(argNum - ParamRegisters.length))
+        if (argNum < ParamRegisters.length) regOp(n) else ActivationRecordOperand(
+          paramOffsets(argNum - ParamRegisters.length), paramSizes(argNum - ParamRegisters.length))
       case n => regOp(n)
     }
 

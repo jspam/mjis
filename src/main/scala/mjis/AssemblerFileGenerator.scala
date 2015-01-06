@@ -41,6 +41,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
       case r: RegisterOffsetOperand => s"${r.offset}(%${Registers(r.regNr).name})"
       case l: LabelOperand => l.name
       case c: ConstOperand => s"$$${c.value}"
+      case _: ActivationRecordOperand => assert(false, "ActivationRecordOperands should not occur at this stage")
     }.mkString(", ")
     val instrAndOperands = instr.opcode + operandsResult
     if (instr.comment.nonEmpty)
@@ -67,24 +68,14 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
       emit("")
       emit(s"${function.name}:", indent = false)
 
-      // Converts rbp relative addressing to rsp relative addressing now that the AR size is known
-      def convertRspToRbpRelative(instr: Instruction): Unit = {
-        instr.operands.zipWithIndex.foreach {
-          case (r @ RegisterOffsetOperand(`RBP`, offset, sizeBytes), idx) =>
-            instr.operands(idx) = RegisterOffsetOperand(
-              RSP, offset + function.activationRecordSize + instr.stackPointerDisplacement, sizeBytes)
-          case _ =>
-        }
-      }
-      def emitInstr(instr: Instruction): Unit = { convertRspToRbpRelative(instr); emit(instrToString(instr)) }
       def emitBlock(block: AsmBasicBlock): Unit = {
         if (block.nr >= 0) {
           emit(s".L${block.nr}: # Block ${block.nr}", indent = false)
         } else {
           emit("# Unnamed block", indent = false)
         }
-        block.instructions.foreach(emitInstr)
-        block.controlFlowInstructions.foreach(emitInstr)
+        block.instructions.foreach(instr => emit(instrToString(instr)))
+        block.controlFlowInstructions.foreach(instr => emit(instrToString(instr)))
       }
 
       emitBlock(function.prologue)
