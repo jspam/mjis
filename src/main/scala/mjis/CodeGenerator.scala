@@ -24,7 +24,9 @@ object CodeGenerator {
 
 class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
   def findings = List()
-  def dumpResult(a: BufferedWriter) = {}
+  def dumpResult(a: BufferedWriter) = {
+    a.write(new MjisAssemblerFileGenerator(result).generateCode())
+  }
   val resultProgram = new AsmProgram()
 
   override def getResult(): AsmProgram = {
@@ -231,7 +233,9 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           }
           Seq()
 
-        case _ => Seq()
+        case _ : firm.nodes.Block | _ : firm.nodes.Start | _ : firm.nodes.End | _ : firm.nodes.Proj |
+             _ : firm.nodes.Address | _ : firm.nodes.Const | _ : firm.nodes.Return | _ : firm.nodes.Jmp |
+             _ : firm.nodes.Cmp | _ : firm.nodes.Cond => Seq()
       }
     }
 
