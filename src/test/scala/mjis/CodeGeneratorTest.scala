@@ -87,6 +87,68 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret"""))
   }
 
+  it should "generate code for array loads" in {
+    fromMembers("public int foo(int[] xs, int i) { return xs[i]; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rsi, %REG0
+        |  movq %rdx, %REG1
+        |.L0:
+        |  movq %REG1, %REG2
+        |  shlq $2, %REG2
+        |  movq %REG0, %REG3
+        |  addq %REG2, %REG3
+        |  movq 0(%REG3), %REG4
+        |  movq %REG4, %rax
+        |  jmp .L1
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for array stores" in {
+    fromMembers("public void foo(int[] xs, int i, int j) { xs[i] = j; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rsi, %REG0
+        |  movq %rdx, %REG1
+        |  movq %rcx, %REG2
+        |.L0:
+        |  movq %REG1, %REG3
+        |  shlq $2, %REG3
+        |  movq %REG0, %REG4
+        |  addq %REG3, %REG4
+        |  movq %REG2, 0(%REG4)
+        |  jmp .L1
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for member loads" in {
+    fromMembers("public int i; public int j; public int foo(Test t) { return t.j; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rsi, %REG0
+        |.L0:
+        |  movq %REG0, %REG1
+        |  addq $4, %REG1
+        |  movq 0(%REG1), %REG2
+        |  movq %REG2, %rax
+        |  jmp .L1
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for member stores" in {
+    fromMembers("public int i; public int j; public void foo(Test t, int i) { t.j = i; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rsi, %REG0
+        |  movq %rdx, %REG1
+        |.L0:
+        |  movq %REG0, %REG2
+        |  addq $4, %REG2
+        |  movq %REG1, 0(%REG2)
+        |  jmp .L1
+        |.L1:
+        |  ret"""))
+  }
+
   it should "generate code for a method call" in {
     fromMembers("public int foo(int x) { return x; } public int bar() { return foo(42); }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:

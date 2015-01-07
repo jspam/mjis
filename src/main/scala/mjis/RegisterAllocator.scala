@@ -3,18 +3,16 @@ package mjis
 import java.io.BufferedWriter
 
 import firm.Mode
-import firm.nodes.Node
 import mjis.asm.AMD64Registers._
 import mjis.asm._
 
 import mjis.util.MapExtensions._
-import mjis.opt.FirmExtensions._
 
 import scala.collection.mutable
 import scala.language.implicitConversions
 
 class RegisterAllocator(input: AsmProgram) extends Phase[AsmProgram] {
-  override def getResult: AsmProgram = {
+  override def getResult(): AsmProgram = {
     input.functions.foreach(new FunctionRegisterAllocator(_).allocateRegs())
     input
   }
@@ -33,7 +31,7 @@ class FunctionRegisterAllocator(function: AsmFunction) {
     -activationRecordSize
   })
 
-  private def activationRecordOperand(regNo: Int) = ActivationRecordOperand(activationRecord(regNo), 8 /* TODO */)
+  private def activationRecordOperand(regNr: Int) = ActivationRecordOperand(activationRecord(regNr), 8 /* TODO */)
 
   def intConstOp(i: Int): Operand = new ConstOperand(i, Mode.getIs.getSizeBytes)
   implicit def regOp(regNr: Int): RegisterOperand = new RegisterOperand(regNr, Registers(regNr).sizeBytes)
@@ -50,43 +48,48 @@ class FunctionRegisterAllocator(function: AsmFunction) {
             instrList.remove(i)
           case instr =>
             var rbpUsed = false
-            var hasMemoryReference = false
-            def getRegister: RegisterOperand = if (!rbpUsed) { rbpUsed = true; RBP } else RBX
+            def getRegister(): Int = if (!rbpUsed) { rbpUsed = true; RBP } else RBX
+            def hasMemoryReference: Boolean = instr.operands.forall(!_.isInstanceOf[RegisterOffsetOperand])
+            def reload(oldRegNr: Int, actualRegister: RegisterOperand): Unit = {
+              val reloadInstr = Movq(activationRecordOperand(oldRegNr), actualRegister).
+                withComment(s"Reload for internal register $oldRegNr ${instr.comment}")
+              activationRecordOperands += ((reloadInstr, 0))
+              instrList.insert(i, reloadInstr)
+              i += 1
+            }
 
             instr.operands.zipWithIndex.zip(instr.operandSpecs).foreach { case((operand, idx), spec) => operand match {
               case c: ConstOperand if !spec.contains(OperandSpec.CONST) =>
-                val actualRegister = getRegister
+                val actualRegister = getRegister()
                 instrList.insert(i, Movq(c, actualRegister).withComment(s" - Load constant ${instr.comment}"))
                 i += 1
                 instr.operands(idx) = actualRegister
-              case r@RegisterOffsetOperand(regNo, _, _) =>
-                // TODO: At the moment only RSP relative addressing is used
-                assert(regNo < 0)
-                hasMemoryReference = true
-              case r@RegisterOperand(oldRegNo, sizeBytes) if oldRegNo >= 0 =>
+              case r@RegisterOffsetOperand(oldRegNr, _, _) =>
+                assert(!hasMemoryReference)
+                val actualRegister = getRegister()
+                reload(oldRegNr, actualRegister)
+                instr.operands(idx) = r.copy(regNr = actualRegister)
+                // no spill since the register's value itself won't be manipulated
+              case r@RegisterOperand(oldRegNr, sizeBytes) if oldRegNr >= 0 =>
                 val isRead = spec.contains(OperandSpec.READ)
                 val isWrite = spec.contains(OperandSpec.WRITE)
 
-                val canUseArOperand = spec.contains(OperandSpec.MEMORY) && !hasMemoryReference
+                val canUseArOperand = spec.contains(OperandSpec.MEMORY) &&
+                  !hasMemoryReference &&
+                  instr.operands.forall(!_.isInstanceOf[RegisterOffsetOperand])
                 if (canUseArOperand) {
-                  instr.operands(idx) = activationRecordOperand(oldRegNo)
+                  instr.operands(idx) = activationRecordOperand(oldRegNr)
                   activationRecordOperands += ((instr, idx))
-                  hasMemoryReference = true
-                  if (isRead) instr.comment += s" - operand $idx reloads internal register $oldRegNo"
-                  if (isWrite) instr.comment += s" - operand $idx spills internal register $oldRegNo"
+                  if (isRead) instr.comment += s" - operand $idx reloads internal register $oldRegNr"
+                  if (isWrite) instr.comment += s" - operand $idx spills internal register $oldRegNr"
                 } else {
-                  val actualRegister = getRegister
+                  val actualRegister = getRegister()
                   instr.operands(idx) = actualRegister
-                  if (isRead) {
-                    val reloadInstr = Movq(activationRecordOperand(r.regNo), actualRegister).
-                      withComment(s"Reload for internal register $oldRegNo ${instr.comment}")
-                    activationRecordOperands += ((reloadInstr, 0))
-                    instrList.insert(i, reloadInstr)
-                    i += 1
-                  }
+                  if (isRead)
+                    reload(oldRegNr, actualRegister)
                   if (isWrite) {
-                    val spillInstr = Movq(actualRegister, activationRecordOperand(r.regNo)).
-                      withComment(s"Spill for internal register $oldRegNo ${instr.comment}")
+                    val spillInstr = Movq(actualRegister, activationRecordOperand(r.regNr)).
+                      withComment(s"Spill for internal register $oldRegNr ${instr.comment}")
                     activationRecordOperands += ((spillInstr, 1))
                     instrList.insert(i + 1, spillInstr)
                     i += 1

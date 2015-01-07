@@ -72,20 +72,20 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       // entries: r3 -> List(x, r1, r2) if (x -> r1), (r1 -> r2), (r2 -> r3) are in the permutation
       //   (which is represented as { r1 -> x, r2 -> r1, r3 -> r2 } in the Phi map)
       val permutations = mutable.ListMap[Int, List[Operand]]() // ListMap for determinism
-      def regOp(regNo: Int) = RegisterOperand(regNo, 8 /* TODO */)
+      def regOp(regNr: Int) = RegisterOperand(regNr, 8 /* TODO */)
 
       @tailrec
-      def getPermutation(destRegNo: Int, acc: List[Operand]): List[Operand] = {
-        permutations.get(destRegNo) match {
+      def getPermutation(destRegNr: Int, acc: List[Operand]): List[Operand] = {
+        permutations.get(destRegNr) match {
           case Some(p) =>
-            permutations.remove(destRegNo)
+            permutations.remove(destRegNr)
             p ++ acc
-          case None => block.phi.get(destRegNo) match {
-            case Some(src@RegisterOperand(regNo, _)) =>
-              block.phi.remove(destRegNo)
-              getPermutation(regNo, src :: acc)
+          case None => block.phi.get(destRegNr) match {
+            case Some(src@RegisterOperand(regNr, _)) =>
+              block.phi.remove(destRegNr)
+              getPermutation(regNr, src :: acc)
             case Some(src) =>
-              block.phi.remove(destRegNo)
+              block.phi.remove(destRegNr)
               src :: acc
             case _ =>
               acc
@@ -184,7 +184,15 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       node match {
         case n : firm.nodes.Add => Seq(Movq(getOperand(n.getLeft), regOp(n)), Addq(getOperand(n.getRight), regOp(n)))
 
-        case n : firm.nodes.Call  =>
+        case n : firm.nodes.Mul => Seq(Movq(getOperand(n.getLeft), RAX), Mulq(getOperand(n.getRight)),
+          Movq(RAX, regOp(n)), Forget(RAX))
+
+        case n@ShlExtr(x, ConstExtr(shift)) => Seq(Movq(getOperand(x), regOp(n)), Shlq(ConstOperand(shift, -1), regOp(n)))
+
+        case n : firm.nodes.Load => Seq(Movq(RegisterOffsetOperand(n.getPtr.idx, 0, n.getMode.getSizeBytes), regOp(n)))
+        case n : firm.nodes.Store => Seq(Movq(getOperand(n.getValue), RegisterOffsetOperand(n.getPtr.idx, 0, n.getMode.getSizeBytes)))
+
+        case n : firm.nodes.Call =>
           val resultInstrs = ListBuffer[Instruction]()
           var stackPointerDisplacement = 0
           def addStackPointerDisplacement(i: Instruction): Instruction = {
@@ -215,9 +223,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
           resultInstrs
 
-        case n : firm.nodes.Mul => Seq(Movq(getOperand(n.getLeft), RAX), Mulq(getOperand(n.getRight)),
-          Movq(RAX, regOp(n)), Forget(RAX))
-
         case n : firm.nodes.Phi =>
           if (n.getMode != Mode.getM && n.getMode != Mode.getX) {
             n.getPreds.zipWithIndex.foreach { case (pred, idx) =>
@@ -235,7 +240,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
         case _ : firm.nodes.Block | _ : firm.nodes.Start | _ : firm.nodes.End | _ : firm.nodes.Proj |
              _ : firm.nodes.Address | _ : firm.nodes.Const | _ : firm.nodes.Return | _ : firm.nodes.Jmp |
-             _ : firm.nodes.Cmp | _ : firm.nodes.Cond => Seq()
+             _ : firm.nodes.Cmp | _ : firm.nodes.Cond | _ : firm.nodes.Conv => Seq()
       }
     }
 
@@ -249,6 +254,10 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def getCanonicalNode(node: Node) = node match {
       case ProjExtr(ProjExtr(call: firm.nodes.Call, firm.nodes.Call.pnTResult), _) => call
+      case ProjExtr(load: firm.nodes.Load, firm.nodes.Load.pnRes) => load
+      case n: firm.nodes.Conv =>
+        // TODO - nothing to do as long there's only one register size
+        n.getOp
       case _ => node
     }
   }

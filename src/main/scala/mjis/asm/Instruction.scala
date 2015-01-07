@@ -37,7 +37,7 @@ object AMD64Registers {
 }
 
 sealed trait Operand
-case class RegisterOperand(regNo: Int, sizeBytes: Int) extends Operand
+case class RegisterOperand(regNr: Int, sizeBytes: Int) extends Operand
 case class RegisterOffsetOperand(regNr: Int, offset: Int, sizeBytes: Int) extends Operand
 case class ConstOperand(value: Int, sizeBytes: Int) extends Operand
 case class LabelOperand(name: String) extends Operand {
@@ -73,16 +73,19 @@ abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*
   val operandSpecs = Seq[OperandSpec](operandsWithSpec.map(_._2):_*)
 }
 
-case class Addq(left: Operand, rightAndResult: RegisterOperand) extends Instruction((left, READ | CONST), (rightAndResult, READ | WRITE))
-case class Call(method: LabelOperand) extends Instruction((method, READ))
-case class Cmpq(left: Operand, right: Operand) extends Instruction((left, READ | CONST), (right, READ | MEMORY))
 // Forget: the register contents are not needed any more -- forced end of liveness interval
 case class Forget(reg: RegisterOperand) extends Instruction((reg, NONE)) {
   override def opcode: String = "# forget"
 }
-case class Movq(src: Operand, dest: Operand) extends Instruction((src, READ | CONST), (dest, WRITE))
-case class Mulq(left: Operand) extends Instruction((left, READ))
-case class Popq(dest: RegisterOperand) extends Instruction((dest, WRITE))
+case class Addq(left: Operand, rightAndResult: RegisterOperand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
+case class Subq(subtrahend: Operand, minuendAndResult: RegisterOperand) extends Instruction((subtrahend, READ | CONST | MEMORY), (minuendAndResult, READ | WRITE | MEMORY))
+case class Mulq(left: Operand) extends Instruction((left, READ | MEMORY))
+case class Shlq(shift: ConstOperand, valueAndResult: RegisterOperand) extends Instruction((shift, CONST), (valueAndResult, READ | WRITE | MEMORY))
+case class Cmpq(left: Operand, right: Operand) extends Instruction((left, READ | CONST | MEMORY), (right, READ | MEMORY))
+case class Call(method: LabelOperand) extends Instruction((method, READ))
+case class Movq(src: Operand, dest: Operand) extends Instruction((src, READ | CONST | MEMORY), (dest, WRITE | MEMORY))
+case class Popq(dest: RegisterOperand) extends Instruction((dest, WRITE | MEMORY))
+case class Pushq(src: Operand) extends Instruction((src, READ | MEMORY))
 case class Jmp(dest: LabelOperand) extends Instruction((dest, READ))
 case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolean) extends Instruction((dest, READ)) {
   override def opcode: String = relation match {
@@ -98,6 +101,4 @@ case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolea
     case _ => ???
   }
 }
-case class Pushq(src: Operand) extends Instruction((src, READ))
 case class Ret() extends Instruction
-case class Subq(subtrahend: Operand, minuendAndResult: RegisterOperand) extends Instruction((subtrahend, READ), (minuendAndResult, READ | WRITE))
