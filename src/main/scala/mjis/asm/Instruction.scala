@@ -43,6 +43,9 @@ case class ConstOperand(value: Int, sizeBytes: Int) extends Operand
 case class LabelOperand(name: String) extends Operand {
   def this(name: Int) = this(s".L$name")
 }
+/** equivalent to RegisterOffsetOperand(RBP, offset, sizeBytes), but we use RBP as a general purpose
+  * register and instead convert these operands to RSP relative operands once the AR size is known. */
+case class ActivationRecordOperand(offset: Int, sizeBytes: Int) extends Operand
 
 case class OperandSpec(value: Int) extends AnyVal {
   def |(that: OperandSpec) = OperandSpec(this.value | that.value)

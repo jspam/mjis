@@ -33,12 +33,15 @@ class FunctionRegisterAllocator(function: AsmFunction) {
     -activationRecordSize
   })
 
-  private def activationRecordOperand(regNo: Int) = RegisterOffsetOperand(RBP, activationRecord(regNo), 8 /* TODO */)
+  private def activationRecordOperand(regNo: Int) = ActivationRecordOperand(activationRecord(regNo), 8 /* TODO */)
 
   def intConstOp(i: Int): Operand = new ConstOperand(i, Mode.getIs.getSizeBytes)
   implicit def regOp(regNr: Int): RegisterOperand = new RegisterOperand(regNr, Registers(regNr).sizeBytes)
 
   def allocateRegs() = {
+    // Save ActivationRecordOperands for later conversion to "real" operands
+    val activationRecordOperands = mutable.ListBuffer[(Instruction, /* operand index */ Int)]()
+
     function.allBlocks.foreach(block => Seq(block.instructions, block.controlFlowInstructions).foreach { instrList =>
       var i = 0
       while (i < instrList.length) {
@@ -67,6 +70,7 @@ class FunctionRegisterAllocator(function: AsmFunction) {
                 val canUseArOperand = spec.contains(OperandSpec.MEMORY) && !hasMemoryReference
                 if (canUseArOperand) {
                   instr.operands(idx) = activationRecordOperand(oldRegNo)
+                  activationRecordOperands += ((instr, idx))
                   hasMemoryReference = true
                   if (isRead) instr.comment += s" - operand $idx reloads internal register $oldRegNo"
                   if (isWrite) instr.comment += s" - operand $idx spills internal register $oldRegNo"
@@ -74,15 +78,22 @@ class FunctionRegisterAllocator(function: AsmFunction) {
                   val actualRegister = getRegister
                   instr.operands(idx) = actualRegister
                   if (isRead) {
-                    instrList.insert(i, Movq(activationRecordOperand(r.regNo), actualRegister).
-                      withComment(s"Reload for internal register $oldRegNo ${instr.comment}"))
+                    val reloadInstr = Movq(activationRecordOperand(r.regNo), actualRegister).
+                      withComment(s"Reload for internal register $oldRegNo ${instr.comment}")
+                    activationRecordOperands += ((reloadInstr, 0))
+                    instrList.insert(i, reloadInstr)
                     i += 1
                   }
                   if (isWrite) {
-                    instrList.insert(i + 1, Movq(actualRegister, activationRecordOperand(r.regNo)).
-                      withComment(s"Spill for internal register $oldRegNo ${instr.comment}"))
+                    val spillInstr = Movq(actualRegister, activationRecordOperand(r.regNo)).
+                      withComment(s"Spill for internal register $oldRegNo ${instr.comment}")
+                    activationRecordOperands += ((spillInstr, 1))
+                    instrList.insert(i + 1, spillInstr)
+                    i += 1
                   }
                 }
+              case a@ActivationRecordOperand(_, _) =>
+                activationRecordOperands += ((instr, idx))
               case _ =>
             }}
 
@@ -90,6 +101,13 @@ class FunctionRegisterAllocator(function: AsmFunction) {
         }
       }
     })
+
+    // Now that the AR size is known, convert ActivationRecordOperands
+    activationRecordOperands.foreach { case (instr, idx) =>
+      val arOperand = instr.operands(idx).asInstanceOf[ActivationRecordOperand]
+      instr.operands(idx) = RegisterOffsetOperand(RSP,
+        arOperand.offset + activationRecordSize + instr.stackPointerDisplacement, arOperand.sizeBytes)
+    }
 
     function.activationRecordSize = activationRecordSize
     if (activationRecordSize > 0) {
