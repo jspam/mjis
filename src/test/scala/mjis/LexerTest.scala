@@ -213,6 +213,12 @@ class LexerTest extends FlatSpec with Matchers with Inspectors {
     lexer.success shouldBe true
   }
 
+  it should "correctly parse single-line comments" in {
+    val lexer = new Lexer("this // is \n beyond // silly")
+    checkMatchesTokenData(lexer.result, List(This, new Identifier("beyond")))
+    lexer.success shouldBe true
+  }
+
   it should "parse EOF as identifier" in {
     val lexer = new Lexer("EOF")
     checkMatchesTokenData(lexer.result, List(new Identifier("EOF")))
