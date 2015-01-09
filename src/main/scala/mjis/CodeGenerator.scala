@@ -189,8 +189,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
         case n@ShlExtr(x, ConstExtr(shift)) => Seq(Movq(getOperand(x), regOp(n)), Shlq(ConstOperand(shift, -1), regOp(n)))
 
-        case n : firm.nodes.Load => Seq(Movq(RegisterOffsetOperand(n.getPtr.idx, 0, n.getMode.getSizeBytes), regOp(n)))
-        case n : firm.nodes.Store => Seq(Movq(getOperand(n.getValue), RegisterOffsetOperand(n.getPtr.idx, 0, n.getMode.getSizeBytes)))
+        case n : firm.nodes.Load => Seq(Movq(RegisterOffsetOperand(getCanonicalNode(n.getPtr).idx, 0, n.getMode.getSizeBytes), regOp(n)))
+        case n : firm.nodes.Store => Seq(Movq(getOperand(n.getValue), RegisterOffsetOperand(getCanonicalNode(n.getPtr).idx, 0, n.getMode.getSizeBytes)))
 
         case n : firm.nodes.Call =>
           val resultInstrs = ListBuffer[Instruction]()
@@ -253,7 +253,9 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     }
 
     private def getCanonicalNode(node: Node) = node match {
-      case ProjExtr(ProjExtr(call: firm.nodes.Call, firm.nodes.Call.pnTResult), _) => call
+      case ProjExtr(ProjExtr(call: firm.nodes.Call, firm.nodes.Call.pnTResult), resultNo) =>
+        assert(resultNo == 0)
+        call
       case ProjExtr(load: firm.nodes.Load, firm.nodes.Load.pnRes) => load
       case n: firm.nodes.Conv =>
         // TODO - nothing to do as long there's only one register size

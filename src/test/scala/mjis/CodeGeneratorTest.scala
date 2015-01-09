@@ -135,6 +135,21 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret"""))
   }
 
+  it should "generate code for member loads when that member is the result of a function call" in {
+    fromMembers("public Test t; public Test foo() { return this.foo().t; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rdi, %REG0
+        |.L0:
+        |  movq %REG0, %rdi
+        |  call _4Test_foo
+        |  movq %rax, %REG1
+        |  movq 0(%REG1), %REG2
+        |  movq %REG2, %rax
+        |  jmp .L1
+        |.L1:
+        |  ret"""))
+  }
+
   it should "generate code for member stores" in {
     fromMembers("public int i; public int j; public void foo(Test t, int i) { t.j = i; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
@@ -144,6 +159,21 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq %REG0, %REG2
         |  addq $4, %REG2
         |  movq %REG1, 0(%REG2)
+        |  jmp .L1
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for member stores when that member is the result of a function call" in {
+    fromMembers("public Test t; public Test foo() { this.foo().t = null; return this; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rdi, %REG0
+        |.L0:
+        |  movq %REG0, %rdi
+        |  call _4Test_foo
+        |  movq %rax, %REG1
+        |  movq $0, 0(%REG1)
+        |  movq %REG0, %rax
         |  jmp .L1
         |.L1:
         |  ret"""))
