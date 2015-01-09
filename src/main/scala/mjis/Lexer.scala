@@ -33,6 +33,7 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
   private case class TokenSymbol(data: TokenData) extends Symbol
   private case object LineBreak extends Symbol
   private case object CommentStart extends Symbol
+  private case object SingleLineCommentStart extends Symbol
 
   private val whitespace = Set[Char](' ', '\t', '\r', '\n')
   private val constLenTokens = List[TokenData](Unequal, Not, ParenOpen, ParenClosed,
@@ -43,8 +44,8 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
     ":", "<<=", "<<", ">>=", ">>>=", ">>>", ">>", "?", "%=", "&=", "&", "^=", "^", "~", "|", "|=")
   private val symbols = new Trie[Symbol](
     constLenTokens.map(t => (t.literal, TokenSymbol(t))) ++
-    unusedConstLenTokens.map(t => (t, TokenSymbol(UnusedFeature(t)))) :+
-    ("/*" -> CommentStart)
+    unusedConstLenTokens.map(t => (t, TokenSymbol(UnusedFeature(t)))) ++
+    Seq("/*" -> CommentStart, "//" -> SingleLineCommentStart)
   )
   private val keywords: Map[String, TokenData] = List[TokenData](BooleanType, Class, Else, False, If, IntType, New, Null,
     Public, Return, Static, This,True, VoidType, While).map(t => (t.literal, t)).toMap
@@ -100,6 +101,9 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
   }
 
   @annotation.tailrec
+  private def lexLineRemainder(): Unit = if (!input.atEnd && input.consume() != '\n') lexLineRemainder()
+
+  @annotation.tailrec
   private def lexToken(): Token = {
     if (input.atEnd) new Token(TokenData.EOF, input.pos)
     else if (input.currentChar == '_' || input.currentChar.isASCIILetter)
@@ -127,6 +131,9 @@ class Lexer(val inputReader: java.io.Reader) extends AnalysisPhase[LookaheadIter
             case LineBreak => lexToken()
             case CommentStart =>
               lexCommentRemainder(pos)
+              lexToken()
+            case SingleLineCommentStart =>
+              lexLineRemainder()
               lexToken()
           }
       }
