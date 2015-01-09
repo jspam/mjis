@@ -20,8 +20,8 @@ object FirmExtractors {
   }
 
   object ConstExtr {
-    def unapply(node: Node): Option[Long] = node match {
-      case c: Const => Some(c.getTarval.asLong())
+    def unapply(node: Node): Option[Int] = node match {
+      case c: Const => Some(c.getTarval.asInt())
       case _ => None
     }
   }
@@ -50,6 +50,13 @@ object FirmExtractors {
   object SubExtr {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case sub: Sub => Some((sub.getLeft, sub.getRight))
+      case _ => None
+    }
+  }
+
+  object ShlExtr {
+    def unapply(node: Node): Option[(Node, Node)] = node match {
+      case shl: Shl => Some((shl.getLeft, shl.getRight))
       case _ => None
     }
   }

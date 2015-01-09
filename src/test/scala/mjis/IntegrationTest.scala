@@ -17,7 +17,15 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
     "Simon_004.mj", "Simon_024.mj", "Simon_001.mj", "Simon_011.mj", "Simon_014.mj", "Simon_002.mj",
     "Simon_021.mj", "Simon_007.mj", "Simon_010.mj", "Simon_005.mj", "Simon_012.mj", "Simon_054.mj",
     "Simon_061.mj", "Simon_053.mj", "Simon_025.mj", "Simon_003.mj", "Simon_062.mj", "Simon_006.mj",
-    "Simon_009.mj", "Simon_022.mj", "Simon_013.mj", "Simon_044.mj")
+    "Simon_009.mj", "Simon_022.mj", "Simon_013.mj", "Simon_044.mj", "ArrayParam.mj", "LinkedListInsertion.mj",
+    "NestedArrays.mj", "Simon_016.mj", "Simon_017.mj", "Simon_026.mj", "Simon_028.mj", "Simon_030.mj",
+    "Simon_031.mj", "Simon_032.mj", "Simon_033.mj", "Simon_035.mj", "Simon_037.mj", "Simon_038.mj",
+    "Simon_040.mj", "Simon_041.mj", "Simon_045.mj", "Simon_047.mj", "Simon_049.mj", "Simon_056.mj",
+    "Simon_064.mj", "Simon_065.mj", "Simon_069.mj", "Simon_070.mj", "Simon_077.mj", "Simon_081.mj",
+    "Simon_091.mj", "Simon_093.mj", "Simon_094.mj", "Simon_097.mj", "Simon_101.mj", "Simon_102.mj",
+    "Simon_113.mj", "Simon_114.mj", "Simon_115.mj", "Simon_126.mj", "Simon_127.mj", "Simon_128.mj",
+    "Simon_129.mj", "fortyfive.mj", "fortysomething.mj", "Simon_131.mj", "Simon_132.mj", "Simon_134.mj",
+    "Simon_136.mj", "Simon_142.mj")
 
   val testFiles = new java.io.File(TestDir).listFiles.filter(_.getName.endsWith(".mj"))
 

@@ -8,7 +8,7 @@ import mjis.opt.FirmExtensions._
 object Identities extends Optimization {
 
   private object PowerOfTwo {
-    def unapply(x: Long): Option[Int] = {
+    def unapply(x: Int): Option[Int] = {
       // everybody's favorite trick
       if (x > 0 && (x & (x-1)) == 0) {
         var ret = 0

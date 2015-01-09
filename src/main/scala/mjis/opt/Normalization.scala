@@ -15,7 +15,7 @@ object Normalization extends Optimization {
           node.setPred(1, pred0)
         case SubExtr(x, ConstExtr(c)) =>
           // x - c == x + (-c)
-          GraphBase.exchange(node, g.newAdd(node.getBlock, x, g.newConst(-c.toInt, node.getMode), node.getMode))
+          GraphBase.exchange(node, g.newAdd(node.getBlock, x, g.newConst(-c, node.getMode), node.getMode))
         case SubExtr(ConstExtr(0), x) =>
           // 0 - x = -x
           GraphBase.exchange(node, g.newMinus(node.getBlock, x, node.getMode))
