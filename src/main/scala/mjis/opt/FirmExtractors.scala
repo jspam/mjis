@@ -68,9 +68,23 @@ object FirmExtractors {
     }
   }
 
+  object CmpExtr {
+    def unapply(node: Node): Option[(Relation, Node, Node)] = node match {
+      case cmp: Cmp => Some((cmp.getRelation, cmp.getLeft, cmp.getRight))
+      case _ => None
+    }
+  }
+
   object DivExtr {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case div: Div => Some((div.getLeft, div.getRight))
+      case _ => None
+    }
+  }
+
+  object ModExtr {
+    def unapply(node: Node): Option[(Node, Node)] = node match {
+      case mod: Mod => Some((mod.getLeft, mod.getRight))
       case _ => None
     }
   }

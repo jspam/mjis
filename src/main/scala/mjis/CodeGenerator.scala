@@ -5,7 +5,6 @@ import java.io._
 import firm._
 import firm.nodes.{Node, Block}
 import mjis.asm._
-import mjis.CodeGenerator._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
 import mjis.opt.NodeCollector
@@ -42,8 +41,9 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       val methodType = methodEntity.getType.asInstanceOf[MethodType]
       assert(methodType.getNRess > 0)
       methodType.getResType(0).getSizeBytes
-    case n : nodes.Load =>
-      n.getLoadMode.getSizeBytes
+    case n : nodes.Load => n.getLoadMode.getSizeBytes
+    case n : firm.nodes.Div => n.getResmode.getSizeBytes
+    case n : firm.nodes.Mod => n.getResmode.getSizeBytes
     case _ => node.getMode.getSizeBytes
   })
   def regOp(regNr: Int, sizeBytes: Int) = RegisterOperand(regNr, sizeBytes)
@@ -190,12 +190,35 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createValue(node: Node): Seq[Instruction] = {
       node match {
+        case n : nodes.And => Seq(Mov(getOperand(n.getLeft), regOp(n)), And(getOperand(n.getRight), regOp(n)))
         case n : nodes.Add => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Add(getOperand(n.getRight), regOp(n)))
+        case n : nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
+        case n : nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
 
         case n : nodes.Mul =>
           val tempRegister = regOp(RAX, n.getMode.getSizeBytes)
           Seq(Mov(getOperand(n.getLeft), tempRegister), asm.Mul(getOperand(n.getRight)),
             Mov(tempRegister, regOp(n)), Forget(tempRegister))
+
+        case n : firm.nodes.Div =>
+          assert(n.getLeft.getMode == Mode.getIs)
+          assert(n.getRight.getMode == Mode.getIs)
+          Seq(
+            Mov(getOperand(n.getLeft), regOp(RAX, 4)),
+            Cdq, // sign-extend eax into edx:eax
+            IDiv(getOperand(n.getRight)),
+            Mov(regOp(RAX, 4), regOp(n))
+          )
+
+        case n : firm.nodes.Mod =>
+          assert(n.getLeft.getMode == Mode.getIs)
+          assert(n.getRight.getMode == Mode.getIs)
+          Seq(
+            Mov(getOperand(n.getLeft), regOp(RAX, 4)),
+            Cdq, // sign-extend eax into edx:eax
+            IDiv(getOperand(n.getRight)),
+            Mov(regOp(RDX, 4), regOp(n))
+          )
 
         case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
           Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
@@ -274,6 +297,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         assert(resultNo == 0)
         call
       case ProjExtr(load: nodes.Load, nodes.Load.pnRes) => load
+      case ProjExtr(div: nodes.Div, nodes.Div.pnRes) => div
+      case ProjExtr(mod: nodes.Mod, nodes.Mod.pnRes) => mod
       case n: nodes.Conv =>
         // TODO - nothing to do as long there's only one register size
         getCanonicalNode(n.getOp)

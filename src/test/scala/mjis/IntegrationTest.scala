@@ -7,7 +7,7 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   // Change this to true to see which new files our backend can handle.
   // You can uncomment the green tests in KnownGoodFiles.
-  val KnownGoodFilesCheckMode = false
+  val KnownGoodFilesCheckMode = true
 
   val TestDir = "mj-test/run/"
 
@@ -59,7 +59,7 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
     "Simon_020.mj",
     "Simon_021.mj",
     "Simon_022.mj",
-    //"Simon_023.mj",
+    "Simon_023.mj",
     "Simon_024.mj",
     "Simon_025.mj",
     "Simon_026.mj",
@@ -169,7 +169,7 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
     "Simon_130.mj",
     "Simon_131.mj",
     "Simon_132.mj",
-    //"Simon_133.mj",
+    "Simon_133.mj",
     "Simon_134.mj",
     "Simon_135.mj",
     "Simon_136.mj",

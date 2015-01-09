@@ -26,19 +26,20 @@ object Identities extends Optimization {
   def optimize(g: Graph): Unit = {
     BackEdges.enable(g)
 
-    def applyIdentity: PartialFunction[Node, Node] = {
-      case AddExtr(x, ConstExtr(0)) => x
-      case MulExtr(x, ConstExtr(1)) => x
-      case ProjExtr(div@DivExtr(x, ConstExtr(1)), Div.pnRes) =>
-        g.deleteDivOrMod(div)
-        x
-      case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
-        g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode)
-    }
-
     g.walkTopological(new NodeVisitor.Default {
-      override def defaultVisit(node: Node): Unit = applyIdentity.lift(node) match {
-        case Some(newNode) => GraphBase.exchange(node, newNode)
+      override def defaultVisit(node: Node): Unit = node match {
+        case n@AddExtr(x, ConstExtr(0)) => GraphBase.exchange(n, x)
+        case n@MulExtr(x, ConstExtr(1)) => GraphBase.exchange(n, x)
+        case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
+          GraphBase.exchange(n, g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode))
+        case n@ProjExtr(div@DivExtr(x, ConstExtr(1)), Div.pnRes) =>
+          g.deleteDivOrMod(div)
+          GraphBase.exchange(n, x)
+        // x % 2^k ==/!= 0
+        case CmpExtr(Relation.Equal | Relation.UnorderedLessGreater, proj@ProjExtr(mod@ModExtr(x, ConstExtr(modulo@PowerOfTwo(_))), Mod.pnRes), ConstExtr(0)) =>
+          g.deleteDivOrMod(mod)
+          // |x % 2^k| = x & (modulo-1)
+          GraphBase.exchange(proj, g.newAnd(proj.getBlock, x, g.newConst(modulo-1, x.getMode), x.getMode))
         case _ =>
       }
     })

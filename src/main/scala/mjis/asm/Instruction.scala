@@ -77,7 +77,7 @@ object OperandSpec {
 
 abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*) {
   var comment = ""
-  def opcode: String = this.getClass.getSimpleName.toLowerCase
+  def opcode: String = this.getClass.getSimpleName.toLowerCase.stripSuffix("$")
   def withComment(comment: String) = { this.comment = comment; this }
   var stackPointerDisplacement: Int = 0
   val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)
@@ -94,13 +94,21 @@ abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*
   }
 }
 
+// Reserve: the register contents are used implicitly -- forced start of liveness interval
+case class Reserve(reg: RegisterOperand) extends Instruction((reg, NONE)) {
+  override def opcode: String = "# reserve"
+}
 // Forget: the register contents are not needed any more -- forced end of liveness interval
 case class Forget(reg: RegisterOperand) extends Instruction((reg, NONE)) {
   override def opcode: String = "# forget"
 }
+case class And(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
 case class Add(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
 case class Sub(subtrahend: Operand, minuendAndResult: Operand) extends Instruction((subtrahend, READ | CONST | MEMORY), (minuendAndResult, READ | WRITE | MEMORY))
+case class Neg(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
 case class Mul(left: Operand) extends Instruction((left, READ | MEMORY))
+case class IDiv(left: Operand) extends Instruction((left, READ | MEMORY))
+case object Cdq extends Instruction()
 case class Shl(shift: ConstOperand, valueAndResult: Operand) extends Instruction((shift, CONST), (valueAndResult, READ | WRITE | MEMORY))
 case class Cmp(left: Operand, right: Operand) extends Instruction((left, READ | CONST | MEMORY), (right, READ | MEMORY))
 case class Call(method: LabelOperand) extends Instruction((method, READ))

@@ -43,7 +43,7 @@ class FunctionRegisterAllocator(function: AsmFunction) {
       var i = 0
       while (i < instrList.length) {
         instrList(i) match {
-          case _ : Forget =>
+          case _ : Forget | _ : Reserve =>
             instrList.remove(i)
           case instr =>
             var rbxUsed = false
