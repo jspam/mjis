@@ -3,7 +3,7 @@ package mjis
 import java.io._
 
 import firm._
-import firm.nodes._
+import firm.nodes.{Node, Block}
 import mjis.asm._
 import mjis.CodeGenerator._
 import mjis.opt.FirmExtractors._
@@ -16,10 +16,9 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions._
-import scala.language.implicitConversions
 
 object CodeGenerator {
-  def align(x: Int, alignment: Int = 4) = if (x % alignment == 0) x else x + (alignment - x % alignment)
+  def align(x: Int, alignment: Int = 8) = if (x % alignment == 0) x else x + (alignment - x % alignment)
 }
 
 class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
@@ -36,9 +35,18 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     resultProgram
   }
 
-  def intConstOp(i: Int): Operand = new ConstOperand(i, Mode.getIs.getSizeBytes)
-  def regOp(node: Node): RegisterOperand = new RegisterOperand(node.idx, node.getMode.getSizeBytes)
-  implicit def regOp(regNr: Int): RegisterOperand = new RegisterOperand(regNr, Registers(regNr).sizeBytes)
+  def intConstOp(i: Int): Operand = ConstOperand(i, Mode.getIs.getSizeBytes)
+  def regOp(node: Node): RegisterOperand = RegisterOperand(node.idx, node match {
+    case n : nodes.Call =>
+      val methodEntity = n.getPtr.asInstanceOf[nodes.Address].getEntity
+      val methodType = methodEntity.getType.asInstanceOf[MethodType]
+      assert(methodType.getNRess > 0)
+      methodType.getResType(0).getSizeBytes
+    case n : nodes.Load =>
+      n.getLoadMode.getSizeBytes
+    case _ => node.getMode.getSizeBytes
+  })
+  def regOp(regNr: Int, sizeBytes: Int) = RegisterOperand(regNr, sizeBytes)
 
   class MethodCodeGenerator(g: Graph) {
     def regParamsIndexes = 0.until(g.getEntity.getType.asInstanceOf[MethodType].getNParams min ParamRegisters.length)
@@ -72,7 +80,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       // entries: r3 -> List(x, r1, r2) if (x -> r1), (r1 -> r2), (r2 -> r3) are in the permutation
       //   (which is represented as { r1 -> x, r2 -> r1, r3 -> r2 } in the Phi map)
       val permutations = mutable.ListMap[Int, List[Operand]]() // ListMap for determinism
-      def regOp(regNr: Int) = RegisterOperand(regNr, 8 /* TODO */)
 
       @tailrec
       def getPermutation(destRegNr: Int, acc: List[Operand]): List[Operand] = {
@@ -99,22 +106,23 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
 
       permutations.foreach { case (dest, l) =>
-        val destRegOp = regOp(dest)
         l.head match {
           case RegisterOperand(`dest`, _) => /* cyclic permutation */
+            val destRegOp = regOp(dest, l.last.sizeBytes)
             val comment = "cyclic permutation " + l.mkString(" -> ") + s" -> $destRegOp"
-            val tempRegister = regOp(0)
+            val tempRegister = regOp(0, destRegOp.sizeBytes)
 
             (tempRegister :: l.reverse).sliding(2).foreach {
-              case Seq(destOp, srcOp) => block.instructions += Movq(srcOp, destOp).withComment(comment)
+              case Seq(destOp, srcOp) => block.instructions += Mov(srcOp, destOp).withComment(comment)
             }
-            block.instructions += Movq(tempRegister, destRegOp).withComment(comment)
+            block.instructions += Mov(tempRegister, destRegOp).withComment(comment)
             block.instructions += Forget(tempRegister).withComment(comment)
 
           case _ =>
+            val destRegOp = regOp(dest, l.head.sizeBytes)
             val comment = "permutation " + l.mkString(" -> ") + s" -> $destRegOp"
             (destRegOp :: l.reverse).sliding(2).foreach {
-              case Seq(destOp, srcOp) => block.instructions += Movq(srcOp, destOp).withComment(comment)
+              case Seq(destOp, srcOp) => block.instructions += Mov(srcOp, destOp).withComment(comment)
             }
         }
       }
@@ -124,7 +132,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       val methodType = g.getEntity.getType.asInstanceOf[MethodType]
       0.until(methodType.getNParams).map(i => {
         val paramType = methodType.getParamType(i)
-        8 // paramType.getSizeBytes TODO: when operations chose registers accordingly
+        paramType.getSizeBytes
       })
     }
     // Parameter offsets relative to RBP (= RSP upon entry into the function)
@@ -140,18 +148,18 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       def successorBlockOperand(node: Node) = new LabelOperand(successorBlock(node).getNr)
 
       node match {
-        case _ : firm.nodes.Jmp =>
+        case _ : nodes.Jmp =>
           basicBlocks(node.block).successors += basicBlocks(successorBlock(node))
           Seq(mjis.asm.Jmp(successorBlockOperand(node)))
 
         case ReturnExtr(retvalOption) =>
           basicBlocks(node.block).successors += basicBlocks(successorBlock(node))
           (retvalOption match {
-            case Some(retval) => Seq(Movq(getOperand(retval), RAX))
+            case Some(retval) => Seq(Mov(getOperand(retval), RegisterOperand(RAX, g.methodType.getResType(0).getSizeBytes)))
             case None => Seq()
           }) ++ Seq(mjis.asm.Jmp(successorBlockOperand(node)))
 
-        case CondExtr(cmp: Cmp) =>
+        case CondExtr(cmp: nodes.Cmp) =>
           val result = mutable.ListBuffer[Instruction]()
 
           // Const operand must be on the left
@@ -159,11 +167,11 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case left : ConstOperand => (getOperand(cmp.getRight), left, cmp.getRelation.inversed())
             case left : Operand => (left, getOperand(cmp.getRight), cmp.getRelation)
           }
-          result += Cmpq(rightOp, leftOp).withComment(s"Evaluate $cmp (actual relation: $relation)")
+          result += asm.Cmp(rightOp, leftOp).withComment(s"Evaluate $cmp (actual relation: $relation)")
 
-          val successors = BackEdges.getOuts(node).map(_.node.asInstanceOf[Proj]).toList
-          val projTrue = successors.find(_.getNum == Cond.pnTrue)
-          val projFalse = successors.find(_.getNum == Cond.pnFalse)
+          val successors = BackEdges.getOuts(node).map(_.node.asInstanceOf[nodes.Proj]).toList
+          val projTrue = successors.find(_.getNum == nodes.Cond.pnTrue)
+          val projFalse = successors.find(_.getNum == nodes.Cond.pnFalse)
           assert (projTrue.isDefined && projFalse.isDefined)
 
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projTrue.get))
@@ -182,17 +190,20 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createValue(node: Node): Seq[Instruction] = {
       node match {
-        case n : firm.nodes.Add => Seq(Movq(getOperand(n.getLeft), regOp(n)), Addq(getOperand(n.getRight), regOp(n)))
+        case n : nodes.Add => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Add(getOperand(n.getRight), regOp(n)))
 
-        case n : firm.nodes.Mul => Seq(Movq(getOperand(n.getLeft), RAX), Mulq(getOperand(n.getRight)),
-          Movq(RAX, regOp(n)), Forget(RAX))
+        case n : nodes.Mul =>
+          val tempRegister = regOp(RAX, n.getMode.getSizeBytes)
+          Seq(Mov(getOperand(n.getLeft), tempRegister), asm.Mul(getOperand(n.getRight)),
+            Mov(tempRegister, regOp(n)), Forget(tempRegister))
 
-        case n@ShlExtr(x, ConstExtr(shift)) => Seq(Movq(getOperand(x), regOp(n)), Shlq(ConstOperand(shift, -1), regOp(n)))
+        case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
+          Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
 
-        case n : firm.nodes.Load => Seq(Movq(RegisterOffsetOperand(getCanonicalNode(n.getPtr).idx, 0, n.getMode.getSizeBytes), regOp(n)))
-        case n : firm.nodes.Store => Seq(Movq(getOperand(n.getValue), RegisterOffsetOperand(getCanonicalNode(n.getPtr).idx, 0, n.getMode.getSizeBytes)))
+        case n : nodes.Load => Seq(Mov(RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getLoadMode.getSizeBytes), regOp(n)))
+        case n : nodes.Store => Seq(Mov(getOperand(n.getValue), RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getType.getSizeBytes)))
 
-        case n : firm.nodes.Call =>
+        case n : nodes.Call =>
           val resultInstrs = ListBuffer[Instruction]()
           var stackPointerDisplacement = 0
           def addStackPointerDisplacement(i: Instruction): Instruction = {
@@ -203,27 +214,32 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
           // Pass first parameters in registers. Skip first 2 preds (memory and method address)
           for (i <- 0 until (n.getPredCount - 2).min(ParamRegisters.length)) {
-            resultInstrs += Movq(getOperand(n.getPred(i+2)), ParamRegisters(i)).withComment(s"Load register argument $i")
+            val srcOp = getOperand(n.getPred(i+2))
+            val destOp  = RegisterOperand(ParamRegisters(i), srcOp.sizeBytes)
+            resultInstrs += Mov(srcOp, destOp).withComment(s"Load register argument $i")
           }
           // Push rest of parameters onto the stack in reverse order
           for (i <- n.getPredCount - 1 until ParamRegisters.length by -1) {
-            resultInstrs += addStackPointerDisplacement(Pushq(n.getPred(i).getNr).withComment(s"Push stack argument $i"))
-            stackPointerDisplacement += 8 // TODO
+            val paramOp = regOp(getCanonicalNode(n.getPred(i)))
+            resultInstrs += addStackPointerDisplacement(Push(paramOp).withComment(s"Push stack argument $i"))
+            stackPointerDisplacement += paramOp.sizeBytes
           }
 
-          val methodEntity = n.getPtr.asInstanceOf[Address].getEntity
+          val methodEntity = n.getPtr.asInstanceOf[nodes.Address].getEntity
           val methodName = methodEntity.getLdName
+          val methodType = methodEntity.getType.asInstanceOf[MethodType]
           resultInstrs += mjis.asm.Call(LabelOperand(methodName))
           if (stackPointerDisplacement > 0)
-            resultInstrs += Addq(intConstOp(stackPointerDisplacement), RSP).withComment(s"Restore stack pointer")
+            resultInstrs += Add(intConstOp(stackPointerDisplacement), regOp(RSP, 8)).withComment(s"Restore stack pointer")
 
-          if (methodEntity.getType.asInstanceOf[MethodType].getNRess > 0) {
-            resultInstrs ++= Seq(Movq(RAX, regOp(n)), Forget(RAX))
+          if (methodType.getNRess > 0) {
+            val resultRegister = regOp(RAX, methodType.getResType(0).getSizeBytes)
+            resultInstrs ++= Seq(Mov(resultRegister, regOp(n)), Forget(resultRegister))
           }
 
           resultInstrs
 
-        case n : firm.nodes.Phi =>
+        case n : nodes.Phi =>
           if (n.getMode != Mode.getM && n.getMode != Mode.getX) {
             n.getPreds.zipWithIndex.foreach { case (pred, idx) =>
               val predBB = basicBlocks(n.getBlock.getPred(idx).block)
@@ -232,21 +248,21 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           }
           Seq()
 
-        case n @ ProjExtr(ProjExtr(_, Start.pnTArgs), argNum) =>
+        case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
           if (argNum < ParamRegisters.length) {
-            function.prologue.instructions += Movq(ParamRegisters(argNum), regOp(n))
+            function.prologue.instructions += Mov(RegisterOperand(ParamRegisters(argNum), n.getMode.getSizeBytes), regOp(n))
           }
           Seq()
 
-        case _ : firm.nodes.Block | _ : firm.nodes.Start | _ : firm.nodes.End | _ : firm.nodes.Proj |
-             _ : firm.nodes.Address | _ : firm.nodes.Const | _ : firm.nodes.Return | _ : firm.nodes.Jmp |
-             _ : firm.nodes.Cmp | _ : firm.nodes.Cond | _ : firm.nodes.Conv | _ : firm.nodes.Bad => Seq()
+        case _ : nodes.Block | _ : nodes.Start | _ : nodes.End | _ : nodes.Proj |
+             _ : nodes.Address | _ : nodes.Const | _ : nodes.Return | _ : nodes.Jmp |
+             _ : nodes.Cmp | _ : nodes.Cond | _ : nodes.Conv | _ : nodes.Bad => Seq()
       }
     }
 
     private def getOperand(node: Node): Operand = getCanonicalNode(node) match {
-      case n : firm.nodes.Const => ConstOperand(n.getTarval.asInt(), n.getMode.getSizeBytes)
-      case n @ ProjExtr(ProjExtr(_, Start.pnTArgs), argNum) =>
+      case n : nodes.Const => ConstOperand(n.getTarval.asInt(), n.getMode.getSizeBytes)
+      case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
         if (argNum < ParamRegisters.length) regOp(n) else ActivationRecordOperand(
           paramOffsets(argNum - ParamRegisters.length), paramSizes(argNum - ParamRegisters.length))
       case n => regOp(n)
@@ -254,11 +270,11 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     @annotation.tailrec
     private def getCanonicalNode(node: Node): Node = node match {
-      case ProjExtr(ProjExtr(call: firm.nodes.Call, firm.nodes.Call.pnTResult), resultNo) =>
+      case ProjExtr(ProjExtr(call: nodes.Call, nodes.Call.pnTResult), resultNo) =>
         assert(resultNo == 0)
         call
-      case ProjExtr(load: firm.nodes.Load, firm.nodes.Load.pnRes) => load
-      case n: firm.nodes.Conv =>
+      case ProjExtr(load: nodes.Load, nodes.Load.pnRes) => load
+      case n: nodes.Conv =>
         // TODO - nothing to do as long there's only one register size
         getCanonicalNode(n.getOp)
       case _ => node
