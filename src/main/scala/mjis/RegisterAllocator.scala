@@ -49,7 +49,8 @@ class FunctionRegisterAllocator(function: AsmFunction) {
           case instr =>
             var rbpUsed = false
             def getRegister(): Int = if (!rbpUsed) { rbpUsed = true; RBP } else RBX
-            def hasMemoryReference: Boolean = instr.operands.forall(!_.isInstanceOf[RegisterOffsetOperand])
+            def hasMemoryReference: Boolean = instr.operands.exists(op =>
+              op.isInstanceOf[RegisterOffsetOperand] || op.isInstanceOf[ActivationRecordOperand])
             def reload(oldRegNr: Int, actualRegister: RegisterOperand): Unit = {
               val reloadInstr = Movq(activationRecordOperand(oldRegNr), actualRegister).
                 withComment(s"Reload for internal register $oldRegNr ${instr.comment}")
@@ -65,7 +66,6 @@ class FunctionRegisterAllocator(function: AsmFunction) {
                 i += 1
                 instr.operands(idx) = actualRegister
               case r@RegisterOffsetOperand(oldRegNr, _, _) =>
-                assert(!hasMemoryReference)
                 val actualRegister = getRegister()
                 reload(oldRegNr, actualRegister)
                 instr.operands(idx) = r.copy(regNr = actualRegister)
@@ -74,9 +74,7 @@ class FunctionRegisterAllocator(function: AsmFunction) {
                 val isRead = spec.contains(OperandSpec.READ)
                 val isWrite = spec.contains(OperandSpec.WRITE)
 
-                val canUseArOperand = spec.contains(OperandSpec.MEMORY) &&
-                  !hasMemoryReference &&
-                  instr.operands.forall(!_.isInstanceOf[RegisterOffsetOperand])
+                val canUseArOperand = spec.contains(OperandSpec.MEMORY) && !hasMemoryReference
                 if (canUseArOperand) {
                   instr.operands(idx) = activationRecordOperand(oldRegNr)
                   activationRecordOperands += ((instr, idx))
