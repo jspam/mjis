@@ -252,14 +252,15 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case n => regOp(n)
     }
 
-    private def getCanonicalNode(node: Node) = node match {
+    @annotation.tailrec
+    private def getCanonicalNode(node: Node): Node = node match {
       case ProjExtr(ProjExtr(call: firm.nodes.Call, firm.nodes.Call.pnTResult), resultNo) =>
         assert(resultNo == 0)
         call
       case ProjExtr(load: firm.nodes.Load, firm.nodes.Load.pnRes) => load
       case n: firm.nodes.Conv =>
         // TODO - nothing to do as long there's only one register size
-        n.getOp
+        getCanonicalNode(n.getOp)
       case _ => node
     }
   }

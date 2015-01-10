@@ -14,8 +14,8 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
   // Files our backend can already handle
   val KnownGoodFiles = Set[String](
     "ArrayParam.mj",
-    //"ArrayReturn.mj",
-    //"Assignment.mj",
+    "ArrayReturn.mj",
+    "Assignment.mj",
     "BooleanExpr.mj",
     "BooleanExpr2.mj",
     "ExprStatements.mj",
@@ -79,7 +79,7 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
     "Simon_040.mj",
     "Simon_041.mj",
     "Simon_042.mj",
-    //"Simon_043.mj",
+    "Simon_043.mj",
     "Simon_044.mj",
     "Simon_045.mj",
     "Simon_046.mj",
@@ -177,6 +177,8 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
     "Simon_138.mj",
     "Simon_139.mj",
     "Simon_140.mj",
+    //"Simon_141.mj",
+    "Simon_142.mj",
     //"Sorter.mj",
     "Void.mj"
   )
