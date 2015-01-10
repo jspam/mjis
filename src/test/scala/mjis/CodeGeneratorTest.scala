@@ -104,6 +104,28 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret"""))
   }
 
+  it should "generate code for nested array loads" in {
+    fromMembers("public int foo(int[] xs, int i) { return xs[xs[i]]; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rsi, %REG0   # xs
+        |  movq %rdx, %REG1   # i
+        |.L0:
+        |  movq %REG1, %REG2
+        |  shlq $2, %REG2
+        |  movq %REG0, %REG3
+        |  addq %REG2, %REG3
+        |  movq 0(%REG3), %REG4
+        |  movq %REG4, %REG5
+        |  shlq $2, %REG5
+        |  movq %REG0, %REG6
+        |  addq %REG5, %REG6
+        |  movq 0(%REG6), %REG7
+        |  movq %REG7, %rax
+        |  jmp .L1
+        |.L1:
+        |  ret"""))
+  }
+
   it should "generate code for array stores" in {
     fromMembers("public void foo(int[] xs, int i, int j) { xs[i] = j; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
