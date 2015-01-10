@@ -8,18 +8,18 @@
 	.globl System_out_println
 	.type System_out_println, @function
 System_out_println:
+	pushq %rbp
 	/* Ensure 16-byte stack alignment */
-	movq %rsp, %rax
-	pushq %rax
-	pushq %rax
+	movq %rsp, %rbp /* rbp is a callee-save register */
 	andq $-0x10, %rsp
 
 	xorq %rax, %rax /* number of SSE args */
 	movq %rdi, %rsi
 	movq $.System_out_println__template, %rdi
-
 	call printf
-	movq 8(%rsp), %rsp
+
+	movq %rbp, %rsp
+	popq %rbp
 	ret
 
 	.p2align 4,,15
