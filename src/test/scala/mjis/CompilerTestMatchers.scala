@@ -191,7 +191,7 @@ trait CompilerTestMatchers {
       val out = try {
         p.!!(ProcessLogger(err += _ + "\n"))
       } catch {
-        case e: Exception => Assertions.fail(err)
+        case e: Exception => Assertions.fail(e.getMessage + System.lineSeparator + err)
       }
 
       val check = Source.fromFile(path.stripSuffix("mj") + "check").mkString
