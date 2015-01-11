@@ -113,6 +113,14 @@ object FirmExtractors {
     }
   }
 
+  object CallExtr {
+    /** Some(target, parameters) or None */
+    def unapply(node: Node): Option[(Address, Seq[Node])] = node match {
+      case call: Call => Some((call.getPtr.asInstanceOf[Address], call.getPreds.toList.drop(2) /* Mem and address */))
+      case _ => None
+    }
+  }
+
   object TargetValueExtr {
     def unapply(tarval: TargetValue): Option[Long] = {
       if (tarval.isConstant)

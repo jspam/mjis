@@ -55,7 +55,8 @@ class FunctionRegisterAllocator(function: AsmFunction) {
               op.isInstanceOf[RegisterOffsetOperand] || op.isInstanceOf[ActivationRecordOperand])
             def reload(oldReg: RegisterOperand, actualRegister: RegisterOperand): Unit = {
               val reloadInstr = Mov(activationRecordOperand(oldReg), actualRegister).
-                withComment(s"Reload for internal register ${oldReg.regNr} ${instr.comment}")
+                withComment(s"Reload for internal register ${oldReg.regNr} ${instr.comment}").
+                withStackPointerDisplacement(instr.stackPointerDisplacement)
               activationRecordOperands += ((reloadInstr, 0))
               instrList.insert(i, reloadInstr)
               i += 1
@@ -67,7 +68,7 @@ class FunctionRegisterAllocator(function: AsmFunction) {
                 instrList.insert(i, Mov(c, actualRegister).withComment(s" - Load constant ${instr.comment}"))
                 i += 1
                 instr.operands(idx) = actualRegister
-              case r@RegisterOffsetOperand(reg, _, _) =>
+              case r@RegisterOffsetOperand(reg, _, _) if reg.regNr >= 0 =>
                 val actualRegister = getRegister(reg.sizeBytes)
                 reload(reg, actualRegister)
                 instr.operands(idx) = r.copy(base = actualRegister)
@@ -89,7 +90,8 @@ class FunctionRegisterAllocator(function: AsmFunction) {
                     reload(r, actualRegister)
                   if (isWrite) {
                     val spillInstr = Mov(actualRegister, activationRecordOperand(r)).
-                      withComment(s"Spill for internal register $oldRegNr ${instr.comment}")
+                      withComment(s"Spill for internal register $oldRegNr ${instr.comment}").
+                      withStackPointerDisplacement(instr.stackPointerDisplacement)
                     activationRecordOperands += ((spillInstr, 1))
                     instrList.insert(i + 1, spillInstr)
                     i += 1

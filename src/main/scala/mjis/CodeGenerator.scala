@@ -128,21 +128,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
     }
 
-    private val paramSizes: Seq[Int] = {
-      val methodType = g.getEntity.getType.asInstanceOf[MethodType]
-      0.until(methodType.getNParams).map(i => {
-        val paramType = methodType.getParamType(i)
-        paramType.getSizeBytes
-      })
-    }
-    // Parameter offsets relative to RBP (= RSP upon entry into the function)
-    private val paramOffsets: Seq[Int] =
-      if (paramSizes.length <= ParamRegisters.length) Seq()
-      else {
-        val stackParams = paramSizes.drop(ParamRegisters.length)
-        stackParams.tail.scanLeft(align(stackParams(0)))(_ + align(_))
-      }
-
     private def createControlFlow(node: Node): Seq[Instruction] = {
       def successorBlock(node: Node) = BackEdges.getOuts(node).iterator().next().node.asInstanceOf[Block]
       def successorBlockOperand(node: Node) = new LabelOperand(successorBlock(node).getNr)
@@ -228,33 +213,37 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         case n : nodes.Load => Seq(Mov(RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getLoadMode.getSizeBytes), regOp(n)))
         case n : nodes.Store => Seq(Mov(getOperand(n.getValue), RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getType.getSizeBytes)))
 
-        case n : nodes.Call =>
+        case n@CallExtr(address, params) =>
           val resultInstrs = ListBuffer[Instruction]()
-          var stackPointerDisplacement = 0
-          def addStackPointerDisplacement(i: Instruction): Instruction = {
-            i.stackPointerDisplacement = stackPointerDisplacement
-            i.comment += s" - stackPointerDisplacement = $stackPointerDisplacement"
-            i
+
+          val (regParams, stackParams) = params.splitAt(ParamRegisters.length)
+
+          for ((param, reg) <- regParams.zip(ParamRegisters)) {
+            val srcOp = getOperand(param)
+            resultInstrs += Mov(srcOp, RegisterOperand(reg, srcOp.sizeBytes)).withComment(s"Load register argument")
           }
 
-          // Pass first parameters in registers. Skip first 2 preds (memory and method address)
-          for (i <- 0 until (n.getPredCount - 2).min(ParamRegisters.length)) {
-            val srcOp = getOperand(n.getPred(i+2))
-            val destOp  = RegisterOperand(ParamRegisters(i), srcOp.sizeBytes)
-            resultInstrs += Mov(srcOp, destOp).withComment(s"Load register argument $i")
-          }
-          // Push rest of parameters onto the stack in reverse order
-          for (i <- n.getPredCount - 1 until ParamRegisters.length by -1) {
-            val paramOp = regOp(getCanonicalNode(n.getPred(i)))
-            resultInstrs += addStackPointerDisplacement(Push(paramOp).withComment(s"Push stack argument $i"))
-            stackPointerDisplacement += paramOp.sizeBytes
+          val stackPointerDisplacement = 8 * stackParams.length
+          if (stackParams.nonEmpty) {
+            resultInstrs += Sub(intConstOp(stackPointerDisplacement), regOp(RSP, 8)).withComment(s"Move stack pointer for parameters")
+            // Push rest of parameters onto the stack in reverse order
+            for ((param, i) <- stackParams.zipWithIndex.reverse) {
+              val srcOp = getOperand(param)
+              val tempOp = regOp(n.idx, srcOp.sizeBytes) // needed if srcOp is a memory operand
+              resultInstrs += Mov(srcOp, tempOp).
+                withComment(s"Reload stack argument").
+                withStackPointerDisplacement(stackPointerDisplacement)
+              resultInstrs += Mov(tempOp, RegisterOffsetOperand(regOp(RSP, 8), 8 * i, srcOp.sizeBytes)).
+                withComment(s"Push stack argument").
+                withStackPointerDisplacement(stackPointerDisplacement)
+            }
           }
 
-          val methodEntity = n.getPtr.asInstanceOf[nodes.Address].getEntity
-          val methodName = methodEntity.getLdName
-          val methodType = methodEntity.getType.asInstanceOf[MethodType]
+          val methodName = address.getEntity.getLdName
+          val methodType = address.getEntity.getType.asInstanceOf[MethodType]
           resultInstrs += mjis.asm.Call(LabelOperand(methodName))
-          if (stackPointerDisplacement > 0)
+
+          if (stackParams.nonEmpty)
             resultInstrs += Add(intConstOp(stackPointerDisplacement), regOp(RSP, 8)).withComment(s"Restore stack pointer")
 
           if (methodType.getNRess > 0) {
@@ -289,7 +278,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case n : nodes.Const => ConstOperand(n.getTarval.asInt(), n.getMode.getSizeBytes)
       case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
         if (argNum < ParamRegisters.length) regOp(n) else ActivationRecordOperand(
-          paramOffsets(argNum - ParamRegisters.length), paramSizes(argNum - ParamRegisters.length))
+        8 * (argNum - ParamRegisters.length + 1 /* return address */), n.getMode.getSizeBytes)
       case n => regOp(n)
     }
 

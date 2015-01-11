@@ -80,6 +80,11 @@ abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*
   def opcode: String = this.getClass.getSimpleName.toLowerCase.stripSuffix("$")
   def withComment(comment: String) = { this.comment = comment; this }
   var stackPointerDisplacement: Int = 0
+  def withStackPointerDisplacement(displacement: Int): Instruction = {
+    this.stackPointerDisplacement = displacement
+    this.comment += s" - stackPointerDisplacement = $displacement"
+    this
+  }
   val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)
   val operandSpecs = Seq[OperandSpec](operandsWithSpec.map(_._2):_*)
   def suffix = {
@@ -121,8 +126,6 @@ case class Mov(src: Operand, dest: Operand) extends Instruction((src, READ | CON
       else suffixForSize(dest.sizeBytes)
   }
 }
-case class Pop(dest: Operand) extends Instruction((dest, WRITE | MEMORY))
-case class Push(src: Operand) extends Instruction((src, READ | MEMORY))
 case class Jmp(dest: LabelOperand) extends Instruction((dest, READ))
 case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolean) extends Instruction((dest, READ)) {
   override def opcode: String = relation match {
