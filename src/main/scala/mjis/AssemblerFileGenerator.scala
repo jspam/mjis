@@ -44,7 +44,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
       case r: RegisterOffsetOperand => s"${r.offset}(%${regName(r.base)})"
       case l: LabelOperand => l.name
       case c: ConstOperand => s"$$${c.value}"
-      case _: ActivationRecordOperand => assert(false, "ActivationRecordOperands should not occur at this stage")
+      case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
     }.mkString(", ")
     val instrAndOperands = instr.opcode + instr.suffix + operandsResult
     if (instr.comment.nonEmpty)
