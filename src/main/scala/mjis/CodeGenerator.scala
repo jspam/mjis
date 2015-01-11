@@ -279,7 +279,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
         case _ : nodes.Block | _ : nodes.Start | _ : nodes.End | _ : nodes.Proj |
              _ : nodes.Address | _ : nodes.Const | _ : nodes.Return | _ : nodes.Jmp |
-             _ : nodes.Cmp | _ : nodes.Cond | _ : nodes.Conv | _ : nodes.Bad => Seq()
+             _ : nodes.Cmp | _ : nodes.Cond | _ : nodes.Conv | _ : nodes.Bad | _ : nodes.Unknown => Seq()
       }
     }
 
