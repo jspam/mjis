@@ -36,16 +36,17 @@ abstract class AssemblerFileGenerator extends Phase[Unit] {
 
 class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerator {
   private def instrToString(instr: Instruction): String = {
-    def regName(regNr: Int) = if (Registers.contains(regNr)) Registers(regNr).name else "REG" + regNr
+    def regName(r: RegisterOperand) = if (Registers.contains(r.regNr)) Registers(r.regNr).subregs(r.sizeBytes)
+      else s"REG${r.regNr}{${r.sizeBytes}}"
 
     val operandsResult = if (instr.operands.isEmpty) "" else " " + instr.operands.map {
-      case r: RegisterOperand => "%" + regName(r.regNr)
-      case r: RegisterOffsetOperand => s"${r.offset}(%${regName(r.regNr)})"
+      case r: RegisterOperand => "%" + regName(r)
+      case r: RegisterOffsetOperand => s"${r.offset}(%${regName(r.base)})"
       case l: LabelOperand => l.name
       case c: ConstOperand => s"$$${c.value}"
       case _: ActivationRecordOperand => assert(false, "ActivationRecordOperands should not occur at this stage")
     }.mkString(", ")
-    val instrAndOperands = instr.opcode + operandsResult
+    val instrAndOperands = instr.opcode + instr.suffix + operandsResult
     if (instr.comment.nonEmpty)
       // Align comments
       instrAndOperands + Seq.fill((30 - instrAndOperands.length) max 0)(" ").mkString("") + " # " + instr.comment

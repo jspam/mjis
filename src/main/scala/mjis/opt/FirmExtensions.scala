@@ -56,6 +56,8 @@ object FirmExtensions {
       }).flatten
     }
 
+    def methodType: MethodType = g.getEntity.getType.asInstanceOf[MethodType]
+
   }
 
   implicit class NodeExt(node: Node) {
