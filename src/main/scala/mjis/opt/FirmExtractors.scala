@@ -26,6 +26,13 @@ object FirmExtractors {
     }
   }
 
+  object ConvExtr {
+    def unapply(node: Node): Option[Node] = node match {
+      case c: Conv => Some(c.getOp)
+      case _ => None
+    }
+  }
+
   object ProjExtr {
     def unapply(node: Node): Option[(Node, Int)] = node match {
       case proj: Proj => Some((proj.getPred, proj.getNum))
@@ -68,9 +75,23 @@ object FirmExtractors {
     }
   }
 
+  object CmpExtr {
+    def unapply(node: Node): Option[(Relation, Node, Node)] = node match {
+      case cmp: Cmp => Some((cmp.getRelation, cmp.getLeft, cmp.getRight))
+      case _ => None
+    }
+  }
+
   object DivExtr {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case div: Div => Some((div.getLeft, div.getRight))
+      case _ => None
+    }
+  }
+
+  object ModExtr {
+    def unapply(node: Node): Option[(Node, Node)] = node match {
+      case mod: Mod => Some((mod.getLeft, mod.getRight))
       case _ => None
     }
   }
@@ -88,6 +109,14 @@ object FirmExtractors {
         // >= 2 because the Mem predecessor always exists
         if (ret.getPredCount >= 2)  Some(ret.getPred(1)) else None
       )
+      case _ => None
+    }
+  }
+
+  object CallExtr {
+    /** Some(target, parameters) or None */
+    def unapply(node: Node): Option[(Address, Seq[Node])] = node match {
+      case call: Call => Some((call.getPtr.asInstanceOf[Address], call.getPreds.toList.drop(2) /* Mem and address */))
       case _ => None
     }
   }

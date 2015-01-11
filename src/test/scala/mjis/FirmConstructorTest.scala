@@ -193,7 +193,7 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "create FIRM graphs for calloc" in {
-    val callocMethodEntity = new Entity(Program.getGlobalType, "calloc",
+    val callocMethodEntity = new Entity(Program.getGlobalType, "_calloc",
       new MethodType(Array[Type](IntType, IntType), Array[Type](new PrimitiveType(Mode.getP))))
     val mCalloc = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_m_calloc", null, Seq()),
       """
@@ -201,8 +201,8 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |mem_before_call = Proj M M, start
         |const17 = Const 17 Is
         |const1 = Const 1 Is
-        |addr_calloc = Addr calloc
-        |call = Call calloc, mem_before_call, addr_calloc, const1, const17
+        |addr_calloc = Addr _calloc
+        |call = Call _calloc, mem_before_call, addr_calloc, const1, const17
         |mem_after_call = Proj M M, call
         |return = Return, mem_after_call
         |end = End, return
@@ -212,15 +212,15 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "create FIRM graphs for calloc with a class without members" in {
-    val callocMethodEntity = new Entity(Program.getGlobalType, "calloc",
+    val callocMethodEntity = new Entity(Program.getGlobalType, "_calloc",
       new MethodType(Array[Type](IntType, IntType), Array[Type](new PrimitiveType(Mode.getP))))
     val mCalloc = FirmGraphTestHelper.buildFirmGraph(methodEntity("__expected__4Test_m_calloc", null, Seq()),
       """
         |start = Start
         |mem_before_call = Proj M M, start
         |const1 = Const 1 Is
-        |addr_calloc = Addr calloc
-        |call = Call calloc, mem_before_call, addr_calloc, const1, const1
+        |addr_calloc = Addr _calloc
+        |call = Call _calloc, mem_before_call, addr_calloc, const1, const1
         |mem_after_call = Proj M M, call
         |return = Return, mem_after_call
         |end = End, return

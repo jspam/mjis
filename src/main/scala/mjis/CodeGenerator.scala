@@ -5,7 +5,6 @@ import java.io._
 import firm._
 import firm.nodes.{Node, Block}
 import mjis.asm._
-import mjis.CodeGenerator._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
 import mjis.opt.NodeCollector
@@ -42,8 +41,9 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       val methodType = methodEntity.getType.asInstanceOf[MethodType]
       assert(methodType.getNRess > 0)
       methodType.getResType(0).getSizeBytes
-    case n : nodes.Load =>
-      n.getLoadMode.getSizeBytes
+    case n : nodes.Load => n.getLoadMode.getSizeBytes
+    case n : firm.nodes.Div => n.getResmode.getSizeBytes
+    case n : firm.nodes.Mod => n.getResmode.getSizeBytes
     case _ => node.getMode.getSizeBytes
   })
   def regOp(regNr: Int, sizeBytes: Int) = RegisterOperand(regNr, sizeBytes)
@@ -128,21 +128,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
     }
 
-    private val paramSizes: Seq[Int] = {
-      val methodType = g.getEntity.getType.asInstanceOf[MethodType]
-      0.until(methodType.getNParams).map(i => {
-        val paramType = methodType.getParamType(i)
-        paramType.getSizeBytes
-      })
-    }
-    // Parameter offsets relative to RBP (= RSP upon entry into the function)
-    private val paramOffsets: Seq[Int] =
-      if (paramSizes.length <= ParamRegisters.length) Seq()
-      else {
-        val stackParams = paramSizes.drop(ParamRegisters.length)
-        stackParams.tail.scanLeft(align(stackParams(0)))(_ + align(_))
-      }
-
     private def createControlFlow(node: Node): Seq[Instruction] = {
       def successorBlock(node: Node) = BackEdges.getOuts(node).iterator().next().node.asInstanceOf[Block]
       def successorBlockOperand(node: Node) = new LabelOperand(successorBlock(node).getNr)
@@ -190,46 +175,75 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createValue(node: Node): Seq[Instruction] = {
       node match {
+        case n : nodes.And => Seq(Mov(getOperand(n.getLeft), regOp(n)), And(getOperand(n.getRight), regOp(n)))
         case n : nodes.Add => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Add(getOperand(n.getRight), regOp(n)))
+        case n : nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
+        case n : nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
 
         case n : nodes.Mul =>
           val tempRegister = regOp(RAX, n.getMode.getSizeBytes)
           Seq(Mov(getOperand(n.getLeft), tempRegister), asm.Mul(getOperand(n.getRight)),
             Mov(tempRegister, regOp(n)), Forget(tempRegister))
 
+        case n : firm.nodes.Div =>
+          assert(n.getLeft.getMode == Mode.getIs)
+          assert(n.getRight.getMode == Mode.getIs)
+          Seq(
+            Mov(getOperand(n.getLeft), regOp(RAX, 4)),
+            Cdq, // sign-extend eax into edx:eax
+            IDiv(getOperand(n.getRight)),
+            Mov(regOp(RAX, 4), regOp(n))
+          )
+
+        case n : firm.nodes.Mod =>
+          assert(n.getLeft.getMode == Mode.getIs)
+          assert(n.getRight.getMode == Mode.getIs)
+          Seq(
+            Mov(getOperand(n.getLeft), regOp(RAX, 4)),
+            Cdq, // sign-extend eax into edx:eax
+            IDiv(getOperand(n.getRight)),
+            Mov(regOp(RDX, 4), regOp(n))
+          )
+
         case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
           Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
+
+        case n : nodes.Conv => Seq(Mov(getOperand(n.getOp), regOp(n)))
 
         case n : nodes.Load => Seq(Mov(RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getLoadMode.getSizeBytes), regOp(n)))
         case n : nodes.Store => Seq(Mov(getOperand(n.getValue), RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getType.getSizeBytes)))
 
-        case n : nodes.Call =>
+        case n@CallExtr(address, params) =>
           val resultInstrs = ListBuffer[Instruction]()
-          var stackPointerDisplacement = 0
-          def addStackPointerDisplacement(i: Instruction): Instruction = {
-            i.stackPointerDisplacement = stackPointerDisplacement
-            i.comment += s" - stackPointerDisplacement = $stackPointerDisplacement"
-            i
+
+          val (regParams, stackParams) = params.splitAt(ParamRegisters.length)
+
+          for ((param, reg) <- regParams.zip(ParamRegisters)) {
+            val srcOp = getOperand(param)
+            resultInstrs += Mov(srcOp, RegisterOperand(reg, srcOp.sizeBytes)).withComment(s"Load register argument")
           }
 
-          // Pass first parameters in registers. Skip first 2 preds (memory and method address)
-          for (i <- 0 until (n.getPredCount - 2).min(ParamRegisters.length)) {
-            val srcOp = getOperand(n.getPred(i+2))
-            val destOp  = RegisterOperand(ParamRegisters(i), srcOp.sizeBytes)
-            resultInstrs += Mov(srcOp, destOp).withComment(s"Load register argument $i")
-          }
-          // Push rest of parameters onto the stack in reverse order
-          for (i <- n.getPredCount - 1 until ParamRegisters.length by -1) {
-            val paramOp = regOp(getCanonicalNode(n.getPred(i)))
-            resultInstrs += addStackPointerDisplacement(Push(paramOp).withComment(s"Push stack argument $i"))
-            stackPointerDisplacement += paramOp.sizeBytes
+          val stackPointerDisplacement = 8 * stackParams.length
+          if (stackParams.nonEmpty) {
+            resultInstrs += Sub(intConstOp(stackPointerDisplacement), regOp(RSP, 8)).withComment(s"Move stack pointer for parameters")
+            // Push rest of parameters onto the stack in reverse order
+            for ((param, i) <- stackParams.zipWithIndex.reverse) {
+              val srcOp = getOperand(param)
+              val tempOp = regOp(n.idx, srcOp.sizeBytes) // needed if srcOp is a memory operand
+              resultInstrs += Mov(srcOp, tempOp).
+                withComment(s"Reload stack argument").
+                withStackPointerDisplacement(stackPointerDisplacement)
+              resultInstrs += Mov(tempOp, RegisterOffsetOperand(regOp(RSP, 8), 8 * i, srcOp.sizeBytes)).
+                withComment(s"Push stack argument").
+                withStackPointerDisplacement(stackPointerDisplacement)
+            }
           }
 
-          val methodEntity = n.getPtr.asInstanceOf[nodes.Address].getEntity
-          val methodName = methodEntity.getLdName
-          val methodType = methodEntity.getType.asInstanceOf[MethodType]
+          val methodName = address.getEntity.getLdName
+          val methodType = address.getEntity.getType.asInstanceOf[MethodType]
           resultInstrs += mjis.asm.Call(LabelOperand(methodName))
-          if (stackPointerDisplacement > 0)
+
+          if (stackParams.nonEmpty)
             resultInstrs += Add(intConstOp(stackPointerDisplacement), regOp(RSP, 8)).withComment(s"Restore stack pointer")
 
           if (methodType.getNRess > 0) {
@@ -256,7 +270,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
         case _ : nodes.Block | _ : nodes.Start | _ : nodes.End | _ : nodes.Proj |
              _ : nodes.Address | _ : nodes.Const | _ : nodes.Return | _ : nodes.Jmp |
-             _ : nodes.Cmp | _ : nodes.Cond | _ : nodes.Conv | _ : nodes.Bad => Seq()
+             _ : nodes.Cmp | _ : nodes.Cond | _ : nodes.Conv | _ : nodes.Bad | _ : nodes.Unknown => Seq()
       }
     }
 
@@ -264,19 +278,17 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case n : nodes.Const => ConstOperand(n.getTarval.asInt(), n.getMode.getSizeBytes)
       case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
         if (argNum < ParamRegisters.length) regOp(n) else ActivationRecordOperand(
-          paramOffsets(argNum - ParamRegisters.length), paramSizes(argNum - ParamRegisters.length))
+        8 * (argNum - ParamRegisters.length + 1 /* return address */), n.getMode.getSizeBytes)
       case n => regOp(n)
     }
 
-    @annotation.tailrec
     private def getCanonicalNode(node: Node): Node = node match {
       case ProjExtr(ProjExtr(call: nodes.Call, nodes.Call.pnTResult), resultNo) =>
         assert(resultNo == 0)
         call
       case ProjExtr(load: nodes.Load, nodes.Load.pnRes) => load
-      case n: nodes.Conv =>
-        // TODO - nothing to do as long there's only one register size
-        getCanonicalNode(n.getOp)
+      case ProjExtr(div: nodes.Div, nodes.Div.pnRes) => div
+      case ProjExtr(mod: nodes.Mod, nodes.Mod.pnRes) => mod
       case _ => node
     }
   }
