@@ -352,7 +352,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       val result: Array[Type] = Array(new PointerType(new PrimitiveType(Mode.getBu)))
       new MethodType(params, result)
     }
-    private val calloc = new Entity(FirmProgram.getGlobalType, "calloc", callocType)
+    private val calloc = new Entity(FirmProgram.getGlobalType, "_calloc", callocType)
 
     private def call(methodEntity: Entity, args: Array[Node]): Node = {
       val methodType = methodEntity.getType.asInstanceOf[MethodType]

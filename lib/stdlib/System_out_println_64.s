@@ -22,6 +22,22 @@ System_out_println:
 	popq %rbp
 	ret
 
+	.text
+	.p2align 4,,15
+	.globl _calloc
+	.type _calloc, @function
+_calloc:
+	pushq %rbp
+	/* Ensure 16-byte stack alignment */
+	movq %rsp, %rbp /* rbp is a callee-save register */
+	andq $-0x10, %rsp
+
+	call calloc
+
+	movq %rbp, %rsp
+	popq %rbp
+	ret
+
 	.p2align 4,,15
 	.globl main
 	.type main, @function
