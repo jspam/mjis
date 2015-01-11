@@ -236,7 +236,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "generate code for calloc" in {
-    fromMembers("public void foo() { new Test().foo(); }") should succeedGeneratingCodeWith(template(
+    fromMembers("public Test t; public void foo() { new Test().foo(); }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
         |.L0:
         |  movl $1, %edi

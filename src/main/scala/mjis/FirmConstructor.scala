@@ -381,7 +381,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
 
     override def postVisit(expr: NewObject, _1: Unit): ExprResult = {
       val classType = firmClassEntity(expr.typ.decl).getType
-      val size = constr.newConst(new PrimitiveType(Mode.getP).getSizeBytes, Mode.getIs)
+      val size = constr.newConst(1 max classType.getSizeBytes, Mode.getIs)
       val num_elems = constr.newConst(1, Mode.getIs)
       Value(call(calloc, Array[Node](num_elems, size)))
     }
