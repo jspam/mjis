@@ -26,6 +26,13 @@ object FirmExtractors {
     }
   }
 
+  object ConvExtr {
+    def unapply(node: Node): Option[Node] = node match {
+      case c: Conv => Some(c.getOp)
+      case _ => None
+    }
+  }
+
   object ProjExtr {
     def unapply(node: Node): Option[(Node, Int)] = node match {
       case proj: Proj => Some((proj.getPred, proj.getNum))

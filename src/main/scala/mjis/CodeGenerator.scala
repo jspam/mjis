@@ -223,6 +223,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
           Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
 
+        case n : nodes.Conv => Seq(Mov(getOperand(n.getOp), regOp(n)))
+
         case n : nodes.Load => Seq(Mov(RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getLoadMode.getSizeBytes), regOp(n)))
         case n : nodes.Store => Seq(Mov(getOperand(n.getValue), RegisterOffsetOperand(regOp(getCanonicalNode(n.getPtr)), 0, n.getType.getSizeBytes)))
 
@@ -291,7 +293,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case n => regOp(n)
     }
 
-    @annotation.tailrec
     private def getCanonicalNode(node: Node): Node = node match {
       case ProjExtr(ProjExtr(call: nodes.Call, nodes.Call.pnTResult), resultNo) =>
         assert(resultNo == 0)
@@ -299,9 +300,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case ProjExtr(load: nodes.Load, nodes.Load.pnRes) => load
       case ProjExtr(div: nodes.Div, nodes.Div.pnRes) => div
       case ProjExtr(mod: nodes.Mod, nodes.Mod.pnRes) => mod
-      case n: nodes.Conv =>
-        // TODO - nothing to do as long there's only one register size
-        getCanonicalNode(n.getOp)
       case _ => node
     }
   }

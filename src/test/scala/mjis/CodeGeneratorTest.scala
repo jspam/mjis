@@ -94,11 +94,12 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %edx, %REG1{4}
         |.L0:
         |  movslq %REG1{4}, %REG2{8}
-        |  shlq $2, %REG2{8}
-        |  movq %REG0{8}, %REG3{8}
-        |  addq %REG2{8}, %REG3{8}
-        |  movl 0(%REG3{8}), %REG4{4}
-        |  movl %REG4{4}, %eax
+        |  movq %REG2{8}, %REG3{8}
+        |  shlq $2, %REG3{8}
+        |  movq %REG0{8}, %REG4{8}
+        |  addq %REG3{8}, %REG4{8}
+        |  movl 0(%REG4{8}), %REG5{4}
+        |  movl %REG5{4}, %eax
         |  jmp .L1
         |.L1:
         |  ret"""))
@@ -111,16 +112,18 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %edx, %REG1{4}   # i
         |.L0:
         |  movslq %REG1{4}, %REG2{8}
-        |  shlq $2, %REG2{8}
-        |  movq %REG0{8}, %REG3{8}
-        |  addq %REG2{8}, %REG3{8}
-        |  movl 0(%REG3{8}), %REG4{4}
-        |  movslq %REG4{4}, %REG5{8}
-        |  shlq $2, %REG5{8}
-        |  movq %REG0{8}, %REG6{8}
-        |  addq %REG5{8}, %REG6{8}
-        |  movl 0(%REG6{8}), %REG7{4}
-        |  movl %REG7{4}, %eax
+        |  movq %REG2{8}, %REG3{8}
+        |  shlq $2, %REG3{8}
+        |  movq %REG0{8}, %REG4{8}
+        |  addq %REG3{8}, %REG4{8}
+        |  movl 0(%REG4{8}), %REG5{4}
+        |  movslq %REG5{4}, %REG6{8}
+        |  movq %REG6{8}, %REG7{8}
+        |  shlq $2, %REG7{8}
+        |  movq %REG0{8}, %REG8{8}
+        |  addq %REG7{8}, %REG8{8}
+        |  movl 0(%REG8{8}), %REG9{4}
+        |  movl %REG9{4}, %eax
         |  jmp .L1
         |.L1:
         |  ret"""))
@@ -134,10 +137,11 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %ecx, %REG2{4}
         |.L0:
         |  movslq %REG1{4}, %REG3{8}
-        |  shlq $2, %REG3{8}
-        |  movq %REG0{8}, %REG4{8}
-        |  addq %REG3{8}, %REG4{8}
-        |  movl %REG2{4}, 0(%REG4{8})
+        |  movq %REG3{8}, %REG4{8}
+        |  shlq $2, %REG4{8}
+        |  movq %REG0{8}, %REG5{8}
+        |  addq %REG4{8}, %REG5{8}
+        |  movl %REG2{4}, 0(%REG5{8})
         |  jmp .L1
         |.L1:
         |  ret"""))
