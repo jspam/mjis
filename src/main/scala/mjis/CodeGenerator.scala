@@ -182,7 +182,10 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
         case n : nodes.Mul =>
           val tempRegister = regOp(RAX, n.getMode.getSizeBytes)
-          Seq(Mov(getOperand(n.getLeft), tempRegister), asm.Mul(getOperand(n.getRight)),
+          // Normalization moves constants to the right of a Mul node,
+          // but the Mul instruction cannot take a constant as operand.
+          // Avoid having to allocate an extra register by swapping left and right.
+          Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
             Mov(tempRegister, regOp(n)), Forget(tempRegister))
 
         case n : firm.nodes.Div =>

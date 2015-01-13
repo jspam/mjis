@@ -78,8 +78,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  addl $3, %REG2{4}
         |  movl %REG1{4}, %REG3{4}
         |  addl $4, %REG3{4}
-        |  movl %REG2{4}, %eax
-        |  mull %REG3{4}
+        |  movl %REG3{4}, %eax
+        |  mull %REG2{4}
         |  movl %eax, %REG4{4}
         |  movl %REG4{4}, %eax
         |  jmp .L1
