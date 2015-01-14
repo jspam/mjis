@@ -2,7 +2,6 @@ package mjis.opt
 
 import firm._
 import firm.nodes._
-import mjis.util.FirmDumpHelper
 import org.scalatest._
 import mjis.opt.FirmExtensions._
 import mjis.opt.FirmExtractors._

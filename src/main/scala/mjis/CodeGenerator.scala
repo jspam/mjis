@@ -69,9 +69,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       basicBlocks.values.foreach(generateInstructionsForPhi)
 
       function.epilogue.controlFlowInstructions += Ret()
-      function.basicBlocks = (Seq(basicBlocks(g.getStartBlock)) ++
-        basicBlocks.keys.filter(b => b != g.getStartBlock && b != g.getEndBlock).map(basicBlocks) ++
-        Seq(basicBlocks(g.getEndBlock))).toList
+      function.basicBlocks = NodeCollector.getBlocksInReverseBackEdgesPostOrder(g).map(basicBlocks).toList
       function
     }
 

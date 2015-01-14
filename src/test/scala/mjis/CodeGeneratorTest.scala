@@ -261,13 +261,13 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %esi, %REG1{4}  # argI
         |.L0:
         |  cmpb $1, %REG0{1}
-        |  je .L2
-        |  jmp .L1
+        |  je .L1
+        |  jmp .L2
         |.L1:
-        |  movl %REG1{4}, %REG2{4}
+        |  movl $0, %REG2{4}
         |  jmp .L3
         |.L2:
-        |  movl $0, %REG2{4}
+        |  movl %REG1{4}, %REG2{4}
         |  jmp .L3
         |.L3:
         |  movl %REG2{4}, %eax
@@ -302,16 +302,16 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
           |.L0:
           |  movl $42, %REG1{4}         # y => REG1
           |  movl %REG0{4}, %REG2{4}    # x => REG2
-          |  jmp .L2
+          |  jmp .L1
           |.L1:
+          |  cmpl $5, %REG2{4}
+          |  jl .L2
+          |  jmp .L3
+          |.L2:
           |  movl %REG1{4}, %REG3{4}    # tmp = y
           |  movl %REG2{4}, %REG1{4}    # y = x
           |  movl %REG3{4}, %REG2{4}    # x = tmp
-          |  jmp .L2
-          |.L2:
-          |  cmpl $5, %REG2{4}
-          |  jl .L1
-          |  jmp .L3
+          |  jmp .L1
           |.L3:
           |  movl %REG1{4}, %eax
           |  jmp .L4
