@@ -1,7 +1,8 @@
 package mjis.opt
 
-import firm.BlockWalker
 import firm.nodes._
+import firm.{BlockWalker, Graph}
+import FirmExtensions._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -22,5 +23,22 @@ object NodeCollector {
       override def visitBlock(block: Block): Unit = blocks += block
     })
     blocks
+  }
+
+  def getBlocksInReverseBackEdgesPostOrder(g: Graph): Seq[Block] = {
+    val postOrder = ArrayBuffer[Block]()
+    val edges = g.getBlockBackEdges
+
+    def visit(block: Block): Unit = {
+      if (!block.blockVisited) {
+        block.markBlockVisited()
+        edges(block).foreach(visit)
+        postOrder += block
+      }
+    }
+
+    g.incBlockVisited()
+    visit(g.getStartBlock)
+    postOrder.reverse
   }
 }
