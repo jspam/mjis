@@ -47,19 +47,25 @@ class FunctionRegisterAllocator(function: AsmFunction) {
             instrList.remove(i)
           case instr =>
             var rbxUsed = false
-            def getRegister(sizeBytes: Int): RegisterOperand =
-              if (!rbxUsed) { rbxUsed = true; RegisterOperand(RBX, sizeBytes) }
-              else RegisterOperand(RCX, sizeBytes)
+            val registers = mutable.Queue[Int](RBX, RCX, R8)
+            def getRegister(sizeBytes: Int): RegisterOperand = RegisterOperand(registers.dequeue(), sizeBytes)
 
             def hasMemoryReference: Boolean = instr.operands.exists(op =>
-              op.isInstanceOf[RegisterOffsetOperand] || op.isInstanceOf[ActivationRecordOperand])
-            def reload(oldReg: RegisterOperand, actualRegister: RegisterOperand): Unit = {
-              val reloadInstr = Mov(activationRecordOperand(oldReg), actualRegister).
-                withComment(s"Reload for internal register ${oldReg.regNr} ${instr.comment}").
+              op.isInstanceOf[AddressOperand] || op.isInstanceOf[ActivationRecordOperand])
+            def reload(op: Operand, actualRegister: RegisterOperand): Unit = {
+              val reloadInstr = (op match {
+                case r: RegisterOperand => Mov(activationRecordOperand(r), actualRegister)
+                case ar: ActivationRecordOperand => Mov(ar, actualRegister)
+              }).withComment(s"Reload for $op ${instr.comment}").
                 withStackPointerDisplacement(instr.stackPointerDisplacement)
               activationRecordOperands += ((reloadInstr, 0))
               instrList.insert(i, reloadInstr)
               i += 1
+            }
+            def getAndReload(op: Operand): RegisterOperand = {
+              val actualReg = getRegister(op.sizeBytes)
+              reload(op, actualReg)
+              actualReg
             }
 
             instr.operands.zipWithIndex.zip(instr.operandSpecs).foreach { case((operand, idx), spec) => operand match {
@@ -68,11 +74,9 @@ class FunctionRegisterAllocator(function: AsmFunction) {
                 instrList.insert(i, Mov(c, actualRegister).withComment(s" - Load constant ${instr.comment}"))
                 i += 1
                 instr.operands(idx) = actualRegister
-              case r@RegisterOffsetOperand(reg, _, _) if reg.regNr >= 0 =>
-                val actualRegister = getRegister(reg.sizeBytes)
-                reload(reg, actualRegister)
-                instr.operands(idx) = r.copy(base = actualRegister)
-                // no spill since the register's value itself won't be manipulated
+              case AddressOperand(Some(base: RegisterOperand), _, _, _, _) if base.regNr < 0 =>
+              case a: AddressOperand =>
+                instr.operands(idx) = a.copy(base = a.base.map(getAndReload), offset = a.offset.map(getAndReload))
               case r@RegisterOperand(oldRegNr, sizeBytes) if oldRegNr >= 0 =>
                 val isRead = spec.contains(OperandSpec.READ)
                 val isWrite = spec.contains(OperandSpec.WRITE)
@@ -112,8 +116,10 @@ class FunctionRegisterAllocator(function: AsmFunction) {
     // Now that the AR size is known, convert ActivationRecordOperands
     activationRecordOperands.foreach { case (instr, idx) =>
       val arOperand = instr.operands(idx).asInstanceOf[ActivationRecordOperand]
-      instr.operands(idx) = RegisterOffsetOperand(rsp,
-        arOperand.offset + activationRecordSize + instr.stackPointerDisplacement, arOperand.sizeBytes)
+      instr.operands(idx) = AddressOperand(
+        base=Some(rsp),
+        displacement = arOperand.offset + activationRecordSize + instr.stackPointerDisplacement,
+        sizeBytes = arOperand.sizeBytes)
     }
 
     function.activationRecordSize = activationRecordSize

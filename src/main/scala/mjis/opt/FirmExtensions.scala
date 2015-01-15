@@ -62,7 +62,11 @@ object FirmExtensions {
 
   implicit class NodeExt(node: Node) {
 
-    def block: Block = node.getBlock.asInstanceOf[Block]
+    def block: Block = node.getBlock match {
+      case null => null
+      case b: Block => b
+      case _: Bad | _: Anchor => null
+    }
 
     def idx: Int = bindings.binding_irnode.get_irn_idx(node.ptr)
 
