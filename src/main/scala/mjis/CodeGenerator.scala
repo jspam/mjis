@@ -148,6 +148,20 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
     }
 
+    private def getDivModCode(n: Node, left: Node, right: Node): Seq[Instruction] = {
+      assert(left.getMode == Mode.getIs)
+      assert(right.getMode == Mode.getIs)
+      val rightOp = getOperand(right)
+      Seq(
+        Mov(getOperand(left), RegisterOperand(RAX, 4)),
+        Cdq /* sign-extend eax into edx:eax */) ++
+      // IDiv cannot handle a constant as right operand
+      (if (rightOp.isInstanceOf[ConstOperand])
+        Seq(Mov(rightOp, regOp(n)), IDiv(regOp(n)))
+      else
+        Seq(IDiv(rightOp)))
+    }
+
     private def createValue(node: Node): Seq[Instruction] = {
       def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = node match {
         // TODO: Use both displacement and offset?
@@ -217,26 +231,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
                 Mov(tempRegister, regOp(n)), Forget(tempRegister))
 
-
-            case n: firm.nodes.Div =>
-              assert(n.getLeft.getMode == Mode.getIs)
-              assert(n.getRight.getMode == Mode.getIs)
-              Seq(
-                Mov(getOperand(n.getLeft), RegisterOperand(RAX, 4)),
-                Cdq, // sign-extend eax into edx:eax
-                IDiv(getOperand(n.getRight)),
-                Mov(RegisterOperand(RAX, 4), regOp(n))
-              )
-
-            case n: firm.nodes.Mod =>
-              assert(n.getLeft.getMode == Mode.getIs)
-              assert(n.getRight.getMode == Mode.getIs)
-              Seq(
-                Mov(getOperand(n.getLeft), RegisterOperand(RAX, 4)),
-                Cdq, // sign-extend eax into edx:eax
-                IDiv(getOperand(n.getRight)),
-                Mov(RegisterOperand(RDX, 4), regOp(n))
-              )
+            case n : firm.nodes.Div => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RAX, 4), regOp(n)))
+            case n : firm.nodes.Mod => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RDX, 4), regOp(n)))
 
             case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
               Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
