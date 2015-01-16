@@ -5,8 +5,10 @@ import scala.collection.mutable
 
 class AsmBasicBlock(val nr: Int = -1) {
   val instructions = ListBuffer[Instruction]()
-  val phi = mutable.ListMap[Int, Operand]() // maps destination Phi node to the operand with the value to be copied there
-                                            // ListMap for determinism
+  /** Maps register for destination Phi node to the value to be copied there.
+    * ListMap for determinism */
+  val phi = mutable.ListMap[RegisterOperand, Operand]()
+
   val controlFlowInstructions = ListBuffer[Instruction]()
   val successors = ListBuffer[AsmBasicBlock]()
 }

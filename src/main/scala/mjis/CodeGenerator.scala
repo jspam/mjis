@@ -46,7 +46,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     case n : firm.nodes.Mod => n.getResmode.getSizeBytes
     case _ => node.getMode.getSizeBytes
   })
-  def regOp(regNr: Int, sizeBytes: Int) = RegisterOperand(regNr, sizeBytes)
 
   class MethodCodeGenerator(g: Graph) {
     def regParamsIndexes = 0.until(g.getEntity.getType.asInstanceOf[MethodType].getNParams min ParamRegisters.length)
@@ -66,64 +65,11 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
       if (!backEdgesWereEnabled) BackEdges.disable(g)
 
-      basicBlocks.values.foreach(generateInstructionsForPhi)
+      basicBlocks.values.foreach(block => block.instructions ++= new PhiCodeGenerator(block).getInstructions)
 
       function.epilogue.controlFlowInstructions += Ret()
       function.basicBlocks = NodeCollector.getBlocksInReverseBackEdgesPostOrder(g).map(basicBlocks).toList
       function
-    }
-
-    /** Creates Mov instructions for the contents of block.phi, which is destroyed during this operation. */
-    private def generateInstructionsForPhi(block: AsmBasicBlock) = {
-      // entries: r3 -> List(x, r1, r2) if (x -> r1), (r1 -> r2), (r2 -> r3) are in the permutation
-      //   (which is represented as { r1 -> x, r2 -> r1, r3 -> r2 } in the Phi map)
-      val permutations = mutable.ListMap[Int, List[Operand]]() // ListMap for determinism
-
-      @tailrec
-      def getPermutation(destRegNr: Int, acc: List[Operand]): List[Operand] = {
-        permutations.get(destRegNr) match {
-          case Some(p) =>
-            permutations.remove(destRegNr)
-            p ++ acc
-          case None => block.phi.get(destRegNr) match {
-            case Some(src@RegisterOperand(regNr, _)) =>
-              block.phi.remove(destRegNr)
-              getPermutation(regNr, src :: acc)
-            case Some(src) =>
-              block.phi.remove(destRegNr)
-              src :: acc
-            case _ =>
-              acc
-          }
-        }
-      }
-
-      while (block.phi.nonEmpty) {
-        val dest = block.phi.keys.head
-        permutations(dest) = getPermutation(dest, Nil)
-      }
-
-      permutations.foreach { case (dest, l) =>
-        l.head match {
-          case RegisterOperand(`dest`, _) => /* cyclic permutation */
-            val destRegOp = regOp(dest, l.last.sizeBytes)
-            val comment = "cyclic permutation " + l.mkString(" -> ") + s" -> $destRegOp"
-            val tempRegister = regOp(0, destRegOp.sizeBytes)
-
-            (tempRegister :: l.reverse).sliding(2).foreach {
-              case Seq(destOp, srcOp) => block.instructions += Mov(srcOp, destOp).withComment(comment)
-            }
-            block.instructions += Mov(tempRegister, destRegOp).withComment(comment)
-            block.instructions += Forget(tempRegister).withComment(comment)
-
-          case _ =>
-            val destRegOp = regOp(dest, l.head.sizeBytes)
-            val comment = "permutation " + l.mkString(" -> ") + s" -> $destRegOp"
-            (destRegOp :: l.reverse).sliding(2).foreach {
-              case Seq(destOp, srcOp) => block.instructions += Mov(srcOp, destOp).withComment(comment)
-            }
-        }
-      }
     }
 
     private def createControlFlow(node: Node): Seq[Instruction] = {
@@ -179,7 +125,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         case n : nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
 
         case n : nodes.Mul =>
-          val tempRegister = regOp(RAX, n.getMode.getSizeBytes)
+          val tempRegister = RegisterOperand(RAX, n.getMode.getSizeBytes)
           // Normalization moves constants to the right of a Mul node,
           // but the Mul instruction cannot take a constant as operand.
           // Avoid having to allocate an extra register by swapping left and right.
@@ -190,20 +136,20 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           assert(n.getLeft.getMode == Mode.getIs)
           assert(n.getRight.getMode == Mode.getIs)
           Seq(
-            Mov(getOperand(n.getLeft), regOp(RAX, 4)),
+            Mov(getOperand(n.getLeft), RegisterOperand(RAX, 4)),
             Cdq, // sign-extend eax into edx:eax
             IDiv(getOperand(n.getRight)),
-            Mov(regOp(RAX, 4), regOp(n))
+            Mov(RegisterOperand(RAX, 4), regOp(n))
           )
 
         case n : firm.nodes.Mod =>
           assert(n.getLeft.getMode == Mode.getIs)
           assert(n.getRight.getMode == Mode.getIs)
           Seq(
-            Mov(getOperand(n.getLeft), regOp(RAX, 4)),
+            Mov(getOperand(n.getLeft), RegisterOperand(RAX, 4)),
             Cdq, // sign-extend eax into edx:eax
             IDiv(getOperand(n.getRight)),
-            Mov(regOp(RDX, 4), regOp(n))
+            Mov(RegisterOperand(RDX, 4), regOp(n))
           )
 
         case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
@@ -226,15 +172,15 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
           val stackPointerDisplacement = 8 * stackParams.length
           if (stackParams.nonEmpty) {
-            resultInstrs += Sub(intConstOp(stackPointerDisplacement), regOp(RSP, 8)).withComment(s"Move stack pointer for parameters")
+            resultInstrs += Sub(intConstOp(stackPointerDisplacement), RegisterOperand(RSP, 8)).withComment(s"Move stack pointer for parameters")
             // Push rest of parameters onto the stack in reverse order
             for ((param, i) <- stackParams.zipWithIndex.reverse) {
               val srcOp = getOperand(param)
-              val tempOp = regOp(n.idx, srcOp.sizeBytes) // needed if srcOp is a memory operand
+              val tempOp = RegisterOperand(n.idx, srcOp.sizeBytes) // needed if srcOp is a memory operand
               resultInstrs += Mov(srcOp, tempOp).
                 withComment(s"Reload stack argument").
                 withStackPointerDisplacement(stackPointerDisplacement)
-              resultInstrs += Mov(tempOp, RegisterOffsetOperand(regOp(RSP, 8), 8 * i, srcOp.sizeBytes)).
+              resultInstrs += Mov(tempOp, RegisterOffsetOperand(RegisterOperand(RSP, 8), 8 * i, srcOp.sizeBytes)).
                 withComment(s"Push stack argument").
                 withStackPointerDisplacement(stackPointerDisplacement)
             }
@@ -245,10 +191,10 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           resultInstrs += mjis.asm.Call(LabelOperand(methodName))
 
           if (stackParams.nonEmpty)
-            resultInstrs += Add(intConstOp(stackPointerDisplacement), regOp(RSP, 8)).withComment(s"Restore stack pointer")
+            resultInstrs += Add(intConstOp(stackPointerDisplacement), RegisterOperand(RSP, 8)).withComment(s"Restore stack pointer")
 
           if (methodType.getNRess > 0) {
-            val resultRegister = regOp(RAX, methodType.getResType(0).getSizeBytes)
+            val resultRegister = RegisterOperand(RAX, methodType.getResType(0).getSizeBytes)
             resultInstrs ++= Seq(Mov(resultRegister, regOp(n)), Forget(resultRegister))
           }
 
@@ -258,7 +204,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           if (n.getMode != Mode.getM && n.getMode != Mode.getX) {
             n.getPreds.zipWithIndex.foreach { case (pred, idx) =>
               val predBB = basicBlocks(n.getBlock.getPred(idx).block)
-              predBB.phi(n.idx) = getOperand(pred)
+              val phiOperand = RegisterOperand(n.idx, n.getMode.getSizeBytes)
+              predBB.phi(phiOperand) = getOperand(pred)
             }
           }
           Seq()
