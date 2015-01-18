@@ -36,16 +36,23 @@ abstract class AssemblerFileGenerator extends Phase[Unit] {
 
 class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerator {
   private def instrToString(instr: Instruction): String = {
-    def regName(r: RegisterOperand) = if (Registers.contains(r.regNr)) Registers(r.regNr).subregs(r.sizeBytes)
-      else s"REG${r.regNr}{${r.sizeBytes}}"
-
-    val operandsResult = if (instr.operands.isEmpty) "" else " " + instr.operands.map {
-      case r: RegisterOperand => "%" + regName(r)
-      case r: RegisterOffsetOperand => s"${r.offset}(%${regName(r.base)})"
+    def opToString(op: Operand): String = op match {
+      case r: RegisterOperand if Registers.contains(r.regNr) => "%" + Registers(r.regNr).subregs(r.sizeBytes)
+      case r: RegisterOperand => s"%REG${r.regNr}{${r.sizeBytes}}"
+      case r: AddressOperand =>
+        val params = Seq[Option[String]](
+          r.base.map(opToString),
+          r.offset.map(opToString),
+          if (r.scale != 1) Some(r.scale.toString) else None
+        ).flatten
+        val displacement = if (r.displacement != 0) r.displacement.toString else ""
+        s"$displacement(${params.mkString(",")})"
       case l: LabelOperand => l.name
       case c: ConstOperand => s"$$${c.value}"
       case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
-    }.mkString(", ")
+    }
+
+    val operandsResult = if (instr.operands.isEmpty) "" else " " + instr.operands.map(opToString).mkString(", ")
     val instrAndOperands = instr.opcode + instr.suffix + operandsResult
     if (instr.comment.nonEmpty)
       // Align comments

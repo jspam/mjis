@@ -49,7 +49,8 @@ object Instruction {
 
 sealed abstract class Operand(val sizeBytes: Int)
 case class RegisterOperand(regNr: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class RegisterOffsetOperand(base: RegisterOperand, offset: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
+// base + offset * scale + displacement
+case class AddressOperand(base: Option[Operand] = None, offset: Option[Operand] = None, scale: Int = 1, displacement: Int = 0, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class ConstOperand(value: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class LabelOperand(name: String) extends Operand(0) {
   def this(name: Int) = this(s".L$name")
@@ -109,8 +110,11 @@ case class Forget(reg: RegisterOperand) extends Instruction((reg, NONE)) {
 }
 case class And(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
 case class Add(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
+case class Inc(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
 case class Sub(subtrahend: Operand, minuendAndResult: Operand) extends Instruction((subtrahend, READ | CONST | MEMORY), (minuendAndResult, READ | WRITE | MEMORY))
+case class Dec(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
 case class Neg(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
+case class Lea(value: AddressOperand, result: RegisterOperand) extends Instruction((value, MEMORY), (result, WRITE))
 case class Mul(left: Operand) extends Instruction((left, READ | MEMORY))
 case class IDiv(left: Operand) extends Instruction((left, READ | MEMORY))
 case object Cdq extends Instruction()
