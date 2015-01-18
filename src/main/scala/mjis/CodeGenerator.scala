@@ -124,12 +124,21 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           assert(projTrue.isDefined && projFalse.isDefined)
 
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projTrue.get))
-          result += JmpConditional(successorBlockOperand(projTrue.get), relation, negate = false).
-            withComment(projTrue.get.toString)
-
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projFalse.get))
-          result += mjis.asm.Jmp(successorBlockOperand(projFalse.get)).
-            withComment(projFalse.get.toString)
+
+          if (FirmConstructor.predictedJumps(projTrue.get)) {
+            result += JmpConditional(successorBlockOperand(projFalse.get), relation, negate = true).
+              withComment(projFalse.get.toString)
+
+            result += mjis.asm.Jmp(successorBlockOperand(projTrue.get)).
+              withComment(projTrue.get.toString)
+          } else {
+            result += JmpConditional(successorBlockOperand(projTrue.get), relation, negate = false).
+              withComment(projTrue.get.toString)
+
+            result += mjis.asm.Jmp(successorBlockOperand(projFalse.get)).
+              withComment(projFalse.get.toString)
+          }
 
           result
 
