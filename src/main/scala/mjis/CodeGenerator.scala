@@ -292,9 +292,11 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case n: nodes.Phi =>
               if (n.getMode != Mode.getM && n.getMode != Mode.getX) {
                 n.getPreds.zipWithIndex.foreach { case (pred, idx) =>
-                  val predBB = basicBlocks(n.getBlock.getPred(idx).block)
-                  val phiOperand = RegisterOperand(n.idx, n.getMode.getSizeBytes)
-                  predBB.phi(phiOperand) = getOperand(pred)
+                  if (!n.getBlock.getPred(idx).isInstanceOf[nodes.Bad]) {
+                    val predBB = basicBlocks(n.getBlock.getPred(idx).block)
+                    val phiOperand = RegisterOperand(n.idx, n.getMode.getSizeBytes)
+                    predBB.phi(phiOperand) = getOperand(pred)
+                  }
                 }
               }
               Seq()
