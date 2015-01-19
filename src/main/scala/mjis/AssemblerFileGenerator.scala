@@ -57,9 +57,13 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
       map(_._1)
     val operandsResult = if (operandsToPrint.isEmpty) "" else " " + operandsToPrint.map(opToString).mkString(", ")
     val instrAndOperands = instr.opcode + instr.suffix + operandsResult
-    if (instr.comment.nonEmpty)
+
+    val comment = instr.comment +
+      (if (instr.stackPointerDisplacement != 0) s" - stackPointerDisplacement = ${instr.stackPointerDisplacement}" else "")
+
+    if (comment.nonEmpty)
       // Align comments
-      instrAndOperands + Seq.fill((30 - instrAndOperands.length) max 0)(" ").mkString("") + " # " + instr.comment
+      instrAndOperands + Seq.fill((30 - instrAndOperands.length) max 0)(" ").mkString("") + " # " + comment
     else
       instrAndOperands
   }

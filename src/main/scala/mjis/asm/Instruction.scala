@@ -87,7 +87,6 @@ abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*
   var stackPointerDisplacement: Int = 0
   def withStackPointerDisplacement(displacement: Int): Instruction = {
     this.stackPointerDisplacement = displacement
-    this.comment += s" - stackPointerDisplacement = $displacement"
     this
   }
   val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)
