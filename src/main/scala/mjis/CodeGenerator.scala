@@ -317,6 +317,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
         if (argNum < ParamRegisters.length) regOp(n) else ActivationRecordOperand(
         8 * (argNum - ParamRegisters.length + 1 /* return address */), n.getMode.getSizeBytes)
+      case n : nodes.Unknown => ConstOperand(0, n.getMode.getSizeBytes)
       case n => regOp(n)
     }
 
