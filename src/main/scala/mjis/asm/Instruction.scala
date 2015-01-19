@@ -6,6 +6,8 @@ import mjis.asm.Instruction._
 
 import scala.collection.mutable.ListBuffer
 
+import mjis.asm.AMD64Registers._
+
 case class Register(subregs: Map[Int, String])
 
 object AMD64Registers {
@@ -74,6 +76,8 @@ object OperandSpec {
 
   final val MEMORY = OperandSpec(1 << 3) // operand can be a memory location
   final val CONST = OperandSpec(1 << 4) // operand can be a constant
+
+  final val IMPLICIT = OperandSpec(1 << 5) // implicit operand, does not occur in textual representation
 }
 
 abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*) {
@@ -100,14 +104,6 @@ abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*
   }
 }
 
-// Reserve: the register contents are used implicitly -- forced start of liveness interval
-case class Reserve(reg: RegisterOperand) extends Instruction((reg, NONE)) {
-  override def opcode: String = "# reserve"
-}
-// Forget: the register contents are not needed any more -- forced end of liveness interval
-case class Forget(reg: RegisterOperand) extends Instruction((reg, NONE)) {
-  override def opcode: String = "# forget"
-}
 case class And(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
 case class Add(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
 case class Inc(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
@@ -115,12 +111,26 @@ case class Sub(subtrahend: Operand, minuendAndResult: Operand) extends Instructi
 case class Dec(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
 case class Neg(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
 case class Lea(value: AddressOperand, result: RegisterOperand) extends Instruction((value, MEMORY), (result, WRITE))
-case class Mul(left: Operand) extends Instruction((left, READ | MEMORY))
-case class IDiv(left: Operand) extends Instruction((left, READ | MEMORY))
-case object Cdq extends Instruction()
-case class Shl(shift: ConstOperand, valueAndResult: Operand) extends Instruction((shift, CONST), (valueAndResult, READ | WRITE | MEMORY))
+case class Mul(left: Operand) extends Instruction((left, READ | MEMORY),
+  (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RDX, left.sizeBytes), WRITE | IMPLICIT))
+case class IDiv(left: Operand) extends Instruction((left, READ | MEMORY),
+  (RegisterOperand(RDX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RAX, left.sizeBytes), WRITE | IMPLICIT))
+case class Cdq(operandSize: Int) extends Instruction(
+  (RegisterOperand(RAX, operandSize), READ | IMPLICIT), (RegisterOperand(RDX, operandSize), WRITE | IMPLICIT)) {
+  override def suffix = ""
+}
+case class Shl(shift: ConstOperand, valueAndResult: Operand) extends Instruction((shift, READ | CONST), (valueAndResult, READ | WRITE | MEMORY))
 case class Cmp(left: Operand, right: Operand) extends Instruction((left, READ | CONST | MEMORY), (right, READ | MEMORY))
-case class Call(method: LabelOperand) extends Instruction((method, READ))
+case class Call(method: LabelOperand, registerParams: Seq[RegisterOperand]) extends Instruction(
+  Seq((method, NONE)) ++ registerParams.map((_, READ | IMPLICIT)):_*) {
+  override def suffix = ""
+}
+case class CallWithReturn(method: LabelOperand, returnValueSizeBytes: Int, registerParams: Seq[RegisterOperand]) extends Instruction(
+  Seq((method, NONE)) ++ registerParams.map((_, READ | IMPLICIT)) ++
+  Seq((RegisterOperand(RAX, returnValueSizeBytes), WRITE | IMPLICIT)):_*) {
+  override def opcode = "call"
+  override def suffix = ""
+}
 case class Mov(src: Operand, dest: Operand) extends Instruction((src, READ | CONST | MEMORY), (dest, WRITE | MEMORY)) {
   override def suffix = src match {
     case _ : ConstOperand => suffixForSize(dest.sizeBytes)
@@ -145,4 +155,7 @@ case class JmpConditional(dest: LabelOperand, relation: Relation, negate: Boolea
     case _ => ???
   }
 }
-case class Ret() extends Instruction
+case object Ret extends Instruction
+case class Ret(returnValueSizeBytes: Int) extends Instruction((RegisterOperand(RAX, returnValueSizeBytes), READ | IMPLICIT)) {
+  override def suffix = ""
+}

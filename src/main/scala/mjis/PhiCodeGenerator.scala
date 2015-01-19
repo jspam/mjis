@@ -79,10 +79,7 @@ class PhiCodeGenerator(block: AsmBasicBlock) {
 
     (tempRegister :: cycle).sliding(2).map { case Seq(destOp, srcOp) =>
       Mov(srcOp, destOp).withComment(comment)
-    }.toSeq ++ Seq(
-      Mov(tempRegister, destRegOp).withComment(comment),
-      Forget(tempRegister).withComment(comment)
-    )
+    }.toSeq ++ Seq(Mov(tempRegister, destRegOp).withComment(comment))
   }
 
   def getInstructions(): Seq[Instruction] = {
