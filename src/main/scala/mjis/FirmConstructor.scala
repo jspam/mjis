@@ -19,11 +19,6 @@ final case class Value(node: Node) extends ExprResult
 // list will be activated upon evaluation.
 final case class ControlFlow(falseJmps: List[Node], trueJmps: List[Node]) extends ExprResult
 
-object FirmConstructor {
-  // Global state? We can do that, too!
-  val predictedJumps = mutable.Set[Node]()
-}
-
 class FirmConstructor(input: Program) extends Phase[Unit] {
   private val firmClassEntity = new mutable.HashMap[ClassDecl, firm.Entity]()
   private val firmFieldEntity = new mutable.HashMap[FieldDecl, firm.Entity]()
@@ -206,7 +201,6 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       condBlock.addPred(jmp)
       val cond = exprResultToControlFlow(stmt.condition.accept(this))
 
-      FirmConstructor.predictedJumps ++= cond.trueJmps
       constr.setCurrentBlock(createAndMatureBlock(cond.trueJmps))
       stmt.body.accept(this)
       if (stmt.body.isEndReachable)

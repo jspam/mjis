@@ -73,10 +73,14 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         if (!instructions.contains(n))
           instructions(n) = createValue(n)
       }
+
+      function.basicBlocks = NodeCollector.getBlocksInReverseBackEdgesPostOrder(g).map(basicBlocks).toList
+      val nextBlock = function.basicBlocks.zip(function.basicBlocks.tail).toMap
+
       for (n <- NodeCollector.fromWalk(g.walkTopological)) {
         val basicBlock = basicBlocks(n.block)
         basicBlock.instructions ++= instructions.getOrElse(n, Seq()) map appendComment(" - " + n.toString)
-        basicBlock.controlFlowInstructions ++= createControlFlow(n) map appendComment(" - " + n.toString)
+        basicBlock.controlFlowInstructions ++= createControlFlow(n, nextBlock.get(basicBlock)) map appendComment(" - " + n.toString)
       }
       if (!backEdgesWereEnabled) BackEdges.disable(g)
 
@@ -87,26 +91,29 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         usedParamRegisters.get(reg).foreach {
           n => function.prologue.instructions += Mov(RegisterOperand(reg, n.getMode.getSizeBytes), regOp(n))
         }
-      function.basicBlocks = NodeCollector.getBlocksInReverseBackEdgesPostOrder(g).map(basicBlocks).toList
       function.epilogue.controlFlowInstructions += Ret()
       function
     }
 
-    private def createControlFlow(node: Node): Seq[Instruction] = {
+    private def createControlFlow(node: Node, nextBlock: Option[AsmBasicBlock]): Seq[Instruction] = {
       def successorBlock(node: Node) = BackEdges.getOuts(node).iterator().next().node.asInstanceOf[Block]
       def successorBlockOperand(node: Node) = new LabelOperand(successorBlock(node).getNr)
+      def isFallthrough(node: Node) = Some(successorBlock(node).getNr) == nextBlock.map(_.nr)
+      def jmp(node: Node) =
+        if (isFallthrough(node)) Seq()
+        else Seq(asm.Jmp(successorBlockOperand(node)))
 
       node match {
         case _: nodes.Jmp =>
           basicBlocks(node.block).successors += basicBlocks(successorBlock(node))
-          Seq(mjis.asm.Jmp(successorBlockOperand(node)))
+          jmp(node)
 
         case ReturnExtr(retvalOption) =>
           basicBlocks(node.block).successors += basicBlocks(successorBlock(node))
           (retvalOption match {
             case Some(retval) => Seq(Mov(getOperand(retval), RegisterOperand(RAX, g.methodType.getResType(0).getSizeBytes)))
             case None => Seq()
-          }) ++ Seq(mjis.asm.Jmp(successorBlockOperand(node)))
+          }) ++ jmp(node)
 
         case CondExtr(cmp: nodes.Cmp) =>
           val result = mutable.ListBuffer[Instruction]()
@@ -126,18 +133,13 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projTrue.get))
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projFalse.get))
 
-          if (FirmConstructor.predictedJumps(projTrue.get)) {
-            result += JmpConditional(successorBlockOperand(projFalse.get), relation, negate = true).
-              withComment(projFalse.get.toString)
-
-            result += mjis.asm.Jmp(successorBlockOperand(projTrue.get)).
-              withComment(projTrue.get.toString)
+          // Prefer fallthrough. It just so happens that this will use unconditional jumps for loop iterations.
+          if (isFallthrough(projTrue.get)) {
+            result += JmpConditional(successorBlockOperand(projFalse.get), relation, negate = true)
+            result ++= jmp(projTrue.get)
           } else {
-            result += JmpConditional(successorBlockOperand(projTrue.get), relation, negate = false).
-              withComment(projTrue.get.toString)
-
-            result += mjis.asm.Jmp(successorBlockOperand(projFalse.get)).
-              withComment(projFalse.get.toString)
+            result += JmpConditional(successorBlockOperand(projTrue.get), relation, negate = false)
+            result ++= jmp(projFalse.get)
           }
 
           result
