@@ -207,7 +207,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L0:
         |  movl $1, %edi
         |  movl $8, %esi       # rsi doesn't need to be saved
-        |  call _calloc
+        |  call calloc
         |  movq %rax, %REG0{8}
         |  movq %REG0{8}, %rdi
         |  call _4Test_foo
