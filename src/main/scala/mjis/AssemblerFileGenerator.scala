@@ -11,11 +11,7 @@ import System.{lineSeparator => n}
 import scala.io.Source
 import scala.collection.JavaConversions._
 
-object AssemblerFileGenerator {
-  val AsmFileName = "a.s"
-}
-
-abstract class AssemblerFileGenerator extends Phase[Unit] {
+abstract class AssemblerFileGenerator(config: Config) extends Phase[Unit] {
   def writeCode(): Writer
 
   override def getResult() = {
@@ -30,11 +26,11 @@ abstract class AssemblerFileGenerator extends Phase[Unit] {
   val findings = List()
 
   def dumpResult(writer: BufferedWriter) = {
-    Source.fromFile(AssemblerFileGenerator.AsmFileName).foreach(writer.write(_))
+    Source.fromFile(config.asmOutFile.toFile).foreach(writer.write(_))
   }
 }
 
-class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerator {
+class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends AssemblerFileGenerator(config) {
   private def instrToString(instr: Instruction): String = {
     def opToString(op: Operand): String = op match {
       case r: RegisterOperand if Registers.contains(r.regNr) => "%" + Registers(r.regNr).subregs(r.sizeBytes)
@@ -70,7 +66,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
   }
 
   override def writeCode() = {
-    val fw = new BufferedWriter(new FileWriter(AssemblerFileGenerator.AsmFileName, /* append */ false))
+    val fw = new BufferedWriter(new FileWriter(config.asmOutFile.toFile, /* append */ false))
     fw.write(generateCode())
     fw
   }
@@ -105,11 +101,11 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
   }
 }
 
-class FirmAssemblerFileGenerator(a: Unit) extends AssemblerFileGenerator {
+class FirmAssemblerFileGenerator(a: Unit, config: Config) extends AssemblerFileGenerator(config) {
   def writeCode(): Writer = {
     Program.getGraphs.foreach(_.check())
     Util.lowerSels()
-    Backend.createAssembler(AssemblerFileGenerator.AsmFileName, "<input>")
-    new BufferedWriter(new FileWriter(AssemblerFileGenerator.AsmFileName, /* append */ true))
+    Backend.createAssembler(config.asmOutFile.toString, "<input>")
+    new BufferedWriter(new FileWriter(config.asmOutFile.toFile, /* append */ true))
   }
 }
