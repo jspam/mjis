@@ -31,7 +31,7 @@ object FirmExtensions {
       val m = mutable.Map[Block, Set[Block]]().withPersistentDefault(_ => Set.empty)
       g.walkBlocks(new BlockWalker {
         override def visitBlock(block: Block): Unit = {
-          for (pred <- block.getPreds)
+          for (pred <- block.getPreds.filter(!_.isInstanceOf[Bad]))
             m(pred.getBlock.asInstanceOf[Block]) += block
         }
       })
