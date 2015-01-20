@@ -13,13 +13,16 @@ import scala.collection.JavaConversions._
 
 abstract class AssemblerFileGenerator(config: Config) extends Phase[Unit] {
   def writeCode(): Writer
+  val stdlib_files = List("System_out_println_64.s", "calloc_64.s", "main_64.s")
 
   override def getResult() = {
     val fw = writeCode()
 
     // concatenate our implementation of System_out_println to the assembly code
-    val stdlib = Source.fromInputStream(this.getClass.getClassLoader.getResourceAsStream("System_out_println_64.s"))
-    stdlib.foreach(fw.write(_))
+    stdlib_files.foreach(file => {
+      val stdlib = Source.fromInputStream(this.getClass.getClassLoader.getResourceAsStream(file))
+      stdlib.foreach(fw.write(_))
+    })
     fw.flush()
   }
 
