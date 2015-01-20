@@ -47,6 +47,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
         ).flatten
         val displacement = if (r.displacement != 0) r.displacement.toString else ""
         s"$displacement(${params.mkString(",")})"
+      case b: BasicBlockOperand => s".L${b.basicBlock.nr}"
       case l: LabelOperand => l.name
       case c: ConstOperand => s"$$${c.value}"
       case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
