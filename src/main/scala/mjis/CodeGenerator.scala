@@ -91,7 +91,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         usedParamRegisters.get(reg).foreach {
           n => function.prologue.instructions += Mov(RegisterOperand(reg, n.getMode.getSizeBytes), regOp(n))
         }
-      function.epilogue.controlFlowInstructions += Ret()
+      function.epilogue.controlFlowInstructions +=
+        (if (g.methodType.getNRess > 0) Ret(g.methodType.getResType(0).getSizeBytes) else Ret)
       function
     }
 
@@ -146,6 +147,20 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
         case _ => Seq()
       }
+    }
+
+    private def getDivModCode(n: Node, left: Node, right: Node): Seq[Instruction] = {
+      assert(left.getMode == Mode.getIs)
+      assert(right.getMode == Mode.getIs)
+      val rightOp = getOperand(right)
+      Seq(
+        Mov(getOperand(left), RegisterOperand(RAX, 4)),
+        Cdq(4) /* sign-extend eax into edx:eax */) ++
+      // IDiv cannot handle a constant as right operand
+      (if (rightOp.isInstanceOf[ConstOperand])
+        Seq(Mov(rightOp, regOp(n)), IDiv(regOp(n)))
+      else
+        Seq(IDiv(rightOp)))
     }
 
     private def createValue(node: Node): Seq[Instruction] = {
@@ -215,28 +230,10 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               // but the Mul instruction cannot take a constant as operand.
               // Avoid having to allocate an extra register by swapping left and right.
               Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
-                Mov(tempRegister, regOp(n)), Forget(tempRegister))
+                Mov(tempRegister, regOp(n)))
 
-
-            case n: firm.nodes.Div =>
-              assert(n.getLeft.getMode == Mode.getIs)
-              assert(n.getRight.getMode == Mode.getIs)
-              Seq(
-                Mov(getOperand(n.getLeft), RegisterOperand(RAX, 4)),
-                Cdq, // sign-extend eax into edx:eax
-                IDiv(getOperand(n.getRight)),
-                Mov(RegisterOperand(RAX, 4), regOp(n))
-              )
-
-            case n: firm.nodes.Mod =>
-              assert(n.getLeft.getMode == Mode.getIs)
-              assert(n.getRight.getMode == Mode.getIs)
-              Seq(
-                Mov(getOperand(n.getLeft), RegisterOperand(RAX, 4)),
-                Cdq, // sign-extend eax into edx:eax
-                IDiv(getOperand(n.getRight)),
-                Mov(RegisterOperand(RDX, 4), regOp(n))
-              )
+            case n : firm.nodes.Div => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RAX, 4), regOp(n)))
+            case n : firm.nodes.Mod => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RDX, 4), regOp(n)))
 
             case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
               Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
@@ -247,10 +244,13 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               val resultInstrs = ListBuffer[Instruction]()
 
               val (regParams, stackParams) = params.splitAt(ParamRegisters.length)
+              val regSrcOperands = regParams.map(getOperand)
+              val paramRegisters = regSrcOperands.zip(ParamRegisters).map {
+                case (srcOp, reg) => RegisterOperand(reg, srcOp.sizeBytes)
+              }
 
-              for ((param, reg) <- regParams.zip(ParamRegisters)) {
-                val srcOp = getOperand(param)
-                resultInstrs += Mov(srcOp, RegisterOperand(reg, srcOp.sizeBytes)).withComment(s"Load register argument")
+              for ((srcOp, destOp) <- regSrcOperands zip paramRegisters) {
+                resultInstrs += Mov(srcOp, destOp).withComment(s"Load register argument")
               }
 
               val stackPointerDisplacement = 8 * stackParams.length
@@ -274,14 +274,17 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
               val methodName = address.getEntity.getLdName
               val methodType = address.getEntity.getType.asInstanceOf[MethodType]
-              resultInstrs += mjis.asm.Call(LabelOperand(methodName))
+              val returnsValue = methodType.getNRess > 0
+
+              resultInstrs +=
+                (if (returnsValue) mjis.asm.CallWithReturn(LabelOperand(methodName), methodType.getResType(0).getSizeBytes, paramRegisters)
+                else mjis.asm.Call(LabelOperand(methodName), paramRegisters))
 
               if (stackParams.nonEmpty)
                 resultInstrs += Add(intConstOp(stackPointerDisplacement), RegisterOperand(RSP, 8)).withComment(s"Restore stack pointer")
 
-              if (methodType.getNRess > 0) {
-                val resultRegister = RegisterOperand(RAX, methodType.getResType(0).getSizeBytes)
-                resultInstrs ++= Seq(Mov(resultRegister, regOp(n)), Forget(resultRegister))
+              if (returnsValue) {
+                resultInstrs += Mov(RegisterOperand(RAX, methodType.getResType(0).getSizeBytes), regOp(n))
               }
 
               resultInstrs
@@ -289,9 +292,11 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case n: nodes.Phi =>
               if (n.getMode != Mode.getM && n.getMode != Mode.getX) {
                 n.getPreds.zipWithIndex.foreach { case (pred, idx) =>
-                  val predBB = basicBlocks(n.getBlock.getPred(idx).block)
-                  val phiOperand = RegisterOperand(n.idx, n.getMode.getSizeBytes)
-                  predBB.phi(phiOperand) = getOperand(pred)
+                  if (!n.getBlock.getPred(idx).isInstanceOf[nodes.Bad]) {
+                    val predBB = basicBlocks(n.getBlock.getPred(idx).block)
+                    val phiOperand = RegisterOperand(n.idx, n.getMode.getSizeBytes)
+                    predBB.phi(phiOperand) = getOperand(pred)
+                  }
                 }
               }
               Seq()
@@ -314,6 +319,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
         if (argNum < ParamRegisters.length) regOp(n) else ActivationRecordOperand(
         8 * (argNum - ParamRegisters.length + 1 /* return address */), n.getMode.getSizeBytes)
+      case n : nodes.Unknown => ConstOperand(0, n.getMode.getSizeBytes)
       case n => regOp(n)
     }
 

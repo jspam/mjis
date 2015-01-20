@@ -52,11 +52,18 @@ class MjisAssemblerFileGenerator(input: AsmProgram) extends AssemblerFileGenerat
       case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
     }
 
-    val operandsResult = if (instr.operands.isEmpty) "" else " " + instr.operands.map(opToString).mkString(", ")
+    val operandsToPrint = instr.operands.zip(instr.operandSpecs).
+      filter { case (_, spec) => !spec.contains(OperandSpec.IMPLICIT) }.
+      map(_._1)
+    val operandsResult = if (operandsToPrint.isEmpty) "" else " " + operandsToPrint.map(opToString).mkString(", ")
     val instrAndOperands = instr.opcode + instr.suffix + operandsResult
-    if (instr.comment.nonEmpty)
+
+    val comment = instr.comment +
+      (if (instr.stackPointerDisplacement != 0) s" - stackPointerDisplacement = ${instr.stackPointerDisplacement}" else "")
+
+    if (comment.nonEmpty)
       // Align comments
-      instrAndOperands + Seq.fill((30 - instrAndOperands.length) max 0)(" ").mkString("") + " # " + instr.comment
+      instrAndOperands + Seq.fill((30 - instrAndOperands.length) max 0)(" ").mkString("") + " # " + comment
     else
       instrAndOperands
   }
