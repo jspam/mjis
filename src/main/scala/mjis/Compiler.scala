@@ -37,7 +37,10 @@ object Compiler {
    * and you'll have to check for success yourself. This is because the lexer's result
    * is only iterable once.
    */
-  def exec(input: Reader, until: Class[_ <: Phase[_]], pipeline: Pipeline = defaultPipeline): Either[Phase[_], List[Finding]] = {
+  def exec(input: Reader,
+           until: Class[_ <: Phase[_]],
+           pipeline: Pipeline = defaultPipeline,
+           config: Config = Config()): Either[Phase[_], List[Finding]] = {
     val phases = ListBuffer[Phase[AnyRef]]()
     for (cls <- pipeline) {
       if (phases.isEmpty)
@@ -46,8 +49,11 @@ object Compiler {
         phases += new Lexer(input)
       else {
         assert(cls.getConstructors.size == 1)
-        phases += cls.getConstructors.head.asInstanceOf[Constructor[_ <: AnyRef]].
-          newInstance(phases.last.result).asInstanceOf[Phase[AnyRef]]
+        val ctor = cls.getConstructors.head.asInstanceOf[Constructor[_ <: AnyRef]]
+        phases += (
+          if (ctor.getParameterCount == 1) ctor.newInstance(phases.last.result)
+          else ctor.newInstance(phases.last.result, config))
+          .asInstanceOf[Phase[AnyRef]]
       }
 
       // Don't force the Lexer result because it is iterable only once.
@@ -92,7 +98,7 @@ object Compiler {
         System.out.println("error")
     }
 
-    exec(input, target, pipeline) match {
+    exec(input, target, pipeline, config) match {
       case Left(phase) =>
         if (config.stopAfter != "") {
           val out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(java.io.FileDescriptor.out), "ASCII"))

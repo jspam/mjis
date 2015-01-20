@@ -41,6 +41,9 @@ object CLIMain extends App {
     opt[Unit]("from-stdin") optional () action { (phase, config) =>
       config.copy(file = None)
     } text ("Read input from stdin (ignores files)")
+    opt[Path]('o', "out-file") optional () action { (file, config) =>
+      config.copy(outFile = file)
+    } text ("File path of output")
   }
 
   parser.parse(args, Config()) map { config =>

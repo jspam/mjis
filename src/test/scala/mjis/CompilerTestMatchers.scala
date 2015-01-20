@@ -164,7 +164,7 @@ trait CompilerTestMatchers {
   class CodeGeneratorMatcher(expected: String) extends Matcher[String] {
     override def apply(code: String): MatchResult = {
       val codeGenerator = assertExec[CodeGenerator](code)
-      val asmGenerator = new MjisAssemblerFileGenerator(codeGenerator.resultProgram)
+      val asmGenerator = new MjisAssemblerFileGenerator(codeGenerator.resultProgram, null)
       val generatedCode = asmGenerator.generateCode()
 
       val fw = new BufferedWriter(new FileWriter("codegen.s", /* append */ false))
@@ -181,7 +181,7 @@ trait CompilerTestMatchers {
       program.functions += function
 
       val regAllocator = new RegisterAllocator(program)
-      val asmGenerator = new MjisAssemblerFileGenerator(regAllocator.getResult())
+      val asmGenerator = new MjisAssemblerFileGenerator(regAllocator.getResult(), null)
       val generatedCode = asmGenerator.generateCode()
 
       // output the whole code for debugging purposes

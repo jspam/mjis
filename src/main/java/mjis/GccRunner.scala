@@ -4,9 +4,9 @@ import java.io.{InputStreamReader, BufferedReader, BufferedWriter}
 
 import scala.collection.mutable.ListBuffer
 
-class GccRunner(a: Unit) extends Phase[Unit] {
+class GccRunner(a: Unit, config: Config) extends Phase[Unit] {
   override protected def getResult(): Unit = {
-    val gcc = Runtime.getRuntime.exec(s"gcc -m64 ${AssemblerFileGenerator.AsmFileName}")
+    val gcc = Runtime.getRuntime.exec(s"gcc -o ${config.outFile} -m64 ${config.asmOutFile}")
     val stderr = new BufferedReader(new InputStreamReader(gcc.getErrorStream))
     gcc.waitFor()
     val stream = Stream.continually(stderr.readLine()).takeWhile(_ != null)
