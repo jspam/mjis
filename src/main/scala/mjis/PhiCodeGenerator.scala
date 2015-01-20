@@ -41,7 +41,8 @@ class PhiCodeGenerator(block: AsmBasicBlock) {
             buildCyclesAndRootsRec(r, reg :: stack, visited)
           case Some(op) =>
             // non-register operand -> has no predecessor -> root of a tree
-            roots += op
+            if (!roots.contains(op))
+              roots += op
         }
       }
     }
