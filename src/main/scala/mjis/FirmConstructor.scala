@@ -17,6 +17,8 @@ final case class Value(node: Node) extends ExprResult
 // ...boolean expressions, however, may alternatively be characterized by two list of jumps in order to minimize the
 // number of control flow edges. Depending on the boolean value of the expression, exactly one jump node from the respective
 // list will be activated upon evaluation.
+// invariant for avoiding critical edges: each list of nodes contains exactly one node or two distinct nodes whose respective
+// block has only one outgoing edge
 final case class ControlFlow(falseJmps: List[Node], trueJmps: List[Node]) extends ExprResult
 
 class FirmConstructor(input: Program) extends Phase[Unit] {
@@ -244,6 +246,11 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       })
     }
 
+    private def collectJmps(jmps: Seq[Node]): Node = {
+      constr.setCurrentBlock(createAndMatureBlock(jmps))
+      constr.newJmp()
+    }
+
     override def visit(expr: Apply): ExprResult = {
       expr.decl match {
         // short-circuiting operators
@@ -257,14 +264,16 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           constr.setCurrentBlock(createAndMatureBlock(lhs.trueJmps))
           val rhs = exprResultToControlFlow(expr.arguments(1).accept(this))
 
-          ControlFlow(lhs.falseJmps ++ rhs.falseJmps, rhs.trueJmps)
+          // collectJmps necessary to uphold ControlFlow invariant
+          ControlFlow(List(collectJmps(lhs.falseJmps), collectJmps(rhs.falseJmps)), rhs.trueJmps)
         case Builtins.BooleanOrDecl =>
           val lhs = exprResultToControlFlow(expr.arguments(0).accept(this))
 
           constr.setCurrentBlock(createAndMatureBlock(lhs.falseJmps))
           val rhs = exprResultToControlFlow(expr.arguments(1).accept(this))
 
-          ControlFlow(rhs.falseJmps, lhs.trueJmps ++ rhs.trueJmps)
+          // collectJmps necessary to uphold ControlFlow invariant
+          ControlFlow(rhs.falseJmps, List(collectJmps(lhs.trueJmps), collectJmps(rhs.trueJmps)))
 
         // other methods
 
