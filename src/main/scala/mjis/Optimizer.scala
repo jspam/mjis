@@ -14,7 +14,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     firm.Program.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-Optimizer"))
   }
 
-  val highLevelOptimizations = List(LoopStrengthReduction)
+  val highLevelOptimizations = List(LoopStrengthReduction, RedundantLoadElimination)
   val generalOptimizations = List(
     ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities)
 

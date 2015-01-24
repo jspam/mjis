@@ -186,7 +186,7 @@ object FirmGraphTestHelper {
            ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod |
            ir_opcode.iro_Not | ir_opcode.iro_Call | ir_opcode.iro_Conv | ir_opcode.iro_Mux |
            ir_opcode.iro_Minus | ir_opcode.iro_Load | ir_opcode.iro_Block | ir_opcode.iro_Phi |
-           ir_opcode.iro_Jmp | ir_opcode.iro_Cond =>
+           ir_opcode.iro_Jmp | ir_opcode.iro_Cond | ir_opcode.iro_Store | ir_opcode.iro_Sel =>
 
       case ir_opcode.iro_Address =>
         val (leftAsAddr, rightAsAddr) = (new Address(left.ptr), new Address(right.ptr))

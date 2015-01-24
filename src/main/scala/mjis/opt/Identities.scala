@@ -31,11 +31,11 @@ object Identities extends Optimization(needsBackEdges = true) {
         case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
           exchange(n, g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode))
         case n@ProjExtr(div@DivExtr(x, ConstExtr(1)), Div.pnRes) =>
-          g.deleteDivOrMod(div)
+          g.killMemoryNode(div)
           exchange(n, x)
         // x % 2^k ==/!= 0
         case CmpExtr(Relation.Equal | Relation.UnorderedLessGreater, proj@ProjExtr(mod@ModExtr(x, ConstExtr(modulo@PowerOfTwo(_))), Mod.pnRes), ConstExtr(0)) =>
-          g.deleteDivOrMod(mod)
+          g.killMemoryNode(mod)
           // |x % 2^k| = x & (modulo-1)
           exchange(proj, g.newAnd(proj.getBlock, x, g.newConst(modulo-1, x.getMode), x.getMode))
         case _ =>

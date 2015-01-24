@@ -96,6 +96,18 @@ object FirmExtractors {
     }
   }
 
+  object SelExtr {
+    /** Some(ptr, idx) or None */
+    def unapply(node: Node): Option[(Node, Node)] = node match {
+      case sel: Sel => Some((sel.getPtr, sel.getIndex))
+      case _ => None
+    }
+  }
+
+  object AddressExtr {
+    def unapply(address: Address): Option[Entity] = Some(address.getEntity)
+  }
+
   object PhiExtr {
     def unapplySeq(node: Node): Option[Seq[Node]] = node match {
       case phi: Phi => Some(phi.getPreds.toList)
@@ -117,6 +129,27 @@ object FirmExtractors {
     /** Some(target, parameters) or None */
     def unapply(node: Node): Option[(Address, Seq[Node])] = node match {
       case call: Call => Some((call.getPtr.asInstanceOf[Address], call.getPreds.toList.drop(2) /* Mem and address */))
+      case _ => None
+    }
+  }
+
+  object ReturnOfCallExtr {
+    /** Some(target, parameters) or None */
+    def unapply(node: Node): Option[(Address, Seq[Node])] = node match {
+      case ProjExtr(
+        ProjExtr(
+          CallExtr(target, parameters),
+          Call.pnTResult
+        ),
+        0
+      ) => Some((target, parameters))
+      case _ => None
+    }
+  }
+
+  object LoadExtr {
+    def unapply(node: Node): Option[Node] = node match {
+      case load: Load => Some(load.getPtr)
       case _ => None
     }
   }

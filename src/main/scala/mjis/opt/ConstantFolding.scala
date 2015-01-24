@@ -77,7 +77,7 @@ object ConstantFolding extends Optimization(needsBackEdges = true) {
           case _: Div | _: Mod =>
             // the Div / Mod node itself is not exchanged, instead its result Proj
             // will be replaced
-            g.deleteDivOrMod(node)
+            g.killMemoryNode(node)
             changed = true
           case _: Proj if node.getMode == Mode.getX =>
             if (tarval == TargetValue.getBTrue)
