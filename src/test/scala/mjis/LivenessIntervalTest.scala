@@ -159,18 +159,24 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.childAt(11) shouldBe None
   }
 
-  it should "split if asked to split at its end position" in {
+  it should "split when asked to split at its end position" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(4, 7)
 
     l1.splitAt(7) shouldNot be(l1)
   }
 
-  it should "not split if asked to split at its start position" in {
+  it should "not split when asked to split at its start position" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(4, 7)
 
     l1.splitAt(4) shouldBe l1
+  }
+
+  it should "not split when asked to split after its end position" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(4, 7)
+    l1.splitAt(8) shouldBe l1
   }
 
   it should "yield a single-point interval when split at the end" in {

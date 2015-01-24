@@ -80,7 +80,7 @@ class LivenessInterval(val regOp: RegisterOperand) {
   }
 
   def splitAt(pos: Int): LivenessInterval = {
-    if (pos == this.start) this
+    if (pos == this.start || pos > this.end) this
     else {
       val newInterval = new LivenessInterval(this.regOp)
       for (range <- ranges.toArray) {

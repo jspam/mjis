@@ -2,17 +2,23 @@ package mjis
 
 import java.io.BufferedWriter
 
-import firm.Mode
 import mjis.asm.OperandSpec._
 import mjis.asm._
 import mjis.asm.AMD64Registers._
 import mjis.util.MapExtensions._
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class RegisterAllocator(input: AsmProgram) extends Phase[AsmProgram] {
   override def getResult(): AsmProgram = {
-    input.functions.foreach(new FunctionRegisterAllocator(_).allocateRegs())
+    // R15 and RBP are reserved for swap operations for now. TODO: Don't reserve two whole registers for that
+    for (f <- input.functions) new FunctionRegisterAllocator(f,
+      Seq(RAX, RBX, RDI, RSI, RDX, RCX, R8, R9, R10, R11, R12, R13, R14/*, R15, RBP */),
+      AMD64Registers.CallerSaveRegisters,
+      R15,
+      RBP
+    ).allocateRegs()
     input
   }
 
@@ -21,11 +27,25 @@ class RegisterAllocator(input: AsmProgram) extends Phase[AsmProgram] {
   override def findings = List[Finding]()
 }
 
-class FunctionRegisterAllocator(function: AsmFunction) {
-  private case class LivenessInterval(reg: RegisterOperand, start: Int, end: Int) extends Ordered[LivenessInterval] {
-    override def compare(that: LivenessInterval): Int = this.start.compare(that.start)
-    def intersects(that: LivenessInterval): Boolean = !(that.end <= this.start || this.end <= that.start)
-  }
+/**
+ * Linear scan register allocator for programs in SSA form with interval splitting.
+ *
+ * The following papers were used as reference:
+ *
+ * Christian Wimmer, Hanspeter Mössenböck: Optimized Interval Splitting in a Linear Scan Register Allocator.
+ * In Proceedings of the International Conference on Virtual Execution Environments, pages 132–141.
+ * ACM Press, 2005. doi:10.1145/1064979.1064998
+ *
+ * Christian Wimmer, Michael Franz: Linear Scan Register Allocation on SSA Form.
+ * In Proceedings of the International Symposium on Code Generation and Optimization, pages 170–179.
+ * ACM Press, 2010. doi:10.1145/1772954.1772979
+ */
+class FunctionRegisterAllocator(function: AsmFunction,
+  val PhysicalRegisters: Seq[Int],
+  val CallerSaveRegisters: Set[Int] = Set(),
+  val tempRegNo1: Int = 0, val tempRegNo2: Int = 0) {
+  // TODO: Use the ordering defined by PhysicalRegisters; e.g. in functions without calls, caller-save registers
+  // should be used first.
 
   // activationRecordSize takes into account only the values written to the AR by the function itself,
   // but not the parameters and return address.
@@ -46,328 +66,473 @@ class FunctionRegisterAllocator(function: AsmFunction) {
         result
     }
 
-  private class LivenessIntervalMap {
-    // R12-R15 are reserved for spills/reloads at the moment
-    private val internalRegisters = Seq(RAX, RBX, RCX, RDX, RDI, RSI, RBP, R8, R9, R10, R11 /*, R12, R13, R14, R15*/)
+  private val INFINITY = Int.MaxValue
 
-    private val livenessIntervalsByRegister = mutable.Map[Int, mutable.SortedSet[LivenessInterval]]().
-      withPersistentDefault(_ => mutable.SortedSet[LivenessInterval]())
+  /** The lifetime interval for each (virtual and physical) register, indexed by register number.
+    * In case of interval splitting, only the parent interval is stored here. */
+  private val intervals = mutable.Map[Int, LivenessInterval]()
 
-    val regUsageCount = mutable.Map[Int, Int]().withPersistentDefault(_ => 0)
-
-    def addInterval(interval: LivenessInterval): Unit =
-      addInterval(interval, interval.reg.regNr)
-
-    def addInterval(interval: LivenessInterval, regNr: Int): Unit =
-      livenessIntervalsByRegister(regNr) += interval
-
-    def removeInterval(interval: LivenessInterval): Unit =
-      removeInterval(interval, interval.reg.regNr)
-
-    def removeInterval(interval: LivenessInterval, regNr: Int): Unit =
-      livenessIntervalsByRegister(regNr) -= interval
-
-    def getIntervalForPos(regNr: Int, instrPos: Int): Option[LivenessInterval] =
-      livenessIntervalsByRegister(regNr).
-        find(interval => interval.start <= instrPos && interval.end >= instrPos)
-
-    def getIntervalsForPos(instrPos: Int): Map[Int, LivenessInterval] =
-      internalRegisters.flatMap(reg => getIntervalForPos(reg, instrPos) match {
-        case Some(interval) => Some(reg -> interval)
-        case None => None
-      }).toMap
-
-    def allIntervals(): Set[LivenessInterval] = livenessIntervalsByRegister.values.foldLeft[Set[LivenessInterval]](Set())(_ ++ _)
-
-    def isAlive(regNr: Int): Boolean = livenessIntervalsByRegister(regNr).nonEmpty
-
-    def searchFreeRegister(interval: LivenessInterval): Option[Int] = {
-      val freeRegisters = internalRegisters.filter(livenessIntervalsByRegister(_).forall(!_.intersects(interval)))
-      // Prefer registers whose liveness ends at the start of "interval" -- this generates
-      // Mov instructions with the same source and target register
-      if (freeRegisters.isEmpty) None
-      else Some(freeRegisters.find(livenessIntervalsByRegister(_).exists(_.end == interval.start)).getOrElse(freeRegisters.head))
+  /** Helper function that creates an interval for a register operand if one doesn't exist. */
+  private def interval(regOp: RegisterOperand) = {
+    intervals.get(regOp.regNr) match {
+      case Some(existingInterval) => existingInterval
+      case None =>
+        val result = new LivenessInterval(regOp)
+        intervals(regOp.regNr) = result
+        result
     }
   }
 
-  def allocateRegs() = {
-    // Insert Mov instructions for Phi functions
-    for ((pred, succ) <- function.controlFlowEdges) {
-      val parallelMoves: Map[Operand, Operand] = succ.phis.map { phi =>
-        phi.dest -> phi.srcs(succ.predecessors.indexOf(Some(pred)))
-      }.toMap
-      val phiInstrs = new PhiCodeGenerator(parallelMoves, 0, 0).getInstructions()
+  /** Returns all (virtual and physical) registers used by the given instructions
+    * together with their read/write specification. Does not return physical registers
+    * that aren't contained in `PhysicalRegisters` passed to the constructor, e.g. RSP. */
+  private def getRegisterUsages(instr: Instruction): Map[RegisterOperand, OperandSpec] = {
+    val result = mutable.Map[RegisterOperand, OperandSpec]().withDefaultValue(OperandSpec.NONE)
+    instr.operands.zip(instr.operandSpecs) foreach { case (op, spec) => op match {
+      case r: RegisterOperand if r.regNr >= 0 || PhysicalRegisters.contains(r.regNr) =>
+        result(r) |= spec
+      case a: AddressOperand => Seq(a.base, a.offset) foreach {
+        case Some(r: RegisterOperand) if r.regNr >= 0 || PhysicalRegisters.contains(r.regNr) =>
+          result(r) |= OperandSpec.READ
+        case _ =>
+      }
+      case _ =>
+    }}
+    result.toMap
+  }
 
-      if (succ.predecessors.flatten.length == 1) {
-        succ.instructions.insertAll(0, phiInstrs)
-      } else {
-        assert(pred.successors.size == 1, s"Critical edge from ${pred.nr} (successors " +
-          pred.successors.map(_.nr).mkString(", ") + s") to ${succ.nr} (predecessors " +
-          succ.predecessors.flatten.map(_.nr).mkString(", ") + ")")
-        pred.instructions ++= phiInstrs
+  /** Position handling: The instructions of a block are numbered in increments of two starting at two.
+    * The phi functions are viewed as starting at zero (at the starting position of the block).
+    * The odd instruction numbers are reserved for inserting move instructions e.g. because of
+    * interval splitting. */
+
+  private val blockStartPos = function.basicBlocks.zip(
+    function.basicBlocks.map(b => (b.allInstructions.length + 1) * 2).scan(0)(_ + _)
+  ).toMap
+
+  private val blockControlFlowStartPos =
+    function.basicBlocks.map(b => b -> (blockStartPos(b) + (b.instructions.length + 1) * 2)).toMap
+
+  private val blockEndPos =
+    function.basicBlocks.map(b => b -> (blockStartPos(b) + (b.allInstructions.length + 1) * 2)).toMap
+
+  private def instrsWithPos(b: AsmBasicBlock) =
+    b.allInstructions.zip(Range(blockStartPos(b) + 2, blockEndPos(b), 2).iterator)
+
+
+  /** Additional move instructions (for splits/spills and SSA deconstruction) to be inserted
+    * _after_ the instruction whose position is specified by the key. */
+  val insertedInstrs = mutable.Map[Int, mutable.ListBuffer[(Operand, Operand)]]().
+    withPersistentDefault(_ => ListBuffer[(Operand, Operand)]())
+
+
+  private def isLoopHeader(b: AsmBasicBlock) =
+    function.basicBlocks.drop(function.basicBlocks.indexOf(b)).exists(s => s.successors.contains(b))
+
+  private def getLoopEnd(b: AsmBasicBlock) =
+    function.basicBlocks.filter(s => s.successors.contains(b)).last
+
+
+  private def buildLivenessIntervals() = {
+    // Records for each block which variables are live at its beginning.
+    val liveIn = mutable.Map[AsmBasicBlock, Set[RegisterOperand]]().withDefaultValue(Set())
+
+    for (b <- function.basicBlocks.reverse) {
+      val live = mutable.Set[RegisterOperand]()
+
+      for (succ <- b.successors) {
+        live ++= liveIn(succ)
+
+        val predIdx = succ.predecessors.indexOf(Some(b))
+        for (phi <- succ.phis) {
+          phi.srcs(predIdx) match {
+            case r: RegisterOperand => live += r
+            case _: ConstOperand => /* nothing to do */
+            case _ => ???
+          }
+        }
+      }
+
+      // For each variable live at the end of the block, add a range spanning the whole block.
+      // It might be shortened later if a definition is encountered.
+      for (op <- live) interval(op).addRange(blockStartPos(b), blockEndPos(b))
+
+      for ((instr, instrPos) <- instrsWithPos(b).toSeq.reverse) {
+        // Block caller save registers
+        if (instr.isInstanceOf[Call] || instr.isInstanceOf[CallWithReturn]) {
+          for (reg <- PhysicalRegisters.filter(CallerSaveRegisters)) {
+            // Assign size 8 to the register operand so that debug output will
+            // work nicely.
+            interval(RegisterOperand(reg, 8)).addRange(instrPos, instrPos)
+          }
+        }
+
+        for ((op, spec) <- getRegisterUsages(instr)) {
+          // Physical registers need no usage information since they cannot be spilled
+          if (op.regNr >= 0) interval(op).usages += RegisterUsage(instrPos, spec)
+
+          if (spec.contains(WRITE)) {
+            // definition -- shorten live range
+            interval(op).setFrom(instrPos)
+            live -= op
+          }
+          if (spec.contains(READ)) {
+            // usage
+            interval(op).addRange(blockStartPos(b), instrPos)
+            live += op
+          }
+        }
+      }
+
+      // Phi functions are a definition for their destination operands
+      live --= b.phis.map(_.dest)
+
+      if (isLoopHeader(b)) {
+        val loopEnd = getLoopEnd(b)
+        for (op <- live) interval(op).addRange(blockStartPos(b), blockEndPos(loopEnd))
+      }
+
+      liveIn(b) = live.toSet
+    }
+  }
+
+  /** Performs the Linear Scan algorithm and returns a physical register operand or an activation
+    * record operand for each liveness interval */
+  private def linearScan(): Map[LivenessInterval, Operand] = {
+    // Unhandled: Intervals which start after `position` and do not have a register assigned.
+    // Using a priority queue because interval splitting might insert new intervals into unhandled.
+    // Order by `-start` because the priority queue dequeues entries with higher values first.
+    val unhandled = mutable.PriorityQueue[LivenessInterval]()(Ordering.by(-_.start))
+
+    val (physicalRegIntervals, virtualRegIntervals) = intervals.values.partition(_.regOp.regNr < 0)
+    unhandled ++= virtualRegIntervals
+
+    // Active: Intervals which are currently alive and have a register assigned.
+    val active = mutable.Set[LivenessInterval]()
+
+    // Inactive: Intervals which have a lifetime hole at `position` and have a register assigned.
+    val inactive = mutable.Set[LivenessInterval]()
+    inactive ++= physicalRegIntervals
+
+    // Physical register numbers currently assigned to each liveness interval that is not spilled.
+    val physReg = mutable.Map[LivenessInterval, Int]()
+    physReg ++= physicalRegIntervals.map(i => i -> i.regOp.regNr)
+
+    val result = mutable.Map[LivenessInterval, Operand]()
+
+    while (unhandled.nonEmpty) {
+      val current = unhandled.dequeue()
+      val position = current.start
+
+      def optimalSplitPos(maxSplitPos: Int) = {
+        // TODO: possible optimization: select optimal splitting position
+        // Splitting may occur only at a block boundary (the resolve phase will insert the
+        // appropriate move instructions) or at an odd position (because the move instructions
+        // are inserted there).
+        if (blockStartPos.valuesIterator.contains(maxSplitPos)) maxSplitPos
+        else if (maxSplitPos % 2 == 0) maxSplitPos - 1
+        else maxSplitPos
+      }
+
+      def splitInterval(it: LivenessInterval, maxSplitPos: Int, appendToUnhandled: Boolean = true): LivenessInterval = {
+        assert(maxSplitPos >= position)
+
+        val splitPos = optimalSplitPos(maxSplitPos)
+        val itSplit = it.splitAt(splitPos)
+        if (appendToUnhandled && itSplit != it) unhandled += itSplit
+        itSplit
+      }
+
+      def spillInterval(interval: LivenessInterval) = {
+        val spilledInterval = splitInterval(interval, position, appendToUnhandled = false)
+        // do not append to unhandled -- it has been handled by assigning an AR operand!
+        result(spilledInterval) = activationRecordOperand(interval.regOp)
+
+        spilledInterval.nextUsage(position) match {
+          // TODO: Possible optimization: split at first use position *that requires a register*
+          case Some(nextUsage) => splitInterval(spilledInterval, nextUsage.position)
+          case None =>
+        }
+      }
+
+      /* Tries to allocate a register for (at least a part of) current without spilling an interval.
+       * Returns true on success. */
+      def tryAllocateWithoutSpilling(): Boolean = {
+        val freeUntilPos = mutable.Map[Int, Int]()
+        freeUntilPos ++= PhysicalRegisters.map(_ -> INFINITY)
+
+        for (it <- active) freeUntilPos(physReg(it)) = 0 /* not free at all */
+
+        for (it <- inactive) {
+          it.nextIntersectionWith(current, position) match {
+            case Some(intersectionPos) => freeUntilPos(physReg(it)) = intersectionPos min freeUntilPos(physReg(it))
+            case None =>
+          }
+        }
+
+        // reg = register with highest freeUntilPos
+        // Sort by freeUntilPos, then by register number for determinism
+        val reg = freeUntilPos.toSeq.maxBy(t => (t._2, t._1))._1
+
+        if (freeUntilPos(reg) <= position + (position % 2) /* next even instruction pos */) {
+          // No register available without spilling
+          false
+        } else {
+          // `reg` is available ...
+          physReg(current) = reg
+          result(current) = current.regOp.copy(regNr = reg)
+
+          if (freeUntilPos(reg) < current.end) {
+            // ... but not for the whole interval, so we need to split
+            splitInterval(current, freeUntilPos(reg))
+          }
+
+          true
+        }
+      }
+
+      /* Allocate a register for current by spilling an interval (possibly current itself).
+       * Returns whether current was assigned a physical register (instead of being spilled). */
+      def allocateWithSpilling(): Boolean = {
+        // Spill the interval with the furthest next use.
+        val nextUsePos = mutable.Map[Int, Int]()
+        nextUsePos ++= PhysicalRegisters.map(_ -> INFINITY)
+
+        // Fixed intervals block physical registers and cannot be spilled.
+        val nextBlockedPos = mutable.Map[Int, Int]()
+        nextBlockedPos ++= PhysicalRegisters.map(_ -> INFINITY)
+
+        for (it <- active) {
+          if (it.regOp.regNr < 0) {
+            nextUsePos(physReg(it)) = 0
+            nextBlockedPos(physReg(it)) = nextUsePos(physReg(it))
+          } else {
+            nextUsePos(physReg(it)) = it.nextUsagePos(position)
+          }
+        }
+
+        for (it <- inactive if it.intersects(current)) {
+          if (it.regOp.regNr < 0) {
+            nextUsePos(physReg(it)) = nextUsePos(physReg(it)) min it.nextIntersectionWith(current, position).get
+            nextBlockedPos(physReg(it)) = nextUsePos(physReg(it))
+          } else {
+            nextUsePos(physReg(it)) = nextUsePos(physReg(it)) min it.nextUsagePos(position)
+          }
+        }
+
+        // reg = register with highest nextUsePos
+        // Sort by nextUsePos, then by register number for determinism
+        val reg = nextUsePos.toSeq.maxBy(t => (t._2, t._1))._1
+
+        val regAssigned = if (current.nextUsagePos(position) > nextUsePos(reg)) {
+          // current itself is the interval with the furthest next use
+          spillInterval(current)
+          false
+        } else {
+          // spill another interval
+          physReg(current) = reg
+          result(current) = current.regOp.copy(regNr = reg)
+
+          // The register might still be partially blocked by a fixed interval
+          if (nextBlockedPos(reg) < current.end) {
+            splitInterval(current, nextBlockedPos(reg))
+          }
+
+          // Split and spill intervals that currently block `reg`
+          for (it <- active if it.regOp.regNr >= 0 && physReg(it) == reg) {
+            spillInterval(it)
+            active -= it
+          }
+          for (it <- inactive if it.regOp.regNr >= 0 && physReg(it) == reg) {
+            // TODO: only if next usage is before end of current?
+            splitInterval(it, it.nextUsagePos(position))
+          }
+          true
+        }
+
+        intervals.get(reg) match {
+          case Some(fixedIntervalForReg) =>
+            fixedIntervalForReg.nextIntersectionWith(current, position) match {
+              case Some(intersectionPos) => splitInterval(current, intersectionPos)
+              case None =>
+            }
+          case None =>
+        }
+
+        regAssigned
+      }
+
+      // Check for `active` intervals that have become `inactive` or have expired.
+      // Make a copy of `active` first because we are modifying it.
+      for (it <- active.toArray if !it.contains(position)) {
+        active -= it
+        if (it.end >= position) inactive += it
+      }
+
+      // Check for `inactive` intervals that have become `active` or have expired.
+      for (it <- inactive.toArray if it.contains(position) || it.end < position) {
+        inactive -= it
+        if (it.end >= position) active += it
+      }
+
+      if (current.regOp.regNr < 0 || tryAllocateWithoutSpilling() || allocateWithSpilling())
+        active += current
+    }
+
+    result.toMap
+  }
+
+  /** Inserts moves between adjacent split intervals and deconstructs the phi functions. */
+  private def resolveAndDeconstructSSA(mapping: Map[LivenessInterval, Operand]): Unit = {
+    // Insert moves at block boundaries (also deconstructs phi functions).
+    for ((pred, succ) <- function.controlFlowEdges) {
+      val insertionPos =
+        if (succ.predecessors.flatten.length == 1)
+          blockStartPos(succ) + 1
+        else {
+          assert(pred.successors.size == 1, s"Critical edge from ${pred.nr} (successors " +
+            pred.successors.map(_.nr).mkString(", ") + s") to ${succ.nr} (predecessors " +
+            succ.predecessors.flatten.map(_.nr).mkString(", ") + ")")
+          // insert before the control flow instructions
+          blockControlFlowStartPos(pred) - 1
+        }
+
+      for (it <- intervals.values if it.regOp.regNr >= 0 && it.andChildren.exists(_.contains(blockStartPos(succ)))) {
+        val moveFrom =
+          if (it.andChildren.map(_.start).min == blockStartPos(succ)) {
+            // interval is defined by a phi function
+            succ.phis.find(_.dest.regNr == it.regOp.regNr) match {
+              case Some(phi) => phi.srcs(succ.predecessors.indexOf(Some(pred))) match {
+                case c: ConstOperand => c
+                case r: RegisterOperand => mapping(interval(r).childAt(blockEndPos(pred)).get)
+                case _ => ???
+              }
+              case None =>
+                assert(false, s"Cannot find phi function defining interval ${it.regOp.regNr}")
+                ???
+            }
+          } else mapping(it.childAt(blockEndPos(pred)).get)
+
+        val moveTo = mapping(it.childAt(blockStartPos(succ)).get)
+
+        if (moveTo != moveFrom) insertedInstrs(insertionPos) += (moveTo -> moveFrom)
       }
     }
 
     // Prevent the AssemblerFileGenerator from outputting the Phis
-    function.basicBlocks.foreach(_.phis.clear())
+    for (b <- function.basicBlocks) b.phis.clear()
 
-    // Save ActivationRecordOperands for later conversion to "real" operands
-    val activationRecordOperands = mutable.ListBuffer[(Instruction, /* operand index */ Int)]()
-    val intervals = computeLivenessIntervals()
-    val intervalMapping = mutable.Map[LivenessInterval, Operand]()
-
-    // smaller return value => more likely to be spilled
-    def spillOrder(interval: LivenessInterval): Int = {
-      intervals.regUsageCount(interval.reg.regNr)
-    }
-
-    def assignRealRegister(interval: LivenessInterval) = {
-      intervals.searchFreeRegister(interval) match {
-        case Some(freeReg) =>
-          intervalMapping(interval) = interval.reg.copy(regNr = freeReg)
-          intervals.addInterval(interval, freeReg)
-        case None =>
-          // Select live interval to spill among the current interval and the currently active
-          // intervals for temporaries
-          val (freeReg, intervalToSpill) = intervals.getIntervalsForPos(interval.start).toSeq.
-            filter(_._2.reg.regNr >= 0).sortBy(t => spillOrder(t._2)).head
-
-          // Compare with the current interval as well
-          if (spillOrder(intervalToSpill) < spillOrder(interval)) {
-            intervals.removeInterval(intervalToSpill, freeReg)
-            intervals.addInterval(interval, freeReg)
-
-            intervalMapping(intervalToSpill) = activationRecordOperand(intervalToSpill.reg)
-            intervalMapping(interval) = interval.reg.copy(regNr = freeReg)
-          } else {
-            intervalMapping(interval) = activationRecordOperand(interval.reg)
-          }
+    // Insert move instructions for intervals that have been split inside a block.
+    for (interval <- intervals.values if interval.regOp.regNr >= 0) {
+      for (Seq(pred, succ) <- interval.andChildren.sortBy(_.start).sliding(2)) {
+        if (pred.end == succ.start && !blockStartPos.valuesIterator.contains(pred.end)) {
+          assert(pred.end % 2 == 1)
+          val (succOp, predOp) = (mapping(succ), mapping(pred))
+          if (succOp != predOp) insertedInstrs(pred.end) += ((mapping(succ), mapping(pred)))
+        }
       }
     }
+  }
 
-    intervals.allIntervals().filter(_.reg.regNr >= 0).toSeq.sorted.foreach(assignRealRegister)
-
-    var instrPos = 0
-
-    function.basicBlocks.foreach(block => Seq(block.instructions, block.controlFlowInstructions).foreach { instrList =>
-      var i = 0
-      while (i < instrList.length) {
-        val instr = instrList(i)
-        val instrsBefore = mutable.ArrayBuffer[Instruction]()
-        val instrsAfter = mutable.ArrayBuffer[Instruction]()
-
-        def saveCallerSaveRegs(exclude: Set[RegisterOperand]) = {
-          val excludeRegNrs = exclude.map(_.regNr)
-          val regsToSave = intervals.getIntervalsForPos(instrPos).
-            filter { case (regNr, _) => !excludeRegNrs.contains(regNr) }.
-            map { case (regNr, interval) => interval.reg.copy(regNr = regNr) }
-
-          regsToSave.foreach { regOp =>
-            instrsBefore += Mov(regOp, activationRecordOperand(regOp)).withComment("Save caller-save register")
-          }
-
-          regsToSave.foreach { regOp =>
-            instrsAfter += Mov(activationRecordOperand(regOp), regOp).withComment("Restore caller-save register")
-          }
-        }
-
-        instr match {
-          case Call(_, registerParams) => saveCallerSaveRegs(registerParams.toSet)
-          case CallWithReturn(_, _, registerParams) => saveCallerSaveRegs(registerParams.toSet ++ Seq(RegisterOperand(RAX, 8)))
-          case _ =>
-            for (((operand, idx), spec) <- instr.operands.zipWithIndex.zip(instr.operandSpecs)) {
-              def hasMemoryReference = instr.operands.exists{
-                case _: ActivationRecordOperand | _: AddressOperand => true
-                case _ => false
-              }
-
-              // Returns a replacement operand for a register operand and inserts spill/reload instructions
-              // if necessary. spillRegNr is used as a temporary registers for spilled/reloaded values.
-              def replaceRegisterOperand(oldOp: RegisterOperand, spec: OperandSpec, spillRegNr: Int): Operand = {
-                if (oldOp.regNr < 0)
-                  oldOp
-                else {
-                  val newOp = intervalMapping(intervals.getIntervalForPos(oldOp.regNr, instrPos).get)
-                  newOp match {
-                    case a: ActivationRecordOperand if
-                      !spec.contains(MEMORY) || hasMemoryReference ||
-                        // HACK: Cannot do a movslq with a memory operand as target
-                        (idx == 1 && instr.isInstanceOf[Mov] && !instr.asInstanceOf[Mov].src.isInstanceOf[ConstOperand] &&
-                          instr.asInstanceOf[Mov].src.sizeBytes < instr.asInstanceOf[Mov].dest.sizeBytes) =>
-
-                      val regOp = RegisterOperand(spillRegNr, a.sizeBytes)
-                      if (spec.contains(READ)) instrsBefore += Mov(a, regOp).withComment(s"reload for $a")
-                      if (spec.contains(WRITE)) instrsAfter += Mov(regOp, a).withComment(s"spill for $a")
-                      regOp
-                    case _ => newOp
-                  }
-                }
-              }
-
-              // In the worst case, we need four temporary register operands:
-              // mov x(%REG1, %REG2), y(%REG3, %REG4) where REG1-4 have been spilled
-              // R12-R15 are currently used for that purpose (hard-coded)
-              operand match {
-                case r: RegisterOperand =>
-                  val newOp = replaceRegisterOperand(r, spec, if (idx == 0) R12 else R14)
-                  instr.operands(idx) = newOp
-                  instr.comment += s" - $operand => $newOp"
-                case a : AddressOperand =>
-                  var newOp = a
-                  newOp.base match {
-                    case Some(r: RegisterOperand) => newOp = newOp.copy(base = Some(replaceRegisterOperand(r, OperandSpec.READ, if (idx == 0) R12 else R14)))
-                    case _ =>
-                  }
-                  newOp.offset match {
-                    case Some(r: RegisterOperand) => newOp = newOp.copy(offset = Some(replaceRegisterOperand(r, OperandSpec.READ, if (idx == 0) R13 else R15)))
-                    case _ =>
-                  }
-                  instr.operands(idx) = newOp
-                  instr.comment += s" - $operand => $newOp"
-                case _ =>
-              }
-            }
-        }
-
-        // Add all ActivationRecordOperands to the list of AR operands
-        (instrsBefore ++ Seq(instr) ++ instrsAfter).foreach(instruction =>
-          instruction.operands.zipWithIndex.foreach {
-            case (_: ActivationRecordOperand, idx) => activationRecordOperands += ((instruction, idx))
-            case _ =>
-          }
+  private def replaceRegisterOperands(instr: Instruction, map: RegisterOperand => Operand) = {
+    instr.operands.zipWithIndex.foreach {
+      case (r: RegisterOperand, idx) if r.regNr >= 0 =>
+        instr.comment += s" ${r.regNr} => ${map(r)}"
+        instr.operands(idx) = map(r)
+      case (a: AddressOperand, idx) =>
+        instr.operands(idx) = a.copy(
+          base = a.base.flatMap(r => Some(map(r.asInstanceOf[RegisterOperand]))),
+          offset = a.offset.flatMap(r => Some(map(r.asInstanceOf[RegisterOperand])))
         )
+        instr.comment += s" $a => ${instr.operands(idx)}"
+      case _ =>
+    }
+  }
 
-        instrsBefore.foreach(newInstr => instrList.insert(i, newInstr.withStackPointerDisplacement(instr.stackPointerDisplacement)))
-        i += instrsBefore.length
+  /** Replaces virtual registers by their assigned operand in all instructions. */
+  private def applyMapping(mapping: Map[LivenessInterval, Operand]) = {
+    def replaceRegOp(pos: Int)(regOp: RegisterOperand): Operand = {
+      if (regOp.regNr < 0) regOp
+      else mapping(interval(regOp).childAt(pos).get)
+    }
 
-        instrsAfter.foreach(newInstr => instrList.insert(i+1, newInstr.withStackPointerDisplacement(instr.stackPointerDisplacement)))
-        i += instrsAfter.length
-
-        i += 1
-        instrPos += 1
+    for (b <- function.basicBlocks) {
+      for ((instr, pos) <- instrsWithPos(b)) {
+        replaceRegisterOperands(instr, replaceRegOp(pos))
       }
-    })
+    }
+  }
 
-    // Save callee-save registers
-    CalleeSaveRegisters.filter(intervals.isAlive).foreach { reg =>
+  /** Inserts the additional move instructions generated by the resolve phase. */
+  private def insertInstrs() = {
+    for (b <- function.basicBlocks) {
+      for ((instrList, posRange) <- Seq(
+        (b.instructions, blockStartPos(b) + 1 until blockControlFlowStartPos(b) + 1 by 2),
+        (b.controlFlowInstructions, blockControlFlowStartPos(b) + 1 until blockEndPos(b) + 1 by 2))) {
+
+        var numInsertedInstrs = 0
+        for ((pos, idx) <- posRange.zipWithIndex) {
+          val nonIdentityMoves = insertedInstrs(pos).filter(t => t._1 != t._2)
+          assert(nonIdentityMoves.toMap.size == nonIdentityMoves.size) // no duplicate destination operands
+          val phiInstrs = new PhiCodeGenerator(nonIdentityMoves.toMap, tempRegNo1, tempRegNo2).getInstructions()
+
+          instrList.insertAll(idx + numInsertedInstrs, phiInstrs)
+          numInsertedInstrs += phiInstrs.length
+        }
+      }
+    }
+  }
+
+  /** Saves and restores callee-saved registers that have actually been used in the function. */
+  private def saveCalleeSaveRegs(usedRegs: Set[Int]) = {
+    CalleeSaveRegisters.filter(r => usedRegs.contains(r)).foreach { reg =>
       val regOp = RegisterOperand(reg, 8)
       val arOp = activationRecordOperand(8)
 
       val saveInstr = Mov(regOp, arOp).withComment("Save callee-save register")
-      activationRecordOperands += ((saveInstr, 1))
       val restoreInstr = Mov(arOp, regOp).withComment("Restore callee-save register")
-      activationRecordOperands += ((restoreInstr, 0))
 
       function.prologue.instructions.prepend(saveInstr)
       function.epilogue.instructions.append(restoreInstr)
     }
+  }
 
+  private def convertArOperands() = {
     val rsp = RegisterOperand(RSP, 8)
 
-    // Now that the AR size is known, convert ActivationRecordOperands
-    for ((instr, idx) <- activationRecordOperands) {
-      val arOperand = instr.operands(idx).asInstanceOf[ActivationRecordOperand]
-      instr.operands(idx) = AddressOperand(
-        base = Some(rsp),
-        displacement = arOperand.offset + activationRecordSize + instr.stackPointerDisplacement,
-        sizeBytes = arOperand.sizeBytes)
+    for (b <- function.basicBlocks) {
+      for (instr <- b.allInstructions) {
+        for ((op, idx) <- instr.operands.zipWithIndex) {
+          op match {
+            case a: ActivationRecordOperand =>
+              instr.operands(idx) = AddressOperand(
+                base = Some(rsp),
+                displacement = a.offset + activationRecordSize + instr.stackPointerDisplacement,
+                sizeBytes = a.sizeBytes)
+            case _ =>
+          }
+        }
+      }
     }
 
     function.activationRecordSize = activationRecordSize
     if (activationRecordSize > 0) {
-      val arSizeOp = ConstOperand(activationRecordSize, Mode.getIs.getSizeBytes)
+      val arSizeOp = ConstOperand(activationRecordSize, firm.Mode.getIs.getSizeBytes)
       function.prologue.instructions.prepend(Sub(arSizeOp, rsp).withComment("Build stack frame"))
       function.epilogue.instructions += Add(arSizeOp, rsp).withComment("Restore stack frame")
     }
   }
 
-  /* Returns the instrPos of the first instruction of each block. */
-  private def computeBlockInstrPos(): Map[AsmBasicBlock, Int] = {
-    val instrPositions = function.basicBlocks
-      .map(block => block.instructions.length + block.controlFlowInstructions.length)
-      .scan(0)(_ + _)
-    function.basicBlocks.zip(instrPositions).toMap
-  }
-
-  private def computeLivenessIntervals(): LivenessIntervalMap = {
-    val result = new LivenessIntervalMap()
-    val currentIntervalForReg = mutable.Map[Int, LivenessInterval]()
-
-    val blockInstrPos = computeBlockInstrPos()
-    var instrPos = 0
-
-    def handleJmp(targetBlock: AsmBasicBlock) = {
-      val targetInstrPos = blockInstrPos(targetBlock)
-      // Only back jumps will need to be handled specially.
-      if (targetInstrPos < instrPos)
-        // Extend currently active liveness intervals until the Jmp instruction;
-        // ignore temporary registers
-        for ((reg, interval) <- currentIntervalForReg) {
-          if (reg > 0 && interval.end >= targetInstrPos)
-            currentIntervalForReg(reg) = interval.copy(end = instrPos)
-        }
-    }
-
-    def readRegister(reg: RegisterOperand) = {
-      result.regUsageCount(reg.regNr) += 1
-      currentIntervalForReg(reg.regNr) = LivenessInterval(reg,
-        currentIntervalForReg.get(reg.regNr) match {
-          case Some(interval) => interval.start
-          case None =>
-            if (ParamRegisters.contains(reg.regNr)) {
-              // parameters passed in registers
-              -1
-            } else instrPos // can happen with unreachable code
-        }, instrPos)
-    }
-
-    def writeRegister(reg: RegisterOperand) = {
-      result.regUsageCount(reg.regNr) += 1
-      currentIntervalForReg.get(reg.regNr) match {
-        case Some(interval) =>
-          if (reg.regNr <= 0) {
-            // The temporary register (0) and internal registers are only alive within a basic block.
-            // We can therefore easily assign multiple liveness intervals to them.
-            result.addInterval(interval)
-            currentIntervalForReg(reg.regNr) = LivenessInterval(reg, instrPos, instrPos)
-          } else {
-            // Other registers get one long interval at the moment.
-            currentIntervalForReg(reg.regNr) = interval.copy(end = instrPos)
-          }
-        case None =>
-          currentIntervalForReg(reg.regNr) = LivenessInterval(reg, instrPos, instrPos)
-      }
-    }
-
-    function.basicBlocks.foreach(block => (block.instructions ++ block.controlFlowInstructions).foreach {
-      case Jmp(targetBlockOp) =>
-        handleJmp(targetBlockOp.basicBlock)
-        instrPos += 1
-      case JmpConditional(targetBlockOp, _, _) =>
-        handleJmp(targetBlockOp.basicBlock)
-        instrPos += 1
-      case instr =>
-        for ((operand, spec) <- instr.operands zip instr.operandSpecs) {
-          operand match {
-            case r : RegisterOperand if r.regNr != RSP =>
-              /* if spec contains both READ and WRITE, we must continue the existing liveness interval
-               * (because the register stays the same), so we just ignore the WRITE */
-              if (spec.contains(READ)) readRegister(r)
-              else if (spec.contains(WRITE)) writeRegister(r)
-            case op @ AddressOperand(base, offset, _, _, _) =>
-              Seq(base, offset).foreach {
-                case Some(r: RegisterOperand) if r.regNr != RSP =>
-                  readRegister(r)
-                case _ =>
-              }
-            case _ =>
-          }
-        }
-
-        instrPos += 1
-    })
-
-    currentIntervalForReg.values.foreach(result.addInterval)
-    result
+  def allocateRegs(): Unit = {
+    buildLivenessIntervals()
+    val mapping = linearScan()
+    resolveAndDeconstructSSA(mapping)
+    applyMapping(mapping)
+    insertInstrs()
+    saveCalleeSaveRegs(
+      // used physical registers + registers mapped to liveness intervals (of virtual registers)
+      (intervals.keys.filter(_ < 0) ++
+      mapping.values.flatMap { case r: RegisterOperand => Some(r.regNr); case _ => None }).toSet)
+    convertArOperands()
   }
 }
