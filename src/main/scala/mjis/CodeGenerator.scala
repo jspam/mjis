@@ -47,8 +47,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
   })
 
   class MethodCodeGenerator(g: Graph) {
-    def appendComment(s: String): Instruction => Instruction = { instr => instr.comment += s; instr }
-
     val basicBlocks = mutable.ListMap[Block, AsmBasicBlock]().
       withPersistentDefault(b => new AsmBasicBlock(if (b == null) -1 else b.getNr))
     val function = new AsmFunction(g.getEntity.getLdName)
@@ -93,8 +91,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
       for (n <- NodeCollector.fromWalk(g.walkTopological)) {
         val basicBlock = basicBlocks(n.block)
-        basicBlock.instructions ++= instructions.getOrElse(n, Seq()) map appendComment(" - " + n.toString)
-        basicBlock.controlFlowInstructions ++= createControlFlow(n, nextBlock.get(basicBlock)) map appendComment(" - " + n.toString)
+        basicBlock.instructions ++= instructions.getOrElse(n, Seq()) map(_.withComment(s" - $n"))
+        basicBlock.controlFlowInstructions ++= createControlFlow(n, nextBlock.get(basicBlock)) map(_.withComment(s" - $n"))
       }
       if (!backEdgesWereEnabled) BackEdges.disable(g)
 
