@@ -34,24 +34,24 @@ abstract class AssemblerFileGenerator(config: Config) extends Phase[Unit] {
 }
 
 class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends AssemblerFileGenerator(config) {
-  private def instrToString(instr: Instruction): String = {
-    def opToString(op: Operand): String = op match {
-      case r: RegisterOperand if Registers.contains(r.regNr) => "%" + Registers(r.regNr).subregs(r.sizeBytes)
-      case r: RegisterOperand => s"%REG${r.regNr}{${r.sizeBytes}}"
-      case r: AddressOperand =>
-        val params = Seq[Option[String]](
-          r.base.map(opToString),
-          r.offset.map(opToString),
-          if (r.scale != 1) Some(r.scale.toString) else None
-        ).flatten
-        val displacement = if (r.displacement != 0) r.displacement.toString else ""
-        s"$displacement(${params.mkString(",")})"
-      case b: BasicBlockOperand => s".L${b.basicBlock.nr}"
-      case l: LabelOperand => l.name
-      case c: ConstOperand => s"$$${c.value}"
-      case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
-    }
+  private def opToString(op: Operand): String = op match {
+    case r: RegisterOperand if Registers.contains(r.regNr) => "%" + Registers(r.regNr).subregs(r.sizeBytes)
+    case r: RegisterOperand => s"%REG${r.regNr}{${r.sizeBytes}}"
+    case r: AddressOperand =>
+      val params = Seq[Option[String]](
+        r.base.map(opToString),
+        r.offset.map(opToString),
+        if (r.scale != 1) Some(r.scale.toString) else None
+      ).flatten
+      val displacement = if (r.displacement != 0) r.displacement.toString else ""
+      s"$displacement(${params.mkString(",")})"
+    case b: BasicBlockOperand => s".L${b.basicBlock.nr}"
+    case l: LabelOperand => l.name
+    case c: ConstOperand => s"$$${c.value}"
+    case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
+  }
 
+  private def instrToString(instr: Instruction): String = {
     val operandsToPrint = instr.operands.zip(instr.operandSpecs).
       filter { case (_, spec) => !spec.contains(OperandSpec.IMPLICIT) }.
       map(_._1)
@@ -67,6 +67,9 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     else
       instrAndOperands
   }
+
+  private def phiToString(phi: Phi): String =
+    s"phi[${phi.srcs.map(opToString).mkString(", ")}] -> ${opToString(phi.dest)}"
 
   override def writeCode() = {
     val fw = new BufferedWriter(new FileWriter(config.asmOutFile.toFile, /* append */ false))
@@ -85,19 +88,20 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
       emit("")
       emit(s"${function.name}:", indent = false)
 
-      def emitBlock(block: AsmBasicBlock): Unit = {
-        if (block.nr >= 0) {
-          emit(s".L${block.nr}: # Block ${block.nr}", indent = false)
-        } else {
-          emit("# Unnamed block", indent = false)
-        }
-        block.instructions.foreach(instr => emit(instrToString(instr)))
-        block.controlFlowInstructions.foreach(instr => emit(instrToString(instr)))
+      for (block <- function.basicBlocks) {
+        emit(
+          (block match {
+            case function.prologue => "# Prologue"
+            case function.epilogue => "# Epilogue"
+            case _ if block.nr >= 0 => s".L${block.nr}: # Block ${block.nr}"
+            case _ => "# Unnamed block"
+          })
+          + ", predecessors: " + block.predecessors.flatten.map(_.nr).mkString(", ")
+          + ", successors: " + block.successors.map(_.nr).mkString(", "), indent = false)
+        if (block.comment.nonEmpty) emit("# " + block.comment)
+        block.phis.foreach(phi => emit(phiToString(phi)))
+        block.allInstructions.foreach(instr => emit(instrToString(instr)))
       }
-
-      emitBlock(function.prologue)
-      function.basicBlocks.foreach(emitBlock)
-      emitBlock(function.epilogue)
     })
 
     result.toString()

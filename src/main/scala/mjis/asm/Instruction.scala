@@ -172,3 +172,5 @@ case object Ret extends Instruction
 case class Ret(returnValueSizeBytes: Int) extends Instruction((RegisterOperand(RAX, returnValueSizeBytes), READ | IMPLICIT)) {
   override def suffix = ""
 }
+
+case class Phi(srcs: Seq[Operand], dest: RegisterOperand)

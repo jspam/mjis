@@ -91,6 +91,26 @@ class FunctionRegisterAllocator(function: AsmFunction) {
   }
 
   def allocateRegs() = {
+    // Insert Mov instructions for Phi functions
+    for ((pred, succ) <- function.controlFlowEdges) {
+      val parallelMoves = succ.phis.map { phi =>
+        phi.dest -> phi.srcs(succ.predecessors.indexOf(Some(pred)))
+      }.toMap
+      val phiInstrs = new PhiCodeGenerator(parallelMoves).getInstructions()
+
+      if (succ.predecessors.flatten.length == 1) {
+        succ.instructions.insertAll(0, phiInstrs)
+      } else {
+        assert(pred.successors.size == 1, s"Critical edge from ${pred.nr} (successors " +
+          pred.successors.map(_.nr).mkString(", ") + s") to ${succ.nr} (predecessors " +
+          succ.predecessors.flatten.map(_.nr).mkString(", ") + ")")
+        pred.instructions ++= phiInstrs
+      }
+    }
+
+    // Prevent the AssemblerFileGenerator from outputting the Phis
+    function.basicBlocks.foreach(_.phis.clear())
+
     // Save ActivationRecordOperands for later conversion to "real" operands
     val activationRecordOperands = mutable.ListBuffer[(Instruction, /* operand index */ Int)]()
     val intervals = computeLivenessIntervals()
@@ -129,7 +149,7 @@ class FunctionRegisterAllocator(function: AsmFunction) {
 
     var instrPos = 0
 
-    function.allBlocks.foreach(block => Seq(block.instructions, block.controlFlowInstructions).foreach { instrList =>
+    function.basicBlocks.foreach(block => Seq(block.instructions, block.controlFlowInstructions).foreach { instrList =>
       var i = 0
       while (i < instrList.length) {
         val instr = instrList(i)
@@ -263,10 +283,10 @@ class FunctionRegisterAllocator(function: AsmFunction) {
 
   /* Returns the instrPos of the first instruction of each block. */
   private def computeBlockInstrPos(): Map[AsmBasicBlock, Int] = {
-    val instrPositions = function.allBlocks
+    val instrPositions = function.basicBlocks
       .map(block => block.instructions.length + block.controlFlowInstructions.length)
       .scan(0)(_ + _)
-    function.allBlocks.zip(instrPositions).toMap
+    function.basicBlocks.zip(instrPositions).toMap
   }
 
   private def computeLivenessIntervals(): LivenessIntervalMap = {
@@ -319,7 +339,7 @@ class FunctionRegisterAllocator(function: AsmFunction) {
       }
     }
 
-    function.allBlocks.foreach(block => (block.instructions ++ block.controlFlowInstructions).foreach {
+    function.basicBlocks.foreach(block => (block.instructions ++ block.controlFlowInstructions).foreach {
       case Jmp(targetBlockOp) =>
         handleJmp(targetBlockOp.basicBlock)
         instrPos += 1

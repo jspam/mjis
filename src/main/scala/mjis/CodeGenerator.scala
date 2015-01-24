@@ -3,7 +3,7 @@ package mjis
 import java.io._
 
 import firm._
-import firm.nodes.{Node, Block}
+import firm.nodes.{Bad, Node, Block}
 import mjis.asm._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
@@ -73,7 +73,22 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           instructions(n) = createValue(n)
       }
 
-      function.basicBlocks = NodeCollector.getBlocksInReverseBackEdgesPostOrder(g).map(basicBlocks).toList
+      val firmBlocks = NodeCollector.getBlocksInReverseBackEdgesPostOrder(g).map(basicBlocks).toList
+
+      firmBlocks.head.predecessors += Some(function.prologue)
+      function.prologue.successors += firmBlocks.head
+
+      firmBlocks.last.successors += function.epilogue
+      function.epilogue.predecessors += Some(firmBlocks.last)
+
+      function.basicBlocks = function.prologue :: firmBlocks ++ Seq(function.epilogue)
+
+      for ((firmBlock, asmBlock) <- basicBlocks) {
+        asmBlock.predecessors ++= firmBlock.getPreds.map(b =>
+          if (b.isInstanceOf[Bad] || !function.basicBlocks.contains(basicBlocks(b.block))) None
+          else Some(basicBlocks(b.block)))
+      }
+
       val nextBlock = function.basicBlocks.zip(function.basicBlocks.tail).toMap
 
       for (n <- NodeCollector.fromWalk(g.walkTopological)) {
@@ -82,8 +97,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         basicBlock.controlFlowInstructions ++= createControlFlow(n, nextBlock.get(basicBlock)) map appendComment(" - " + n.toString)
       }
       if (!backEdgesWereEnabled) BackEdges.disable(g)
-
-      basicBlocks.values.foreach(block => block.instructions ++= new PhiCodeGenerator(block).getInstructions)
 
       // spill param registers early and in a fixed order
       for (reg <- ParamRegisters)
@@ -290,15 +303,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               resultInstrs
 
             case n: nodes.Phi =>
-              if (n.getMode != Mode.getM && n.getMode != Mode.getX) {
-                n.getPreds.zipWithIndex.foreach { case (pred, idx) =>
-                  if (!n.getBlock.getPred(idx).isInstanceOf[nodes.Bad]) {
-                    val predBB = basicBlocks(n.getBlock.getPred(idx).block)
-                    val phiOperand = RegisterOperand(n.idx, n.getMode.getSizeBytes)
-                    predBB.phi(phiOperand) = getOperand(pred)
-                  }
-                }
-              }
+              if (n.getMode != Mode.getM && n.getMode != Mode.getX)
+                basicBlocks(n.block).phis += Phi(n.getPreds.map(getOperand).toSeq, regOp(n))
               Seq()
 
             case n@ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>

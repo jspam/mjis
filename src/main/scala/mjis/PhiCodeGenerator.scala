@@ -4,8 +4,8 @@ import mjis.asm._
 
 import scala.collection.mutable
 
-/** Creates Mov instructions for the contents of block.phi. */
-class PhiCodeGenerator(block: AsmBasicBlock) {
+/** Creates Mov instructions for the contents of `phi` with parallel move semantics. */
+class PhiCodeGenerator(phi: Map[RegisterOperand, Operand]) {
   // A phi permutation interpreted as a graph looks as follows: Each node has indegree <= 1
   // (because each register is written to at most once) and arbitrary outdegree.
   // Each of the connected subgraphs is thus either acyclic (and therefore a tree) or contains
@@ -14,7 +14,7 @@ class PhiCodeGenerator(block: AsmBasicBlock) {
 
   // Inverse of the Phi map: source operand -> list of registers its value is written to
   private val invertedPhi: Map[Operand, Iterable[RegisterOperand]] =
-    block.phi.groupBy(_._2).mapValues(_.map(_._1)).withDefaultValue(Seq())
+    phi.groupBy(_._2).mapValues(_.map(_._1)).withDefaultValue(Seq())
 
   // Cycles
   private val cycles = mutable.ArrayBuffer[List[RegisterOperand]]()
@@ -33,7 +33,7 @@ class PhiCodeGenerator(block: AsmBasicBlock) {
         }
       } else {
         visited += reg
-        block.phi.get(reg) match {
+        phi.get(reg) match {
           case None =>
             // no predecessor -> root of a tree
             roots += reg
@@ -48,7 +48,7 @@ class PhiCodeGenerator(block: AsmBasicBlock) {
     }
 
     val visited = mutable.Set[RegisterOperand]()
-    block.phi.keys.foreach(buildCyclesAndRootsRec(_, Nil, visited))
+    phi.keys.foreach(buildCyclesAndRootsRec(_, Nil, visited))
   }
 
   /** Writes the acyclic register permutation (= tree) starting at `rootOp`, skipping the successor
@@ -65,7 +65,7 @@ class PhiCodeGenerator(block: AsmBasicBlock) {
     }
 
     ordered.map { destOp =>
-      val srcOp = block.phi(destOp)
+      val srcOp = phi(destOp)
       Mov(srcOp, destOp).withComment(s" - acyclic permutation starting at $rootOp")
     }
   }

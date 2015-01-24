@@ -202,7 +202,15 @@ trait CompilerTestMatchers {
   class RegisterAllocatorInstrSeqMatcher(expected: String) extends Matcher[Seq[Instruction]] {
     override def apply(instrs: Seq[Instruction]): MatchResult = {
       val function = new AsmFunction("test")
-      function.prologue.instructions.appendAll(instrs)
+
+      val bb = new AsmBasicBlock()
+      bb.predecessors += Some(function.prologue)
+      function.prologue.successors += bb
+      bb.instructions.appendAll(instrs)
+      function.epilogue.predecessors += Some(bb)
+      bb.successors += function.epilogue
+
+      function.basicBlocks = List(function.prologue, bb, function.epilogue)
       new RegisterAllocatorMatcher(expected).apply(function)
     }
   }
