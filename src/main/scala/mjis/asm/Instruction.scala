@@ -97,7 +97,7 @@ object OperandSpec {
 abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*) {
   var comment = ""
   def opcode: String = this.getClass.getSimpleName.toLowerCase.stripSuffix("$")
-  def withComment(comment: String) = { this.comment = comment; this }
+  def withComment(comment: String) = { this.comment += comment; this }
   var stackPointerDisplacement: Int = 0
   def withStackPointerDisplacement(displacement: Int): Instruction = {
     this.stackPointerDisplacement = displacement

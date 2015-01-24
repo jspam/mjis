@@ -93,10 +93,10 @@ class FunctionRegisterAllocator(function: AsmFunction) {
   def allocateRegs() = {
     // Insert Mov instructions for Phi functions
     for ((pred, succ) <- function.controlFlowEdges) {
-      val parallelMoves = succ.phis.map { phi =>
+      val parallelMoves: Map[Operand, Operand] = succ.phis.map { phi =>
         phi.dest -> phi.srcs(succ.predecessors.indexOf(Some(pred)))
       }.toMap
-      val phiInstrs = new PhiCodeGenerator(parallelMoves).getInstructions()
+      val phiInstrs = new PhiCodeGenerator(parallelMoves, 0, 0).getInstructions()
 
       if (succ.predecessors.flatten.length == 1) {
         succ.instructions.insertAll(0, phiInstrs)
