@@ -224,11 +224,10 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  cmpb $1, %REG0{1}
         |  jne .L2
         |.L1:
-        |  movl $0, %REG2{4}
         |  jmp .L3
         |.L2:
-        |  movl %REG1{4}, %REG2{4}
         |.L3:
+        |  phi[%REG1{4}, $0] -> %REG2{4}
         |  movl %REG2{4}, %eax
         |.L4:
         |  ret"""))
@@ -247,65 +246,6 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L2:
         |  movl $0, %eax
         |.L3:
-        |  ret"""))
-  }
-
-  it should "circumvent the Swap problem when generating code for Phis" in {
-    fromMembers("public int foo(int x) { int y = 42; while (x < 5) { int tmp = x; x = y; y = tmp; } return y; }") should
-      succeedGeneratingCodeWith(template(
-        """_4Test_foo:
-          |  movl %esi, %REG0{4}
-          |.L0:
-          |  movl %REG0{4}, %REG1{4}    # x => REG1
-          |  movl $42, %REG2{4}         # y => REG2
-          |.L1:
-          |  cmpl $5, %REG1{4}
-          |  jge .L3
-          |.L2:
-          |  movl %REG2{4}, %REG3{4}    # tmp = y
-          |  movl %REG1{4}, %REG2{4}    # y = x
-          |  movl %REG3{4}, %REG1{4}    # x = tmp
-          |  jmp .L1
-          |.L3:
-          |  movl %REG2{4}, %eax
-          |.L4:
-          |  ret"""))
-  }
-
-  it should "generate code for Phis with multiple outputs" in {
-    fromMembers(
-      """public int foo(int n) {
-        |  int x6 = 6;
-        |  int x2 = 2;
-        |  int x1 = 1;
-        |
-        |  while (0 < n) {
-        |    x6 = x2;
-        |
-        |    int t = x2;
-        |    x2 = x1;
-        |    x1 = t;
-        |  }
-        |  return x6;
-        |}""".stripMargin) should succeedGeneratingCodeWith(template(
-      """_4Test_foo:
-        |  movl %esi, %REG0{4}
-        |.L0:
-        |  movl $1, %REG2{4}       # x1 => REG2
-        |  movl $6, %REG1{4}       # x6 => REG1
-        |  movl $2, %REG3{4}       # x2 => REG3
-        |.L1:
-        |  cmpl $0, %REG0{4}
-        |  jle .L3
-        |.L2:
-        |  movl %REG3{4}, %REG1{4} # x6 = x2
-        |  movl %REG3{4}, %REG4{4} # t = x2
-        |  movl %REG2{4}, %REG3{4} # x2 = x1
-        |  movl %REG4{4}, %REG2{4} # x1 = t
-        |  jmp .L1
-        |.L3:
-        |  movl %REG1{4}, %eax
-        |.L4:
         |  ret"""))
   }
 
