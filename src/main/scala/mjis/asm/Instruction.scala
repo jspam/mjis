@@ -127,7 +127,7 @@ case class Lea(value: AddressOperand, result: RegisterOperand) extends Instructi
 case class Mul(left: Operand) extends Instruction((left, READ | MEMORY),
   (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RDX, left.sizeBytes), WRITE | IMPLICIT))
 case class IDiv(left: Operand) extends Instruction((left, READ | MEMORY),
-  (RegisterOperand(RDX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RAX, left.sizeBytes), WRITE | IMPLICIT))
+  (RegisterOperand(RDX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT))
 case class Cdq(operandSize: Int) extends Instruction(
   (RegisterOperand(RAX, operandSize), READ | IMPLICIT), (RegisterOperand(RDX, operandSize), WRITE | IMPLICIT)) {
   override def suffix = ""
