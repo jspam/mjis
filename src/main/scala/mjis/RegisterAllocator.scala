@@ -437,14 +437,12 @@ class FunctionRegisterAllocator(function: AsmFunction,
   private def replaceRegisterOperands(instr: Instruction, map: RegisterOperand => Operand) = {
     instr.operands.zipWithIndex.foreach {
       case (r: RegisterOperand, idx) if r.regNr >= 0 =>
-        instr.comment += s" ${r.regNr} => ${map(r)}"
         instr.operands(idx) = map(r)
       case (a: AddressOperand, idx) =>
         instr.operands(idx) = a.copy(
           base = a.base.flatMap(r => Some(map(r.asInstanceOf[RegisterOperand]))),
           offset = a.offset.flatMap(r => Some(map(r.asInstanceOf[RegisterOperand])))
         )
-        instr.comment += s" $a => ${instr.operands(idx)}"
       case _ =>
     }
   }
