@@ -40,6 +40,24 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.contains(6) shouldBe false
   }
 
+  it should "merge newly inserted ranges with existing ones" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+    l1.addRange(2, 4)
+    l1.ranges should contain only LivenessRange(2, 5)
+
+    val l2 = new LivenessInterval(DummyRegOp)
+    l2.addRange(3, 5)
+    l2.addRange(5, 7)
+    l2.ranges should contain only LivenessRange(3, 7)
+
+    val l3 = new LivenessInterval(DummyRegOp)
+    l3.addRange(2, 3)
+    l3.addRange(5, 7)
+    l3.addRange(1, 8)
+    l3.ranges should contain only LivenessRange(1, 8)
+  }
+
   it should "contain its start position if it's a one-point interval" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(3, 3)
@@ -75,6 +93,34 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
 
     l1.start shouldBe 0
     l1.end shouldBe 6
+  }
+
+  it should "know whether it intersects a liveness range" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+
+    l1.intersects(LivenessRange(0, 3)) shouldBe false
+    l1.intersects(LivenessRange(1, 4)) shouldBe true
+    l1.intersects(LivenessRange(3, 4)) shouldBe true
+    l1.intersects(LivenessRange(5, 7)) shouldBe false
+    l1.intersects(LivenessRange(6, 7)) shouldBe false
+  }
+
+  it should "know whether it intersects another liveness interval" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+    l1.addRange(7, 9)
+
+    val l2 = new LivenessInterval(DummyRegOp)
+    l2.addRange(5, 7)
+
+    l1.intersects(l2) shouldBe false
+    l2.intersects(l1) shouldBe false
+
+    val l3 = new LivenessInterval(DummyRegOp)
+    l3.addRange(4, 6)
+    l1.intersects(l3) shouldBe true
+    l3.intersects(l1) shouldBe true
   }
 
   it should "compute the next intersection with another liveness interval" in {
@@ -159,6 +205,21 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.childAt(11) shouldBe None
   }
 
+  it should "append all split children to one parent" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(1, 6)
+    val l2 = l1.splitAt(4)
+    val l3 = l2.splitAt(2)
+
+    l1.splitParent shouldBe None
+    l2.splitParent shouldBe Some(l1)
+    l3.splitParent shouldBe Some(l1)
+
+    l1.splitChildren should contain only(l2, l3)
+    l2.splitChildren shouldBe empty
+    l3.splitChildren shouldBe empty
+  }
+
   it should "split when asked to split at its end position" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(4, 7)
@@ -190,11 +251,49 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.childAt(7) shouldBe Some(l1split)
   }
 
+  it should "extend the first existing range when setFrom is called" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+    l1.addRange(7, 9)
+    l1.setFrom(1)
+
+    l1.ranges should contain inOrderOnly (LivenessRange(1, 5), LivenessRange(7, 9))
+  }
+
   it should "add a new one-point range when setFrom is called on an empty interval" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.setFrom(5)
 
     l1.ranges should contain only LivenessRange(5, 5)
+  }
+
+  it should "return its next usage" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+
+    val u1 = RegisterUsage(3, OperandSpec.WRITE)
+    val u2 = RegisterUsage(5, OperandSpec.READ)
+    l1.usages += u1
+    l1.usages += u2
+
+    l1.nextUsage(0) shouldBe Some(u1)
+    l1.nextUsage(3) shouldBe Some(u1)
+    l1.nextUsage(4) shouldBe Some(u2)
+    l1.nextUsage(5) shouldBe Some(u2)
+    l1.nextUsage(6) shouldBe None
+  }
+
+  it should "return its next usage position" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+    l1.usages += RegisterUsage(3, OperandSpec.WRITE)
+    l1.usages += RegisterUsage(5, OperandSpec.READ)
+
+    l1.nextUsagePos(0) shouldBe 3
+    l1.nextUsagePos(3) shouldBe 3
+    l1.nextUsagePos(4) shouldBe 5
+    l1.nextUsagePos(5) shouldBe 5
+    l1.nextUsagePos(6) shouldBe Int.MaxValue
   }
 
 }
