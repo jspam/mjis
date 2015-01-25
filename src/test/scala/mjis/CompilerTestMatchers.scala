@@ -1,7 +1,7 @@
 package mjis
 
 import firm.Graph
-import mjis.asm.{AsmFunction, AsmBasicBlock, AsmProgram, Instruction}
+import mjis.asm._
 import mjis.util.CCodeGenerator
 
 import org.scalatest.Assertions
@@ -175,13 +175,14 @@ trait CompilerTestMatchers {
     }
   }
 
-  class RegisterAllocatorMatcher(expected: String) extends Matcher[AsmFunction] {
+  class RegisterAllocatorMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[AsmFunction] {
     override def apply(function: AsmFunction): MatchResult = {
+      new FunctionRegisterAllocator(function, regs, callerSaveRegs,
+        tempRegNo1 = AMD64Registers.RBP, tempRegNo2 = AMD64Registers.R15).allocateRegs()
+
       val program = new AsmProgram()
       program.functions += function
-
-      val regAllocator = new RegisterAllocator(program)
-      val asmGenerator = new MjisAssemblerFileGenerator(regAllocator.getResult(), null)
+      val asmGenerator = new MjisAssemblerFileGenerator(program, null)
       val generatedCode = asmGenerator.generateCode()
 
       // output the whole code for debugging purposes
@@ -199,19 +200,21 @@ trait CompilerTestMatchers {
     }
   }
 
-  class RegisterAllocatorInstrSeqMatcher(expected: String) extends Matcher[Seq[Instruction]] {
+  class RegisterAllocatorInstrSeqMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[Seq[Instruction]] {
     override def apply(instrs: Seq[Instruction]): MatchResult = {
       val function = new AsmFunction("test")
 
-      val bb = new AsmBasicBlock()
-      bb.predecessors += Some(function.prologue)
-      function.prologue.successors += bb
-      bb.instructions.appendAll(instrs)
-      function.epilogue.predecessors += Some(bb)
-      bb.successors += function.epilogue
+      val basicBlock = new AsmBasicBlock()
+      basicBlock.instructions ++= instrs
+      function.basicBlocks = List(basicBlock)
 
-      function.basicBlocks = List(function.prologue, bb, function.epilogue)
-      new RegisterAllocatorMatcher(expected).apply(function)
+      function.prologue.successors += basicBlock
+      basicBlock.predecessors += Some(function.prologue)
+
+      basicBlock.successors += function.epilogue
+      function.epilogue.predecessors += Some(basicBlock)
+
+      new RegisterAllocatorMatcher(regs, callerSaveRegs, expected).apply(function)
     }
   }
 
@@ -260,8 +263,10 @@ trait CompilerTestMatchers {
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def succeedGeneratingCodeWith(expectedString: String) = new CodeGeneratorMatcher(expectedString)
-  def succeedAllocatingRegistersInstrSeqWith(expectedString: String) = new RegisterAllocatorInstrSeqMatcher(expectedString)
-  def succeedAllocatingRegistersWith(expectedString: String) = new RegisterAllocatorMatcher(expectedString)
+  def succeedAllocatingRegistersInstrSeqWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
+    new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, expectedString)
+  def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
+    new RegisterAllocatorMatcher(regs, callerSaveRegs, expectedString)
   def passIntegrationTest(useFirmBackend: Boolean) = new IntegrationTestMatcher(useFirmBackend)
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)
