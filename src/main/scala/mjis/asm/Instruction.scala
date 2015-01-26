@@ -8,52 +8,6 @@ import scala.collection.mutable.ListBuffer
 
 import mjis.asm.AMD64Registers._
 
-case class Register(subregs: Map[Int, String])
-
-object AMD64Registers {
-  val RSP = -1
-  val RAX = -2
-  val RBX = -3
-  val RDI = -4
-  val RSI = -5
-  val RDX = -6
-  val RCX = -7
-  val R8  = -8
-  val R9  = -9
-  val R10 = -10
-  val R11 = -11
-  val R12 = -12
-  val R13 = -13
-  val R14 = -14
-  val R15 = -15
-  val RBP = -16
-
-  val Registers = Map[Int, Register] (
-    RSP -> Register(Map(8 -> "rsp", 4 -> "esp", 2 -> "sp", 1 -> "spl")),
-    RBP -> Register(Map(8 -> "rbp", 4 -> "ebp", 2 -> "bp", 1 -> "bpl")),
-    RAX -> Register(Map(8 -> "rax", 4 -> "eax", 2 -> "ax", 1 -> "al")),
-    RBX -> Register(Map(8 -> "rbx", 4 -> "ebx", 2 -> "bx", 1 -> "bl")),
-    RDI -> Register(Map(8 -> "rdi", 4 -> "edi", 2 -> "di", 1 -> "dil")),
-    RSI -> Register(Map(8 -> "rsi", 4 -> "esi", 2 -> "si", 1 -> "sil")),
-    RDX -> Register(Map(8 -> "rdx", 4 -> "edx", 2 -> "dx", 1 -> "dl")),
-    RCX -> Register(Map(8 -> "rcx", 4 -> "ecx", 2 -> "cx", 1 -> "cl")),
-    R8  -> Register(Map(8 -> "r8", 4 -> "r8d", 2 -> "r8w", 1 -> "r8b")),
-    R9  -> Register(Map(8 -> "r9", 4 -> "r9d", 2 -> "r9w", 1 -> "r9b")),
-    R10 -> Register(Map(8 -> "r10", 4 -> "r10d", 2 -> "r10w", 1 -> "r10b")),
-    R11 -> Register(Map(8 -> "r11", 4 -> "r11d", 2 -> "r11w", 1 -> "r11b")),
-    R12 -> Register(Map(8 -> "r12", 4 -> "r12d", 2 -> "r12w", 1 -> "r12b")),
-    R13 -> Register(Map(8 -> "r13", 4 -> "r13d", 2 -> "r13w", 1 -> "r13b")),
-    R14 -> Register(Map(8 -> "r14", 4 -> "r14d", 2 -> "r14w", 1 -> "r14b")),
-    R15 -> Register(Map(8 -> "r15", 4 -> "r15d", 2 -> "r15w", 1 -> "r15b"))
-  )
-
-  // Registers to pass parameters in (in order)
-  val ParamRegisters = List(RDI, RSI, RDX, RCX, R8, R9)
-
-  val CallerSaveRegisters = Set(RAX, RDI, RSI, RDX, RCX, R8, R9, R10, R11)
-  val CalleeSaveRegisters = Set(RBP, RBX, R12, R13, R14, R15)
-}
-
 object Instruction {
   def suffixForSize(sizeBytes: Int): String = sizeBytes match {
     case 8 => "q"
@@ -62,6 +16,35 @@ object Instruction {
     case 1 => "b"
     case 0 => ""
   }
+
+  def unapply0(opId: Int)(instr: Instruction): Boolean = instr.opId == opId
+  def unapply1(opId: Int)(instr: Instruction): Option[Operand] = if (instr.opId != opId) None else Some(instr.operands(0))
+  def unapply2(opId: Int)(instr: Instruction): Option[(Operand, Operand)] = if (instr.opId != opId) None else Some((instr.operands(0), instr.operands(1)))
+}
+
+object OpId {
+  val ADD  = 1
+  val AND  = 2
+  val CALL = 3
+  val CDQ  = 4
+  val CMP  = 5
+  val DEC  = 6
+  val IDIV = 7
+  val INC  = 8
+  val JMP  = 9
+  val SUB  = 10
+  val NEG  = 11
+  val LEA  = 12
+  val MUL  = 13
+  val SHL  = 14
+  val MOV  = 15
+  val RET  = 16
+  val JL   = 17
+  val JLE  = 18
+  val JGE  = 19
+  val JG   = 20
+  val JE   = 21
+  val JNE  = 22
 }
 
 sealed abstract class Operand(val sizeBytes: Int)
@@ -94,9 +77,8 @@ object OperandSpec {
   final val IMPLICIT = OperandSpec(1 << 5) // implicit operand, does not occur in textual representation
 }
 
-abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*) {
+sealed class Instruction(val opId: Int, val opcode: String, operandsWithSpec: (Operand, OperandSpec)*) {
   var comment = ""
-  def opcode: String = this.getClass.getSimpleName.toLowerCase.stripSuffix("$")
   def withComment(comment: String) = { this.comment += comment; this }
   var stackPointerDisplacement: Int = 0
   def withStackPointerDisplacement(displacement: Int): Instruction = {
@@ -105,72 +87,166 @@ abstract class Instruction(private val operandsWithSpec: (Operand, OperandSpec)*
   }
   val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)
   val operandSpecs = Seq[OperandSpec](operandsWithSpec.map(_._2):_*)
-  def suffix = {
-    val (constOperands, nonConstOperands) = operands.partition(_.isInstanceOf[ConstOperand])
-    if (nonConstOperands.isEmpty) {
-      suffixForSize(0)
-    } else {
-      assert(nonConstOperands.tail.forall(_.sizeBytes == nonConstOperands.head.sizeBytes))
-      assert(constOperands.forall(_.sizeBytes <= nonConstOperands.head.sizeBytes))
-      suffixForSize(nonConstOperands.head.sizeBytes)
+  def suffix = this match {
+    case Call(_) | Cdq() | Ret() => ""
+    case Mov(src, dest) => src match {
+      case _ : ConstOperand => suffixForSize(dest.sizeBytes)
+      case _ =>
+        assert(src.sizeBytes <= dest.sizeBytes)
+        if (src.sizeBytes < dest.sizeBytes) "s" + suffixForSize(src.sizeBytes) + suffixForSize(dest.sizeBytes)
+        else suffixForSize(dest.sizeBytes)
     }
-  }
-}
-
-case class And(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
-case class Add(left: Operand, rightAndResult: Operand) extends Instruction((left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
-case class Inc(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
-case class Sub(subtrahend: Operand, minuendAndResult: Operand) extends Instruction((subtrahend, READ | CONST | MEMORY), (minuendAndResult, READ | WRITE | MEMORY))
-case class Dec(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
-case class Neg(valueAndResult: Operand) extends Instruction((valueAndResult, READ | WRITE | MEMORY))
-case class Lea(value: AddressOperand, result: RegisterOperand) extends Instruction((value, MEMORY), (result, WRITE))
-case class Mul(left: Operand) extends Instruction((left, READ | MEMORY),
-  (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RDX, left.sizeBytes), WRITE | IMPLICIT))
-case class IDiv(left: Operand) extends Instruction((left, READ | MEMORY),
-  (RegisterOperand(RDX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT))
-case class Cdq(operandSize: Int) extends Instruction(
-  (RegisterOperand(RAX, operandSize), READ | IMPLICIT), (RegisterOperand(RDX, operandSize), WRITE | IMPLICIT)) {
-  override def suffix = ""
-}
-case class Shl(shift: ConstOperand, valueAndResult: Operand) extends Instruction((shift, READ | CONST), (valueAndResult, READ | WRITE | MEMORY))
-case class Cmp(left: Operand, right: Operand) extends Instruction((left, READ | CONST | MEMORY), (right, READ | MEMORY))
-case class Call(method: LabelOperand, registerParams: Seq[RegisterOperand]) extends Instruction(
-  Seq((method, NONE)) ++ registerParams.map((_, READ | IMPLICIT)):_*) {
-  override def suffix = ""
-}
-case class CallWithReturn(method: LabelOperand, returnValueSizeBytes: Int, registerParams: Seq[RegisterOperand]) extends Instruction(
-  Seq((method, NONE)) ++ registerParams.map((_, READ | IMPLICIT)) ++
-  Seq((RegisterOperand(RAX, returnValueSizeBytes), WRITE | IMPLICIT)):_*) {
-  override def opcode = "call"
-  override def suffix = ""
-}
-case class Mov(src: Operand, dest: Operand) extends Instruction((src, READ | CONST | MEMORY), (dest, WRITE | MEMORY)) {
-  override def suffix = src match {
-    case _ : ConstOperand => suffixForSize(dest.sizeBytes)
     case _ =>
-      assert(src.sizeBytes <= dest.sizeBytes)
-      if (src.sizeBytes < dest.sizeBytes) "s" + suffixForSize(src.sizeBytes) + suffixForSize(dest.sizeBytes)
-      else suffixForSize(dest.sizeBytes)
+      val (constOperands, nonConstOperands) = operands.partition(_.isInstanceOf[ConstOperand])
+      if (nonConstOperands.isEmpty) {
+        suffixForSize(0)
+      } else {
+        assert(nonConstOperands.tail.forall(_.sizeBytes == nonConstOperands.head.sizeBytes))
+        assert(constOperands.forall(_.sizeBytes <= nonConstOperands.head.sizeBytes))
+        suffixForSize(nonConstOperands.head.sizeBytes)
+      }
+  }
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[Instruction]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: Instruction =>
+      (that canEqual this) &&
+        operands == that.operands &&
+        operandSpecs == that.operandSpecs &&
+        opId == that.opId
+    case _ => false
+  }
+
+  override def hashCode(): Int = Seq(operands, operandSpecs, opId).hashCode()
+
+  override def toString = this.opcode + " " +
+    this.operands.zip(this.operandSpecs).filter { case (_, spec) => !spec.contains(OperandSpec.IMPLICIT) }.map(_._1).mkString(", ")
+}
+
+object And {
+  def apply(left: Operand, rightAndResult: Operand): Instruction =
+    new Instruction(OpId.AND, "and", (left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2(OpId.AND)(instr)
+}
+
+object Add {
+  def apply(left: Operand, rightAndResult: Operand): Instruction =
+    new Instruction(OpId.ADD, "add", (left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2(OpId.ADD)(instr)
+}
+
+object Inc {
+  def apply(valueAndResult: Operand): Instruction =
+    new Instruction(OpId.INC, "inc", (valueAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply1(OpId.INC)(instr)
+}
+
+object Sub {
+  def apply(subtrahend: Operand, minuendAndResult: Operand): Instruction =
+    new Instruction(OpId.SUB, "sub", (subtrahend, READ | CONST | MEMORY), (minuendAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2(OpId.SUB)(instr)
+}
+
+object Dec {
+  def apply(valueAndResult: Operand): Instruction =
+    new Instruction(OpId.DEC, "dec", (valueAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply1(OpId.DEC)(instr)
+}
+
+object Neg {
+  def apply(valueAndResult: Operand): Instruction =
+    new Instruction(OpId.NEG, "neg", (valueAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply1(OpId.NEG)(instr)
+}
+
+object Lea {
+  def apply(value: AddressOperand, result: RegisterOperand): Instruction =
+    new Instruction(OpId.LEA, "lea", (value, MEMORY), (result, WRITE))
+  def unapply(instr: Instruction) = unapply2(OpId.LEA)(instr)
+}
+
+object Mul {
+  def apply(left: Operand): Instruction =
+    new Instruction(OpId.MUL, "mul", (left, READ | MEMORY),
+      (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RDX, left.sizeBytes), WRITE | IMPLICIT))
+  def unapply(instr: Instruction) = unapply1(OpId.MUL)(instr)
+}
+
+object IDiv {
+  def apply(left: Operand): Instruction =
+    new Instruction(OpId.IDIV, "idiv", (left, READ | MEMORY),
+      (RegisterOperand(RDX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT))
+  def unapply(instr: Instruction) = unapply1(OpId.IDIV)(instr)
+}
+
+object Cdq {
+  def apply(operandSize: Int) : Instruction =
+    new Instruction(OpId.CDQ, "cdq",
+      (RegisterOperand(RAX, operandSize), READ | IMPLICIT), (RegisterOperand(RDX, operandSize), WRITE | IMPLICIT))
+  def unapply(instr: Instruction) = unapply0(OpId.CDQ)(instr)
+}
+
+object Shl {
+  def apply(shift: ConstOperand, valueAndResult: Operand): Instruction =
+    new Instruction(OpId.SHL, "shl", (shift, READ | CONST), (valueAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2(OpId.SHL)(instr)
+}
+
+object Cmp {
+  def apply(left: Operand, right: Operand): Instruction =
+    new Instruction(OpId.CMP, "cmp", (left, READ | CONST | MEMORY), (right, READ | MEMORY))
+  def unapply(instr: Instruction) = unapply2(OpId.CMP)(instr)
+}
+
+object Call {
+  def apply(method: LabelOperand, registerParams: Seq[RegisterOperand]) : Instruction =
+    new Instruction(OpId.CALL, "call", Seq((method, NONE)) ++ registerParams.map((_, READ | IMPLICIT)):_*)
+  def apply(method: LabelOperand, returnValueSizeBytes: Int, registerParams: Seq[RegisterOperand]) : Instruction =
+    new Instruction(OpId.CALL, "call",
+      Seq((method, NONE)) ++ registerParams.map((_, READ | IMPLICIT)) ++
+      Seq((RegisterOperand(RAX, returnValueSizeBytes), WRITE | IMPLICIT)):_*)
+  def unapply(instr: Instruction) = unapply1(OpId.CALL)(instr)
+}
+
+object Mov {
+  def apply(src: Operand, dest: Operand) : Instruction =
+    new Instruction(OpId.MOV, "mov", (src, READ | CONST | MEMORY), (dest, WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2(OpId.MOV)(instr)
+}
+
+object Jmp {
+  def apply(dest: BasicBlockOperand) : Instruction = new Instruction(OpId.JMP, "jmp", (dest, READ))
+  def unapply(instr: Instruction) = unapply1(OpId.JMP)(instr)
+}
+
+object JmpConditional {
+  def apply(dest: BasicBlockOperand, relation: Relation, negate: Boolean): Instruction = {
+    val (opId, opcode) = relation match {
+      case Relation.Less => if (!negate) (OpId.JL, "jl") else (OpId.JGE, "jge")
+      case Relation.GreaterEqual => if (!negate) (OpId.JGE, "jge") else (OpId.JL, "jl")
+
+      case Relation.Greater => if (!negate) (OpId.JG, "jg") else (OpId.JLE, "jle")
+      case Relation.LessEqual => if (!negate) (OpId.JLE, "jle") else (OpId.JG, "jg")
+
+      case Relation.Equal => if (!negate) (OpId.JE, "je") else (OpId.JNE, "jne")
+      case Relation.UnorderedLessGreater => if (!negate) (OpId.JNE, "jne") else (OpId.JE, "je")
+
+      case _ => ???
+    }
+    new Instruction(opId, opcode, (dest, READ))
+  }
+  def unapply(instr: Instruction) = instr.opId match {
+    case OpId.JL | OpId.JLE | OpId.JGE | OpId.JG | OpId.JE | OpId.JNE => Some(instr.operands(0))
+    case _ => None
   }
 }
-case class Jmp(dest: BasicBlockOperand) extends Instruction((dest, READ))
-case class JmpConditional(dest: BasicBlockOperand, relation: Relation, negate: Boolean) extends Instruction((dest, READ)) {
-  override def opcode: String = relation match {
-    case Relation.Less => if (!negate) "jl" else "jge"
-    case Relation.GreaterEqual => if (!negate) "jge" else "jl"
 
-    case Relation.Greater => if (!negate) "jg" else "jle"
-    case Relation.LessEqual => if (!negate) "jle" else "jg"
-
-    case Relation.Equal => if (!negate) "je" else "jne"
-    case Relation.UnorderedLessGreater => if (!negate) "jne" else "je"
-
-    case _ => ???
-  }
-}
-case object Ret extends Instruction
-case class Ret(returnValueSizeBytes: Int) extends Instruction((RegisterOperand(RAX, returnValueSizeBytes), READ | IMPLICIT)) {
-  override def suffix = ""
+object Ret {
+  def apply() = new Instruction(OpId.RET, "ret")
+  def apply(returnValueSizeBytes: Int) = new Instruction(OpId.RET, "ret", (RegisterOperand(RAX, returnValueSizeBytes), READ | IMPLICIT))
+  def unapply(instr: Instruction) = unapply0(OpId.RET)(instr)
 }
 
 case class Phi(srcs: Seq[Operand], dest: RegisterOperand)
+

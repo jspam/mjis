@@ -158,13 +158,15 @@ class FunctionRegisterAllocator(function: AsmFunction,
       for (op <- live) interval(op).addRange(blockStartPos(b), blockEndPos(b))
 
       for ((instr, instrPos) <- instrsWithPos(b).toSeq.reverse) {
-        // Block caller save registers
-        if (instr.isInstanceOf[Call] || instr.isInstanceOf[CallWithReturn]) {
-          for (reg <- PhysicalRegisters.filter(CallerSaveRegisters)) {
-            // Assign size 8 to the register operand so that debug output will
-            // work nicely.
-            interval(RegisterOperand(reg, 8)).addRange(instrPos, instrPos)
-          }
+        instr match {
+          case Call(_) =>
+            // Block caller save registers
+            for (reg <- PhysicalRegisters.filter(CallerSaveRegisters)) {
+              // Assign size 8 to the register operand so that debug output will
+              // work nicely.
+              interval(RegisterOperand(reg, 8)).addRange(instrPos, instrPos)
+            }
+          case _ =>
         }
 
         for ((op, spec) <- getRegisterUsages(instr)) {
