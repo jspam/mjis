@@ -246,11 +246,6 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
       })
     }
 
-    private def collectJmps(jmps: Seq[Node]): Node = {
-      constr.setCurrentBlock(createAndMatureBlock(jmps))
-      constr.newJmp()
-    }
-
     override def visit(expr: Apply): ExprResult = {
       expr.decl match {
         // short-circuiting operators
@@ -265,7 +260,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           val rhs = exprResultToControlFlow(expr.arguments(1).accept(this))
 
           // collectJmps necessary to uphold ControlFlow invariant
-          ControlFlow(List(collectJmps(lhs.falseJmps), collectJmps(rhs.falseJmps)), rhs.trueJmps)
+          ControlFlow(lhs.falseJmps ++ rhs.falseJmps, rhs.trueJmps)
         case Builtins.BooleanOrDecl =>
           val lhs = exprResultToControlFlow(expr.arguments(0).accept(this))
 
@@ -273,7 +268,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
           val rhs = exprResultToControlFlow(expr.arguments(1).accept(this))
 
           // collectJmps necessary to uphold ControlFlow invariant
-          ControlFlow(rhs.falseJmps, List(collectJmps(lhs.trueJmps), collectJmps(rhs.trueJmps)))
+          ControlFlow(rhs.falseJmps, lhs.trueJmps ++ rhs.trueJmps)
 
         // other methods
 
