@@ -33,11 +33,13 @@ object AsmTestHelper {
   private def stripComments: String => String = "\\s*#.*".r.replaceAllIn(_, "")
 
   private def normalize(code: String): String = {
+    val withoutAligns = "\r?\n?\t.p2align 4,,15".r.replaceAllIn(code, "")
+
     val labelMappings = createLabelMappings(code)
-    val tmp = ".L(\\d+)".r.replaceAllIn(code, match_ => ".L" + labelMappings(match_.group(1)))
+    val normalizedLabels = ".L(\\d+)".r.replaceAllIn(withoutAligns, match_ => ".L" + labelMappings(match_.group(1)))
 
     val registerMappings = createRegisterMappings(code)
-    "%REG(\\d+)".r.replaceAllIn(tmp, match_ => "%REG" + registerMappings(match_.group(1)))
+    "%REG(\\d+)".r.replaceAllIn(normalizedLabels, match_ => "%REG" + registerMappings(match_.group(1)))
   }
 
   def isIsomorphic(left: String, right: String): MatchResult =
