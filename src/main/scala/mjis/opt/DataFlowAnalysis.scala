@@ -2,6 +2,7 @@ package mjis.opt
 
 import firm._
 import firm.nodes._
+import mjis.util.Digraph
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import mjis.opt.FirmExtensions._
@@ -29,7 +30,7 @@ object DataFlowAnalysis {
     val m = mutable.Map[Block, A]().withDefaultValue(bot)
 
     val worklist = NodeCollector.fromBlockWalk(g.walkBlocks).to[mutable.Queue]
-    val backEdges = g.getBlockBackEdges
+    val backEdges = Digraph.transpose(g.getBlockEdges)
 
     while (worklist.nonEmpty) {
       val block = worklist.dequeue()
