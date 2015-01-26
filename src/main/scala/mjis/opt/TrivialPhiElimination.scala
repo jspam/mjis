@@ -4,11 +4,9 @@ import firm._
 import firm.nodes._
 import scala.collection.JavaConversions._
 
-object TrivialPhiElimination extends Optimization {
+object TrivialPhiElimination extends Optimization(needsBackEdges = true) {
 
-  override def optimize(g: Graph): Unit = {
-    BackEdges.enable(g)
-
+  override def _optimize(g: Graph): Unit = {
     g.walk(new NodeVisitor.Default {
       override def visit(node: Phi): Unit = {
         // skip memory phis
@@ -20,7 +18,7 @@ object TrivialPhiElimination extends Optimization {
         // trivial phi
         if (preds.size == 1) {
           val users = BackEdges.getOuts(node).toList
-          GraphBase.exchange(node, preds.head)
+          exchange(node, preds.head)
           // recurse into all users which may have become trivial too
           users.foreach(_.node match {
             case phi: Phi => visit(phi)
@@ -29,8 +27,6 @@ object TrivialPhiElimination extends Optimization {
         }
       }
     })
-
-    BackEdges.disable(g)
   }
 
 }

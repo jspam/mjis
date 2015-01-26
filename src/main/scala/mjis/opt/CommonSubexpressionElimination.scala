@@ -7,7 +7,7 @@ import scala.collection.JavaConversions._
 
 object CommonSubexpressionElimination extends Optimization {
 
-  def optimize(g: Graph): Unit = {
+  def _optimize(g: Graph): Unit = {
     // map from data uniquely identifying a subexpression to the representing node
     val m = mutable.Map[AnyRef, Node]()
 
@@ -25,7 +25,7 @@ object CommonSubexpressionElimination extends Optimization {
         case Some(nodeData) =>
           val data = (node.getOpCode, node.getBlock, node.getMode, node.getPreds.toList, nodeData)
           m.get(data) match {
-            case Some(n2) => GraphBase.exchange(node, n2)
+            case Some(n2) => exchange(node, n2)
             case None => m += data -> node
           }
         case None =>
