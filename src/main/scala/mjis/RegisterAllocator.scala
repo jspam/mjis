@@ -53,7 +53,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
   val activationRecord = mutable.HashMap[Int, Int]()
 
   private def activationRecordOperand(sizeBytes: Int): ActivationRecordOperand = {
-    activationRecordSize += sizeBytes
+    activationRecordSize = CodeGenerator.align(activationRecordSize + sizeBytes, sizeBytes)
     ActivationRecordOperand(-activationRecordSize, sizeBytes)
   }
 
@@ -497,6 +497,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
 
   private def convertArOperands() = {
     val rsp = RegisterOperand(RSP, 8)
+    activationRecordSize = CodeGenerator.align(activationRecordSize)
 
     for (b <- function.basicBlocks) {
       for (instr <- b.allInstructions) {

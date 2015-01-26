@@ -117,13 +117,13 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(0, 4), AddressOperand(base = Some(RegisterOperand(10, 4)), sizeBytes = 4))
     ) should succeedAllocatingRegistersInstrSeqWith(Seq(RCX), callerSaveRegs = Set(RCX),
       """  movl $0, %ecx
-        |  movl %ecx, (%rsp)  # spill 1
+        |  movl %ecx, 4(%rsp)  # spill 1
         |  call _foobar
-        |  movl (%rsp), %ecx  # reload 1
+        |  movl 4(%rsp), %ecx  # reload 1
         |  movl $0, (%ecx)
-        |  movl %ecx, (%rsp)  # spill 2
+        |  movl %ecx, 4(%rsp)  # spill 2
         |  call _foobar
-        |  movl (%rsp), %ecx  # reload 2
+        |  movl 4(%rsp), %ecx  # reload 2
         |  movl $0, (%ecx)""")
   }
 
