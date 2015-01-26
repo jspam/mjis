@@ -51,7 +51,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       withPersistentDefault(b => new AsmBasicBlock(if (b == null) -1 else b.getNr))
     val function = new AsmFunction(g.getEntity.getLdName)
 
-    val usedParamRegisters = mutable.Map[Int, Node]()
+    val usedParams = mutable.Map[Int, Node]()
     val toVisit = mutable.Queue[Node]()
 
     def getResult(): AsmFunction = {
@@ -96,11 +96,12 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
       if (!backEdgesWereEnabled) BackEdges.disable(g)
 
-      // spill param registers early and in a fixed order
-      for (reg <- ParamRegisters)
-        usedParamRegisters.get(reg).foreach {
-          n => function.prologue.instructions += Mov(RegisterOperand(reg, n.getMode.getSizeBytes), regOp(n))
-        }
+      for ((argNum, n) <- usedParams.toSeq.sortBy(_._1))
+        // save used param registers, load used stack params
+        function.prologue.instructions += Mov(
+          if (argNum < ParamRegisters.length) RegisterOperand(ParamRegisters(argNum), n.getMode.getSizeBytes)
+          else ActivationRecordOperand(8 * (argNum - ParamRegisters.length + 1 /* return address */), n.getMode.getSizeBytes),
+          regOp(n))
 
       function.epilogue.controlFlowInstructions +=
         (if (g.methodType.getNRess > 0) Ret(g.methodType.getResType(0).getSizeBytes) else Ret)
@@ -305,12 +306,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
                 basicBlocks(n.block).phis += Phi(n.getPreds.map(getOperand).toSeq, regOp(n))
               Seq()
 
-            case n@ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
-              if (argNum < ParamRegisters.length) {
-                usedParamRegisters += ((ParamRegisters(argNum), n))
-              }
-              Seq()
-
             case _: nodes.Block | _: nodes.Start | _: nodes.End | _: nodes.Proj |
                  _: nodes.Address | _: nodes.Const | _: nodes.Return | _: nodes.Jmp |
                  _: nodes.Cmp | _: nodes.Cond | _: nodes.Bad | _: nodes.Unknown => Seq()
@@ -321,8 +316,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     private def getOperand(node: Node): Operand = getCanonicalNode(node) match {
       case n : nodes.Const => ConstOperand(n.getTarval.asInt(), n.getMode.getSizeBytes)
       case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
-        if (argNum < ParamRegisters.length) regOp(n) else ActivationRecordOperand(
-        8 * (argNum - ParamRegisters.length + 1 /* return address */), n.getMode.getSizeBytes)
+        usedParams(argNum) = n
+        regOp(n)
       case n : nodes.Unknown => ConstOperand(0, n.getMode.getSizeBytes)
       case n => regOp(n)
     }
