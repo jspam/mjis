@@ -63,6 +63,7 @@ object ConstantFolding extends Optimization(needsBackEdges = true) {
           case List(TargetValueExtr(0), _) | List(_, TargetValueExtr(0)) => new TargetValue(0, Mode.getIs)
           case _ => liftBin(_.mul(_))
         }
+        case _: Shl => liftBin(_.shl(_))
         case _: Minus => liftUnary(_.neg, values(0))
         case cmp: Cmp => liftBin((x, y) => fromBool(x.compare(y).contains(cmp.getRelation)))
         case _ => conflicting
