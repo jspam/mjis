@@ -19,11 +19,12 @@ object FirmExtensions {
   implicit class GraphExt(g: Graph) {
 
     /**
-     * "Deletes" a div or mod node by redirecting the graph's memory flow
+     * "Deletes" a memory node by redirecting the graph's memory flow
      */
-    def deleteDivOrMod(node: Node): Unit = {
-      for (proj@ProjExtr(_, Div.pnM /* == Mod.pnM */) <- BackEdges.getOuts(node).map(_.node))
-        GraphBase.exchange(proj, node.getPred(0))
+    def killMemoryNode(node: Node): Unit = node match {
+      case _: Div | _: Mod | _: Store | _: Load =>
+        for (proj@ProjExtr(_, Div.pnM /* == Mod.pnM == ... */) <- BackEdges.getOuts(node).map(_.node))
+          GraphBase.exchange(proj, node.getPred(0))
     }
 
     // TODO: Use ir_edgekind_t.EDGE_KIND_BLOCK if we're allowed to
