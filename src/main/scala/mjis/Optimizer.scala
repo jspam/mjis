@@ -14,16 +14,19 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     firm.Program.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-Optimizer"))
   }
 
-  override protected def getResult(): Unit = {
-    ConstantFolding.optimize()
-    Normalization.optimize()
-    CommonSubexpressionElimination.optimize()
-    TrivialPhiElimination.optimize()
-    LoopStrengthReduction.optimize()
+  val highLevelOptimizations = List(LoopStrengthReduction)
+  val generalOptimizations = List(
+    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities)
 
+  def exec(optimizations: List[Optimization]): Unit = {
+    // always run all optimizations
+    while (optimizations.map(_.optimize()).exists(b => b)) {}
+  }
+
+  override protected def getResult(): Unit = {
+    exec(generalOptimizations ++ highLevelOptimizations)
     Util.lowerSels()
-    Identities.optimize()
-    CommonSubexpressionElimination.optimize()
+    exec(generalOptimizations)
   }
 
 }

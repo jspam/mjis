@@ -23,11 +23,9 @@ import mjis.opt.FirmExtensions._
  *   ptr += incr * sizeof(a[0]);
  * }
  */
-object LoopStrengthReduction extends Optimization {
+object LoopStrengthReduction extends Optimization(needsBackEdges = true) {
 
-  override def optimize(g: Graph): Unit = {
-    BackEdges.enable(g)
-
+  override def _optimize(g: Graph): Unit = {
     val inductionVars = g.getInductionVariables.map(v => v.value -> v).toMap[Node, InductionVariable]
     val dominators = g.getDominators
 
@@ -49,13 +47,11 @@ object LoopStrengthReduction extends Optimization {
               Mode.getP
             )
             ptr.setPred(1, ptrIncrAdd)
-            GraphBase.exchange(sel, ptr)
+            exchange(sel, ptr)
           }
         case None =>
       }
     })
-
-    BackEdges.disable(g)
   }
 
 }
