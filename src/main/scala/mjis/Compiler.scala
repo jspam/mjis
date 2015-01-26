@@ -42,6 +42,7 @@ object Compiler {
            pipeline: Pipeline = defaultPipeline,
            config: Config = Config()): Either[Phase[_], List[Finding]] = {
     val phases = ListBuffer[Phase[AnyRef]]()
+    var baseTime = System.nanoTime()
     for (cls <- pipeline) {
       if (phases.isEmpty)
         // need to special case the lexer because it has multiple constructors,
@@ -57,8 +58,15 @@ object Compiler {
       }
 
       // Don't force the Lexer result because it is iterable only once.
-      if (cls != classOf[Lexer])
+      if (cls != classOf[Lexer]) {
         phases.last.forceResult()
+        if (config.printTimings) {
+          val currentTime = System.nanoTime()
+          System.out.println((if (cls == classOf[Parser]) "Lexer/Parser" else cls.getSimpleName) +
+            s": ${(currentTime-baseTime)/1000000} ms")
+          baseTime = currentTime
+        }
+      }
 
       val findings = phases.flatMap(_.findings)
       if (findings.exists(_.severity == Severity.ERROR))
