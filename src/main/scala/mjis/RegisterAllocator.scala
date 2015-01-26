@@ -120,8 +120,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
     b.allInstructions.zip(Range(blockStartPos(b) + 2, blockEndPos(b), 2).iterator)
 
 
-  /** Additional move instructions (for splits/spills and SSA deconstruction) to be inserted
-    * _after_ the instruction whose position is specified by the key. */
+  /** Additional move instructions with parallel move semantics. The keys must be
+    * odd numbers. */
   val insertedInstrs = mutable.Map[Int, mutable.ListBuffer[(Operand, Operand)]]().
     withPersistentDefault(_ => ListBuffer[(Operand, Operand)]())
 
