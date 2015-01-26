@@ -23,7 +23,6 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   def template(code: String) =
     s"""  .text
-      |  .p2align 4,,15
       |
       |$code
       |

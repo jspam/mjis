@@ -82,13 +82,14 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     def emit(s: String, indent: Boolean = true) = result.append(if (indent && s.nonEmpty) s"\t$s$n" else s"$s$n")
 
     emit(".text")
-    emit(".p2align 4,,15")
 
     input.functions.foreach(function => {
       emit("")
+      emit(".p2align 4,,15")
       emit(s"${function.name}:", indent = false)
 
-      for (block <- function.basicBlocks) {
+      for (Seq(pred, block) <- (null +: function.basicBlocks).sliding(2)) {
+        if (block.predecessors.flatten.exists(_ != pred)) emit(".p2align 4,,15")
         emit(
           (block match {
             case function.prologue => "# Prologue"
