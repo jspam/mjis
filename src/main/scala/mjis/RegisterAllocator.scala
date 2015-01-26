@@ -72,6 +72,9 @@ class FunctionRegisterAllocator(function: AsmFunction,
     * In case of interval splitting, only the parent interval is stored here. */
   private val intervals = mutable.Map[Int, LivenessInterval]()
 
+  /** Preferred physical register for each liveness interval. */
+  private val registerHints = mutable.Map[LivenessInterval, Int]()
+
   /** Helper function that creates an interval for a register operand if one doesn't exist. */
   private def interval(regOp: RegisterOperand) = {
     intervals.get(regOp.regNr) match {
@@ -166,6 +169,9 @@ class FunctionRegisterAllocator(function: AsmFunction,
               // work nicely.
               interval(RegisterOperand(reg, 8)).addRange(instrPos, instrPos)
             }
+          case Mov(src: RegisterOperand, dest: RegisterOperand) if dest.regNr >= 0
+            && (PhysicalRegisters.contains(src.regNr) || src.regNr >= 0) =>
+              registerHints(interval(dest)) = src.regNr
           case _ =>
         }
 
@@ -272,14 +278,24 @@ class FunctionRegisterAllocator(function: AsmFunction,
           }
         }
 
-        // reg = register with highest freeUntilPos
-        // Sort by freeUntilPos, then by register number for determinism
-        val reg = freeUntilPos.toSeq.maxBy(t => (t._2, t._1))._1
-
-        if (freeUntilPos(reg) <= position + (position % 2) /* next even instruction pos */) {
+        if (freeUntilPos.values.max <= position + (position % 2) /* next even instruction pos */) {
           // No register available without spilling
           false
         } else {
+          val regHint = registerHints.get(current) match {
+            case Some(regNr) if regNr < 0 => regNr
+            case Some(regNr) if regNr >= 0 => result(intervals(regNr)) match {
+              case r: RegisterOperand => r.regNr
+              case _ => 0
+            }
+            case None => 0
+          }
+          val reg =
+            // Take the preferred register even if it is not optimal
+            if (regHint != 0 && freeUntilPos(regHint) > position + (position % 2)) regHint
+            // else take the register with highest freeUntilPos. Additionally sort by register number for determinism.
+            else freeUntilPos.toSeq.maxBy(t => (t._2, t._1))._1
+
           // `reg` is available ...
           physReg(current) = reg
           result(current) = current.regOp.copy(regNr = reg)

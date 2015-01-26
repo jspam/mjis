@@ -101,7 +101,10 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
           + ", successors: " + block.successors.map(_.nr).mkString(", "), indent = false)
         if (block.comment.nonEmpty) emit("# " + block.comment)
         block.phis.foreach(phi => emit(phiToString(phi)))
-        block.allInstructions.foreach(instr => emit(instrToString(instr)))
+        block.allInstructions.flatMap {
+          case Mov(src, dest) if src == dest => Nil
+          case instr => Seq(instr)
+        }.foreach(instr => emit(instrToString(instr)))
       }
     })
 
