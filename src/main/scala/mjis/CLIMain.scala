@@ -24,13 +24,16 @@ object CLIMain extends App {
     } text ("Run all semantics checks and exit")
     opt[Unit]("compile-firm") action { (phase, config) =>
       config.copy(useFirmBackend = true)
-    } text ("Compiles the given file using the libFirm backend")
+    } text ("Compile the given file using the libFirm backend")
     opt[Unit]("generate-c") action { (phase, config) =>
       config.copy(stopAfter = "ccodegen")
-    } text ("Converts the input to C and outputs the result")
+    } text ("Convert the input to C and output the result")
     opt[String]("stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")
+    opt[Unit]("timings") action { (phase, config) =>
+      config.copy(printTimings = true)
+    } text ("Print the running time of each phase to stdout")
     arg[Path]("<file>") optional () action { (file, config) =>
       config.copy(file = Some(file))
     } validate { file =>
