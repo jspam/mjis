@@ -6,10 +6,18 @@ import mjis.asm.OperandSpec._
 import mjis.asm._
 import mjis.asm.AMD64Registers._
 import mjis.util.MapExtensions._
+import mjis.RegisterAllocator._
 
+import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions._
+
+object RegisterAllocator {
+  def nextEven(i: Int) = i + i%2
+  def nextOdd(i: Int) = i + (1 - i%2)
+  def prevOdd(i: Int) = i - (1 - i%2)
+}
 
 class RegisterAllocator(input: AsmProgram) extends Phase[AsmProgram] {
   override def getResult(): AsmProgram = {
@@ -114,6 +122,19 @@ class FunctionRegisterAllocator(function: AsmFunction,
 
   private val blockStartPositions = blockStartPos.values.toSet
 
+  private val blocksByStartPos = SortedMap[Int, AsmBasicBlock](blockStartPos.map(t => t._2 -> t._1).toSeq:_*)
+
+  /** Returns the blocks that contain the given range of instruction positions, ordered by start position. */
+  private def blocksInPosRange(startPos: Int, endPos: Int) = {
+    // The block startPos lies in (if not already contained in the second part of the result) ...
+    (blocksByStartPos.to(startPos).lastOption match {
+      case Some((bStart, b)) if bStart < startPos && blockEndPos(b) >= startPos => Some(b)
+      case _ => None
+    }) ++
+    // ... plus the blocks whose *start* position is in the specified range ...
+    blocksByStartPos.range(startPos, endPos).values
+  }
+
   private val blockEndPos =
     function.basicBlocks.map(b => b -> (blockStartPos(b) + (b.instructions.length + 1) * 2)).toMap
 
@@ -121,6 +142,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
 
   private def instrsWithPos(b: AsmBasicBlock) =
     b.instructions.zip(Range(blockStartPos(b) + 2, blockEndPos(b), 2))
+
+  private val loopDepth = mutable.Map[AsmBasicBlock, Int]().withDefaultValue(0)
 
 
   /** Additional move instructions with parallel move semantics. The keys must be
@@ -191,6 +214,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
       if (function.isLoopHeader(b)) {
         val loopEnd = function.getLoopEnd(b)
         for (op <- live) interval(op).addRange(blockStartPos(b), blockEndPos(loopEnd))
+        blocksByStartPos.range(blockStartPos(b), blockEndPos(loopEnd) + 1).values.foreach(loopDepth(_) += 1)
       }
 
       liveIn(b) = live.toSet
@@ -226,20 +250,15 @@ class FunctionRegisterAllocator(function: AsmFunction,
       val current = unhandled.dequeue()
       val position = current.start
 
-      def optimalSplitPos(maxSplitPos: Int) = {
-        // TODO: possible optimization: select optimal splitting position
-        // Splitting may occur only at a block boundary (the resolve phase will insert the
-        // appropriate move instructions) or at an odd position (because the move instructions
-        // are inserted there).
-        if (blockStartPositions.contains(maxSplitPos)) maxSplitPos
-        else if (maxSplitPos % 2 == 0) maxSplitPos - 1
-        else maxSplitPos
-      }
-
       def splitInterval(it: LivenessInterval, maxSplitPos: Int, appendToUnhandled: Boolean = true): LivenessInterval = {
         assert(maxSplitPos >= position)
 
-        val splitPos = optimalSplitPos(maxSplitPos)
+        // Splitting may occur only at a block boundary (the resolve phase will insert the
+        // appropriate move instructions) or at an odd position (because the move instructions
+        // are inserted there).
+        val splitPos =
+          if (blockStartPositions.contains(maxSplitPos)) maxSplitPos
+          else prevOdd(maxSplitPos)
         val itSplit = it.splitAt(splitPos)
         if (appendToUnhandled && itSplit != it) unhandled += itSplit
         itSplit
@@ -272,7 +291,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
           }
         }
 
-        if (freeUntilPos.values.max <= position + (position % 2) /* next even instruction pos */) {
+        if (freeUntilPos.values.max <= nextEven(position)) {
           // No register available without spilling
           false
         } else {
@@ -286,7 +305,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
           }
           val reg =
             // Take the preferred register even if it is not optimal
-            if (regHint != 0 && freeUntilPos(regHint) > position + (position % 2)) regHint
+            if (regHint != 0 && freeUntilPos(regHint) > nextEven(position)) regHint
             // else take the register with highest freeUntilPos. Additionally sort by register number for determinism.
             else freeUntilPos.toSeq.maxBy(t => (t._2, t._1))._1
 
@@ -392,6 +411,33 @@ class FunctionRegisterAllocator(function: AsmFunction,
     }
 
     result.toMap
+  }
+
+  /** Moves the split positions of intervals so that splits happen at block boundaries and/or outside of loops. */
+  private def optimizeSplitPositions(mapping: Map[LivenessInterval, Operand]): Unit = {
+    for (it <- intervals.values.filter(_.regOp.regNr >= 0)) {
+      for (Seq(it1, it2) <- it.andChildren.sliding(2) if it1.end == it2.start) {
+        (mapping(it1), mapping(it2)) match {
+          case (_: RegisterOperand, _: ActivationRecordOperand) =>
+            // can move spill backwards without problems
+            if (it1.usages.size() > 0) {
+              // can spill *after* the last usage
+              val it1LastUsePos = it1.usages.lastEntry().getKey
+              val minSpillPos =
+                if (blockStartPositions.contains(it1LastUsePos)) it1LastUsePos
+                else nextOdd(it1LastUsePos)
+
+              val loopDepths = blocksInPosRange(minSpillPos, it2.start).map(b => b -> loopDepth(b))
+              val spillBlock = loopDepths.minBy(_._2)._1
+
+              val splitPos = blockStartPos(spillBlock) max minSpillPos
+              it1.moveSplitPos(it2, splitPos)
+            }
+          case _ =>
+            // TODO: can also move Register -> Register if the successor register is free
+        }
+      }
+    }
   }
 
   /** Inserts moves between adjacent split intervals and deconstructs the phi functions. */
@@ -647,6 +693,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
   def allocateRegs(): Unit = {
     buildLivenessIntervals()
     val mapping = linearScan()
+    optimizeSplitPositions(mapping)
     resolveAndDeconstructSSA(mapping)
     applyMapping(mapping)
     insertInstrs(mapping)

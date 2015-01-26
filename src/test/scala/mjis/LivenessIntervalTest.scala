@@ -301,6 +301,27 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.nextUsagePos(6) shouldBe Int.MaxValue
   }
 
+  it should "move the split position between two adjacent intervals" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(0, 3)
+    l1.addRange(5, 13)
+    val l2 = l1.splitAt(8)
+
+    // l1 = [0,3[, [5,8[
+    // l2 = [8,13[
+
+    l1.moveSplitPos(l2, 6)
+    l1.ranges.values.toSeq should contain inOrderOnly(LivenessRange(0, 3), LivenessRange(5, 6))
+    l2.ranges.values should contain only LivenessRange(6, 13)
+
+    l1.childAt(3) shouldBe Some(l1)
+    l1.childAt(5) shouldBe Some(l1)
+    l1.childAt(6) shouldBe Some(l2)
+    l1.childAt(8) shouldBe Some(l2)
+    l1.childAt(13) shouldBe Some(l2)
+    l1.childAt(14) shouldBe None
+  }
+
   it should "print a nice string representation of itself" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(3, 5)

@@ -139,6 +139,24 @@ class LivenessInterval(val regOp: RegisterOperand) extends Ordered[LivenessInter
     }
   }
 
+  /** Moves the start and end positions of two adjacent intervals. */
+  def moveSplitPos(succ: LivenessInterval, newSplitPos: Int): Unit = {
+    assert(succ.start == this.end)
+    assert(newSplitPos >= this.start)
+    assert(newSplitPos <= succ.end)
+
+    if (newSplitPos != this.end) {
+      val oldEndRangeStart = this.ranges.lastKey
+      this.ranges.replace(oldEndRangeStart, LivenessRange(oldEndRangeStart, newSplitPos))
+
+      val oldStartRange = succ.ranges.firstEntry
+      succ.ranges.remove(oldStartRange.getKey)
+      succ.ranges.put(newSplitPos, LivenessRange(newSplitPos, oldStartRange.getValue.end))
+      succ.splitParent.get.splitChildren.remove(oldStartRange.getValue.start)
+      succ.splitParent.get.splitChildren.put(newSplitPos, succ)
+    }
+  }
+
   override def toString =
     (if (this.regOp.regNr < 0) Registers(this.regOp.regNr).subregs(this.regOp.sizeBytes) + "/" else "") +
     s"${this.regOp.regNr}{${this.regOp.sizeBytes}}: " + ranges.values().mkString(", ")
