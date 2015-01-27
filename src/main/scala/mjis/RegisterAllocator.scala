@@ -156,6 +156,9 @@ class FunctionRegisterAllocator(function: AsmFunction,
   val insertedInstrs = mutable.Map[Int, mutable.ListBuffer[(Operand, Operand)]]().
     withPersistentDefault(_ => ListBuffer[(Operand, Operand)]())
 
+  /** Instructions that contain a memory reference. For these, no second memory
+    * reference may be generated. */
+  private val instrsWithMemoryReferences = mutable.Set[Int]()
 
   private def buildLivenessIntervals() = {
     // Records for each block which variables are live at its beginning.
@@ -199,6 +202,10 @@ class FunctionRegisterAllocator(function: AsmFunction,
               registerHints(interval(dest)) = src.regNr
           case _ =>
         }
+
+        if (instr.operands.exists(op =>
+            op.isInstanceOf[ActivationRecordOperand] || op.isInstanceOf[AddressOperand]))
+          instrsWithMemoryReferences += instrPos
 
         for ((op, spec) <- getRegisterUsages(instr)) {
           // Physical registers need no usage information since they cannot be spilled
@@ -278,17 +285,20 @@ class FunctionRegisterAllocator(function: AsmFunction,
         // do not append to unhandled -- it has been handled by assigning an AR operand!
         result(spilledInterval) = activationRecordOperand(interval.regOp)
 
-        spilledInterval.nextUsage(position) match {
-          case Some(nextUsage) =>
-            val nextUsagePos = nextUsage.getKey
-            // TODO: Possible optimization: split at first use position *that requires a register*
-            // Split at a position with minimal loop depth before the next usage (if the register pressure there is
-            // too high at this point, it can just be spilled again).
-            val loopDepths = blocksInPosRange(position + 1, nextUsagePos).map(b => b -> loopDepth(b))
-            val reloadBlock = loopDepths.toSeq.reverse.minBy(_._2)._1 // find the last element with min loop depth
-            val splitPos = blockEndPos(reloadBlock) min nextUsagePos
-            splitInterval(spilledInterval, splitPos)
-          case None =>
+        val usagesAfterSpill = spilledInterval.usages.tailMap(position, true).toSeq
+
+        // If the interval is only used once afterwards and this usage can be from memory, don't bother reloading
+        if (usagesAfterSpill.size == 1 &&
+            !instrsWithMemoryReferences.contains(usagesAfterSpill.head._1) &&
+            usagesAfterSpill.head._2.contains(MEMORY)) {
+          instrsWithMemoryReferences += usagesAfterSpill.head._1
+        } else if (usagesAfterSpill.size >= 1) {
+          // Reload at a position with minimal loop depth before the next usage
+          val maxSplitPos = usagesAfterSpill.head._1
+          val loopDepths = blocksInPosRange(position + 1, maxSplitPos).map(b => b -> loopDepth(b))
+          val reloadBlock = loopDepths.toSeq.reverse.minBy(_._2)._1 // find the last element with min loop depth
+          val splitPos = blockEndPos(reloadBlock) min maxSplitPos
+          splitInterval(spilledInterval, splitPos)
         }
       }
 

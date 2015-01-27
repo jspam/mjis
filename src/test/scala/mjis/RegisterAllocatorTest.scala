@@ -405,10 +405,66 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %eax, 4(%rsp)
         |  call calloc
         |  movl 4(%rsp), %eax
-        |  movl %eax, %eax
         |.L3:
         |  addq $8, %rsp
         |  ret""")
+  }
+
+  it should "not reload operands that can used from memory if they're only used once" in {
+    Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      Call(LabelOperand("_foobar"), Seq()),
+      Mov(ConstOperand(2, 4), RegisterOperand(11, 4)),
+      Add(RegisterOperand(10, 4), RegisterOperand(11, 4)),
+      Mov(RegisterOperand(11, 4), RegisterOperand(RAX, 4)),
+      Ret(4)
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RCX), Set(RAX, RCX),
+      """  movl $0, %eax
+        |  movl %eax, 4(%rsp)
+        |  call _foobar
+        |  movl $2, %eax
+        |  addl 4(%rsp), %eax
+        |  movl %eax, %eax
+        |  ret""")
+  }
+
+  it should "always reload operands if they're used more than once" in {
+    Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      Call(LabelOperand("_foobar"), Seq()),
+
+      Mov(ConstOperand(2, 4), RegisterOperand(11, 4)),
+      Add(RegisterOperand(10, 4), RegisterOperand(11, 4)),
+      Mov(RegisterOperand(11, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4)),
+
+      Mov(ConstOperand(2, 4), RegisterOperand(12, 4)),
+      Add(RegisterOperand(10, 4), RegisterOperand(12, 4)),
+      Mov(RegisterOperand(12, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4))
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RCX), Set(RAX, RCX),
+      """  movl $0, %eax
+        |  movl %eax, 4(%rsp)
+        |  call _foobar
+        |  movl $2, %eax
+        |  movl 4(%rsp), %ecx
+        |  addl %ecx, %eax
+        |  movl %eax, (%rsp)
+        |  movl $2, %eax
+        |  addl %ecx, %eax
+        |  movl %eax, (%rsp)""")
+  }
+
+  it should "reload registers into a matching physical register" in {
+    Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      Mov(RegisterOperand(10, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4)),
+      Call(LabelOperand("_foobar"), Seq()),
+      Mov(RegisterOperand(10, 4), RegisterOperand(RDX, 4))
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RDX), callerSaveRegs = Set(RAX, RDX),
+      """  movl $0, %eax
+        |  movl %eax, (%rsp)
+        |  movl %eax, 4(%rsp)
+        |  call _foobar
+        |  movl 4(%rsp), %edx""")
   }
 
 }
