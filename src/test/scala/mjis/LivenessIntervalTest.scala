@@ -2,6 +2,7 @@ package mjis
 
 import mjis.asm._
 import org.scalatest._
+import scala.collection.JavaConversions._
 
 class LivenessIntervalTest extends FlatSpec with Matchers {
 
@@ -44,18 +45,18 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(3, 5)
     l1.addRange(2, 4)
-    l1.ranges should contain only LivenessRange(2, 5)
+    l1.ranges.values should contain only LivenessRange(2, 5)
 
     val l2 = new LivenessInterval(DummyRegOp)
     l2.addRange(3, 5)
     l2.addRange(5, 7)
-    l2.ranges should contain only LivenessRange(3, 7)
+    l2.ranges.values should contain only LivenessRange(3, 7)
 
     val l3 = new LivenessInterval(DummyRegOp)
     l3.addRange(2, 3)
     l3.addRange(5, 7)
     l3.addRange(1, 8)
-    l3.ranges should contain only LivenessRange(1, 8)
+    l3.ranges.values should contain only LivenessRange(1, 8)
   }
 
   it should "contain its start position if it's a one-point interval" in {
@@ -173,20 +174,19 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.addRange(4, 6)
     l1.addRange(8, 10)
 
-    l1.usages += RegisterUsage(1, OperandSpec.NONE)
-    l1.usages += RegisterUsage(4, OperandSpec.NONE)
-    l1.usages += RegisterUsage(5, OperandSpec.NONE)
-    l1.usages += RegisterUsage(6, OperandSpec.NONE)
-    l1.usages += RegisterUsage(9, OperandSpec.NONE)
+    l1.addUsage(1, OperandSpec.NONE)
+    l1.addUsage(4, OperandSpec.NONE)
+    l1.addUsage(5, OperandSpec.NONE)
+    l1.addUsage(6, OperandSpec.NONE)
+    l1.addUsage(9, OperandSpec.NONE)
 
     val l1split = l1.splitAt(5)
 
-    l1.ranges should contain theSameElementsInOrderAs Seq(LivenessRange(0, 2), LivenessRange(4, 5))
-    l1split.ranges should contain theSameElementsInOrderAs Seq(LivenessRange(5, 6), LivenessRange(8, 10))
+    l1.ranges.values.toSeq should contain theSameElementsInOrderAs Seq(LivenessRange(0, 2), LivenessRange(4, 5))
+    l1split.ranges.values.toSeq should contain theSameElementsInOrderAs Seq(LivenessRange(5, 6), LivenessRange(8, 10))
 
-    l1.usages should contain only (RegisterUsage(1, OperandSpec.NONE), RegisterUsage(4, OperandSpec.NONE))
-    l1split.usages should contain only (RegisterUsage(5, OperandSpec.NONE),
-      RegisterUsage(6, OperandSpec.NONE), RegisterUsage(9, OperandSpec.NONE))
+    l1.usages.map(t => t._1 -> t._2) should contain only (1 -> OperandSpec.NONE, 4 -> OperandSpec.NONE)
+    l1split.usages.map(t => t._1 -> t._2) should contain only (5 -> OperandSpec.NONE, 6 -> OperandSpec.NONE, 9 -> OperandSpec.NONE)
 
     l1.start shouldBe 0
     l1.end shouldBe 5
@@ -209,13 +209,13 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(1, 6)
     val l2 = l1.splitAt(4)
-    val l3 = l2.splitAt(2)
+    val l3 = l1.splitAt(2)
 
     l1.splitParent shouldBe None
     l2.splitParent shouldBe Some(l1)
     l3.splitParent shouldBe Some(l1)
 
-    l1.splitChildren should contain only(l2, l3)
+    l1.splitChildren.values.toSeq should contain inOrderOnly(l3, l2)
     l2.splitChildren shouldBe empty
     l3.splitChildren shouldBe empty
   }
@@ -234,6 +234,12 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.splitAt(4) shouldBe l1
   }
 
+  it should "not split when asked to split before its start position" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(4, 7)
+    l1.splitAt(2) shouldBe l1
+  }
+
   it should "not split when asked to split after its end position" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(4, 7)
@@ -245,8 +251,8 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.addRange(4, 7)
 
     val l1split = l1.splitAt(7)
-    l1.ranges should contain only LivenessRange(4, 7)
-    l1split.ranges should contain only LivenessRange(7, 7)
+    l1.ranges.values should contain only LivenessRange(4, 7)
+    l1split.ranges.values should contain only LivenessRange(7, 7)
 
     l1.childAt(7) shouldBe Some(l1split)
   }
@@ -257,43 +263,49 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.addRange(7, 9)
     l1.setFrom(1)
 
-    l1.ranges should contain inOrderOnly (LivenessRange(1, 5), LivenessRange(7, 9))
+    l1.ranges.values.toSeq should contain inOrderOnly (LivenessRange(1, 5), LivenessRange(7, 9))
   }
 
   it should "add a new one-point range when setFrom is called on an empty interval" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.setFrom(5)
 
-    l1.ranges should contain only LivenessRange(5, 5)
+    l1.ranges.values.toSeq should contain only LivenessRange(5, 5)
   }
 
   it should "return its next usage" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(3, 5)
 
-    val u1 = RegisterUsage(3, OperandSpec.WRITE)
-    val u2 = RegisterUsage(5, OperandSpec.READ)
-    l1.usages += u1
-    l1.usages += u2
+    l1.addUsage(3, OperandSpec.WRITE)
+    l1.addUsage(5, OperandSpec.READ)
 
-    l1.nextUsage(0) shouldBe Some(u1)
-    l1.nextUsage(3) shouldBe Some(u1)
-    l1.nextUsage(4) shouldBe Some(u2)
-    l1.nextUsage(5) shouldBe Some(u2)
-    l1.nextUsage(6) shouldBe None
+    l1.nextUsage(0).map(e => e.getKey -> e.getValue) shouldBe Some(3 -> OperandSpec.WRITE)
+    l1.nextUsage(3).map(e => e.getKey -> e.getValue) shouldBe Some(3 -> OperandSpec.WRITE)
+    l1.nextUsage(4).map(e => e.getKey -> e.getValue) shouldBe Some(5 -> OperandSpec.READ)
+    l1.nextUsage(5).map(e => e.getKey -> e.getValue) shouldBe Some(5 -> OperandSpec.READ)
+    l1.nextUsage(6).map(e => e.getKey -> e.getValue) shouldBe None
   }
 
   it should "return its next usage position" in {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(3, 5)
-    l1.usages += RegisterUsage(3, OperandSpec.WRITE)
-    l1.usages += RegisterUsage(5, OperandSpec.READ)
+    l1.addUsage(3, OperandSpec.WRITE)
+    l1.addUsage(5, OperandSpec.READ)
 
     l1.nextUsagePos(0) shouldBe 3
     l1.nextUsagePos(3) shouldBe 3
     l1.nextUsagePos(4) shouldBe 5
     l1.nextUsagePos(5) shouldBe 5
     l1.nextUsagePos(6) shouldBe Int.MaxValue
+  }
+
+  it should "print a nice string representation of itself" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+    l1.addRange(7, 7)
+
+    l1.toString shouldBe "0{0}: [3,5[, [7,7["
   }
 
 }
