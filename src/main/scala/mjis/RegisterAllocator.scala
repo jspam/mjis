@@ -169,7 +169,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
 
         for ((op, spec) <- getRegisterUsages(instr)) {
           // Physical registers need no usage information since they cannot be spilled
-          if (op.regNr >= 0) interval(op).usages += RegisterUsage(instrPos, spec)
+          if (op.regNr >= 0) interval(op).addUsage(instrPos, spec)
 
           if (spec.contains(WRITE)) {
             // definition -- shorten live range
@@ -250,7 +250,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
 
         spilledInterval.nextUsage(position) match {
           // TODO: Possible optimization: split at first use position *that requires a register*
-          case Some(nextUsage) => splitInterval(spilledInterval, nextUsage.position)
+          case Some(nextUsage) => splitInterval(spilledInterval, nextUsage.getKey)
           case None =>
         }
       }

@@ -1,9 +1,9 @@
 package mjis.asm
 
-import scala.collection.mutable
-import AMD64Registers._
+import java.util
 
-case class RegisterUsage(position: Int, spec: OperandSpec)
+import scala.collection.JavaConversions._
+import AMD64Registers._
 
 case class LivenessRange(start: Int, end: Int) extends Ordered[LivenessRange] {
   override def compare(that: LivenessRange): Int = this.start.compare(that.start)
@@ -20,24 +20,37 @@ case class LivenessRange(start: Int, end: Int) extends Ordered[LivenessRange] {
   *
   * If intervals are split, one interval will become the parent for all split children
   * (even for intervals that are split from one of its child intervals). */
-class LivenessInterval(val regOp: RegisterOperand) {
-  val ranges = mutable.SortedSet[LivenessRange]()
-  val usages = mutable.Set[RegisterUsage]()
+class LivenessInterval(val regOp: RegisterOperand) extends Ordered[LivenessInterval] {
+  override def compare(that: LivenessInterval): Int = this.start.compare(that.start)
 
-  val splitChildren = mutable.Set[LivenessInterval]()
+  val ranges = new util.TreeMap[Int, LivenessRange]()
+  val usages = new util.TreeMap[Int, OperandSpec]()
+
+  val splitChildren = new util.TreeMap[Int, LivenessInterval]()
   var splitParent: Option[LivenessInterval] = None
 
-  def start = ranges.head.start
-  def end = ranges.last.end
+  def start = ranges.firstEntry().getValue.start
+  def end = ranges.lastEntry().getValue.end
 
-  def contains(position: Int) = ranges.exists(_.contains(position))
-  def containsIncl(position: Int) = ranges.exists(_.containsIncl(position))
-  def intersects(range: LivenessRange): Boolean = ranges.exists(_.intersects(range))
-  def intersects(that: LivenessInterval): Boolean = ranges.exists(that.intersects)
+  def contains(position: Int) = if (position < this.start || (position > this.start && position >= this.end)) false
+    else ranges.headMap(position, true).lastEntry() match {
+      case null => false
+      case candidate => candidate.getValue.contains(position)
+    }
+  def containsIncl(position: Int) = if (position < this.start || (position > this.start && position > this.end)) false
+    else ranges.headMap(position, true).lastEntry() match {
+      case null => false
+      case candidate => candidate.getValue.containsIncl(position)
+    }
+  def intersects(range: LivenessRange): Boolean = this.nextAlivePos(range.start) match {
+    case Some(nextAlive) => nextAlive < range.end
+    case None => false
+  }
+  def intersects(that: LivenessInterval): Boolean = this.nextIntersectionWith(that, this.start max that.start).isDefined
 
   def nextAlivePos(fromPos: Int): Option[Int] =
     if (this.contains(fromPos)) Some(fromPos)
-    else this.ranges.filter(_.start > fromPos).map(_.start).headOption
+    else Option(this.ranges.tailMap(fromPos, true).firstEntry()).map(_.getValue.start)
 
   @annotation.tailrec
   final def nextIntersectionWith(that: LivenessInterval, fromPos: Int): Option[Int] = {
@@ -51,70 +64,73 @@ class LivenessInterval(val regOp: RegisterOperand) {
     }
   }
 
-  def nextUsage(fromPos: Int) = usages.filter(_.position >= fromPos).toSeq.sortBy(_.position).headOption
-  def nextUsagePos(fromPos: Int) = nextUsage(fromPos).map(_.position).getOrElse(Int.MaxValue)
+  def addUsage(pos: Int, spec: OperandSpec): Unit = this.usages.put(pos, spec)
+  def nextUsage(fromPos: Int) = Option(usages.ceilingEntry(fromPos))
+  def nextUsagePos(fromPos: Int) = Option(usages.ceilingKey(fromPos)).getOrElse(Int.MaxValue)
 
   def addRange(from: Int, to: Int) = {
     val newRange = LivenessRange(from, to)
     // adjacent ranges are merged into one
-    val intersectingRanges = ranges.filter(r => r.intersects(newRange) || r.end == newRange.start || r.start == newRange.end)
+    val intersectingRanges =
+      Option(ranges.floorEntry(from)).filter(_.getValue.containsIncl(from)).map(_.getValue) ++
+        ranges.subMap(from, true, to, true).values()
     if (intersectingRanges.isEmpty) {
-      ranges += newRange
+      ranges.put(from, newRange)
     } else {
-      ranges --= intersectingRanges
-      ranges += LivenessRange(
-        (from +: intersectingRanges.map(_.start).toSeq).min,
-        (to +: intersectingRanges.map(_.end).toSeq).max
-      )
+      intersectingRanges.foreach(r => ranges.remove(r.start))
+      ranges.put(from, LivenessRange(
+        from min intersectingRanges.head.start,
+        to max intersectingRanges.last.end
+      ))
     }
   }
 
   def setFrom(from: Int) = {
-    ranges.headOption match {
-      case Some(firstRange) =>
-        ranges -= firstRange
-        ranges += LivenessRange(from, firstRange.end)
-      case None =>
-        ranges += LivenessRange(from, from)
+    ranges.firstEntry() match {
+      case null =>
+        ranges.put(from, LivenessRange(from, from))
+      case firstRange =>
+        ranges.remove(firstRange.getValue.start)
+        ranges.put(from, LivenessRange(from, firstRange.getValue.end))
     }
   }
 
   def splitAt(pos: Int): LivenessInterval = {
-    if (pos == this.start || pos > this.end) this
+    if (pos <= this.start || pos > this.end) this
     else {
       val newInterval = new LivenessInterval(this.regOp)
-      for (range <- ranges.toArray) {
+      for (range <- ranges.values().toArray(Array[LivenessRange]())) {
         if (range.containsIncl(pos)) {
-          ranges -= range
-          ranges += LivenessRange(range.start, pos)
-          newInterval.ranges += LivenessRange(pos, range.end)
+          ranges.replace(range.start, LivenessRange(range.start, pos))
+          newInterval.ranges.put(pos, LivenessRange(pos, range.end))
         } else if (range.start > pos) {
-          ranges -= range
-          newInterval.ranges += range
+          ranges.remove(range.start)
+          newInterval.ranges.put(range.start, range)
         }
       }
 
-      newInterval.usages ++= this.usages.filter(_.position >= pos)
-      this.usages --= newInterval.usages
+      newInterval.usages.putAll(this.usages.tailMap(pos, true))
+      newInterval.usages.keysIterator.foreach(this.usages.remove)
 
       val parent = this.splitParent.getOrElse(this)
       newInterval.splitParent = Some(parent)
-      parent.splitChildren += newInterval
+      parent.splitChildren.put(newInterval.start, newInterval)
 
       newInterval
     }
   }
 
-  def andChildren = Seq(this) ++ this.splitChildren
+  def andChildren = Seq(this) ++ this.splitChildren.values().toSeq
 
-  def childAt(pos: Int) = {
-    // "containsIncl" might be true for two intervals if they are adjacent, return the later one
-    val matching = this.andChildren.filter(_.containsIncl(pos))
-    assert (matching.size <= 2)
-    matching.sortBy(-_.start).headOption
+  def childAt(pos: Int): Option[LivenessInterval] = {
+
+    this.splitChildren.floorEntry(pos) match {
+      case null => if (this.containsIncl(pos)) Some(this) else None
+      case cand => if (cand.getValue.containsIncl(pos)) Some(cand.getValue) else None
+    }
   }
 
   override def toString =
     (if (this.regOp.regNr < 0) Registers(this.regOp.regNr).subregs(this.regOp.sizeBytes) + "/" else "") +
-    s"${this.regOp.regNr}{${this.regOp.sizeBytes}}: " + ranges.mkString(", ")
+    s"${this.regOp.regNr}{${this.regOp.sizeBytes}}: " + ranges.values().mkString(", ")
 }
