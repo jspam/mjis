@@ -8,6 +8,7 @@ import mjis.asm._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
 import mjis.opt.NodeCollector
+import mjis.util.Digraph
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
 
@@ -71,7 +72,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           instructions(n) = createValue(n)
       }
 
-      val firmBlocks = NodeCollector.getBlocksInReverseBackEdgesPostOrder(g).map(basicBlocks).toList
+      val firmBlocks = linearizeBlocks().map(basicBlocks).toList
 
       firmBlocks.head.predecessors += Some(function.prologue)
       function.prologue.successors += firmBlocks.head
@@ -106,6 +107,21 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       function.epilogue.controlFlowInstructions +=
         (if (g.methodType.getNRess > 0) Ret(g.methodType.getResType(0).getSizeBytes) else Ret)
       function
+    }
+
+    private def linearizeBlocks(): Seq[Block] = {
+      // keep blocks of a loop together by recursively using a topological ordering of the condensation graph
+      val edges = Digraph.transpose(g.getBlockEdges)
+      def rec(start: Block, blocks: Set[Block]): Seq[Block] =
+        if (blocks.size == 1) blocks.toSeq
+        else Digraph.findStronglyConnectedComponents(edges, start, Some(blocks)).flatMap {
+          case (dominator, scc) =>
+            // break the cycle
+            for ((src, dests) <- edges)
+              dests -= dominator
+            rec(dominator, scc)
+        }
+      rec(g.getStartBlock, Digraph.getTopologicalSorting(edges, g.getStartBlock).toSet)
     }
 
     private def createControlFlow(node: Node, nextBlock: Option[AsmBasicBlock]): Seq[Instruction] = {

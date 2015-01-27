@@ -3,9 +3,8 @@ package mjis.opt
 import firm._
 import firm.nodes._
 import mjis.opt.FirmExtractors._
-import mjis.util.MapExtensions._
 import scala.collection.JavaConversions._
-import scala.collection.mutable
+import scala.collection.immutable.ListMap
 
 /**
  * value = Phi(start, incrAdd)
@@ -27,17 +26,10 @@ object FirmExtensions {
           GraphBase.exchange(proj, node.getPred(0))
     }
 
-    // TODO: Use ir_edgekind_t.EDGE_KIND_BLOCK if we're allowed to
-    def getBlockBackEdges: Map[Block, Set[Block]] = {
-      val m = mutable.Map[Block, Set[Block]]().withPersistentDefault(_ => Set.empty)
-      g.walkBlocks(new BlockWalker {
-        override def visitBlock(block: Block): Unit = {
-          for (pred <- block.getPreds.filter(!_.isInstanceOf[Bad]))
-            m(pred.getBlock.asInstanceOf[Block]) += block
-        }
-      })
-      m.toMap.withDefaultValue(Set.empty)
-    }
+    def getBlockEdges: Map[Block, Seq[Block]] = ListMap(
+      NodeCollector.fromBlockWalk(g.walkBlocks)
+      .map(b => b -> b.getPreds.map(_.block).filter(_ != null).toSeq): _*
+    )
 
     def getDominators: Map[Block, Set[Block]] = {
       DataFlowAnalysis.iterateBlocks[Set[Block]](g, NodeCollector.fromBlockWalk(g.walkBlocks).toSet,
@@ -63,10 +55,12 @@ object FirmExtensions {
 
   implicit class NodeExt(node: Node) {
 
-    def block: Block = node.getBlock match {
-      case null => null
-      case b: Block => b
-      case _: Bad | _: Anchor => null
+    def block: Block = node match {
+      case _: Bad => null
+      case _ => node.getBlock match {
+        case b: Block => b
+        case _ => null
+      }
     }
 
     def idx: Int = bindings.binding_irnode.get_irn_idx(node.ptr)
