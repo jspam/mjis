@@ -168,8 +168,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     }
 
     private def createValue(node: Node): Seq[Instruction] = {
-      def getAddress(node: Node, sizeBytes: Int): Operand = node match {
-        case ConstExtr(c) => ConstOperand(0, sizeBytes) // complete garbage, but only possible for null accesses
+      def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = node match {
         // TODO: Use both displacement and offset?
         case AddExtr(base, ConstExtr(displacement)) =>
           toVisit += base
@@ -211,14 +210,30 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         case n@AddExtr(incr, ConstExtr(-1)) =>
           toVisit ++= Seq(incr)
           Seq(Mov(getOperand(incr), regOp(n)), Dec(regOp(n)))
-        case n: nodes.Add => Seq(Lea(getAddress(n, n.getMode.getSizeBytes).asInstanceOf[AddressOperand], regOp(n)))
+        case n: nodes.Add => Seq(Lea(getAddressOperand(n, n.getMode.getSizeBytes), regOp(n)))
 
         case n: nodes.Load =>
           toVisit ++= Seq(n.getMem)
-          Seq(Mov(getAddress(n.getPtr, n.getLoadMode.getSizeBytes), regOp(n)))
+          n.getPtr match {
+            case c: nodes.Const =>
+              // null access
+              Seq(
+                Mov(getOperand(c), regOp(c)),
+                Mov(AddressOperand(base = Some(regOp(c)), sizeBytes = n.getLoadMode.getSizeBytes), regOp(n))
+              )
+            case _ => Seq(Mov(getAddressOperand(n.getPtr, n.getLoadMode.getSizeBytes), regOp(n)))
+          }
         case n: nodes.Store =>
           toVisit ++= Seq(n.getMem, n.getValue)
-          Seq(Mov(getOperand(n.getValue), getAddress(n.getPtr, n.getType.getSizeBytes)))
+          n.getPtr match {
+            case c: nodes.Const =>
+              // null access
+              Seq(
+                Mov(getOperand(c), regOp(c)),
+                Mov(getOperand(n.getValue), AddressOperand(base = Some(regOp(c)), sizeBytes = n.getType.getSizeBytes))
+              )
+            case _ => Seq(Mov(getOperand(n.getValue), getAddressOperand(n.getPtr, n.getType.getSizeBytes)))
+          }
 
         case _ =>
           // non-special patterns
