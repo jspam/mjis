@@ -130,12 +130,23 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret"""))
   }
 
-  it should "generate something for null accesses" in {
-    fromMembers("public int i; public int foo() { Test t = null; return t.i; }") should succeedGeneratingCodeWith(template(
+  it should "generate something for null loads" in {
+    fromMembers("public int i; public int j; public int foo() { Test t = null; return t.j; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
         |.L0:
-        |  movl $0, %REG2{4}
-        |  movl %REG2{4}, %eax
+        |  movq $4, %REG0{8}
+        |  movl (%REG0{8}), %REG1{4}
+        |  movl %REG1{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate something for null stores" in {
+    fromMembers("public void foo() { Test[] t = null; t[1] = null; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |.L0:
+        |  movq $8, %REG0{8}
+        |  movq $0, (%REG0{8})
         |.L1:
         |  ret"""))
   }
