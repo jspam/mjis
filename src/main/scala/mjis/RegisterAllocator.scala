@@ -411,7 +411,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
                 assert(false, s"Cannot find phi function defining interval ${it.regOp.regNr}")
                 ???
             }
-          } else mapping(it.childAt(blockEndPos(pred)).get)
+          } else mapping(it.childAtExcl(blockEndPos(pred)).get)
 
         val moveTo = mapping(it.childAt(blockStartPos(succ)).get)
 
