@@ -214,4 +214,81 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %ebx, (%rsp)""")
   }
 
+  it should "automatically select a temporary register for phi generation" in {
+    val b0 = new AsmBasicBlock(0)
+    val b1 = new AsmBasicBlock(1)
+    b1.phis += Phi(Seq(ConstOperand(2, 4), RegisterOperand(10, 4)), RegisterOperand(11, 4))
+    b1.phis += Phi(Seq(ConstOperand(1, 4), RegisterOperand(11, 4)), RegisterOperand(10, 4))
+    val b2 = new AsmBasicBlock(2)
+    val b3 = new AsmBasicBlock(3)
+
+    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX, RDX), Set(),
+      """.L0:
+        |  movl $2, %eax
+        |  movl $1, %edx
+        |.L1:
+        |.L2:
+        |  movl %eax, %ecx
+        |  movl %edx, %eax
+        |  movl %ecx, %edx
+        |.L3:
+        |  ret""")
+  }
+
+  it should "spill a register if there aren't enough temporary registers available for phi generation" in {
+    val b0 = new AsmBasicBlock(0)
+    b0.instructions += Mov(ConstOperand(4, 4), RegisterOperand(20, 4))
+    val b1 = new AsmBasicBlock(1)
+    b1.phis += Phi(Seq(ConstOperand(2, 4), RegisterOperand(10, 4)), RegisterOperand(11, 4))
+    b1.phis += Phi(Seq(ConstOperand(1, 4), RegisterOperand(11, 4)), RegisterOperand(10, 4))
+    val b2 = new AsmBasicBlock(2)
+    val b3 = new AsmBasicBlock(3)
+    b3.instructions += Mov(RegisterOperand(20, 4), RegisterOperand(RAX, 4))
+
+    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX, RDX), Set(),
+      """  subq $8, %rsp
+        |.L0:
+        |  movl $4, %eax
+        |  movl $2, %edx
+        |  movl $1, %ecx
+        |.L1:
+        |.L2:
+        |  movl %eax, 4(%rsp)
+        |  movl %edx, %eax
+        |  movl %ecx, %edx
+        |  movl %eax, %ecx
+        |  movl 4(%rsp), %eax
+        |.L3:
+        |  addq $8, %rsp
+        |  ret""")
+  }
+
+  it should "modify the phi moves when a participating register has to be spilled" in {
+    val b0 = new AsmBasicBlock(0)
+    val b1 = new AsmBasicBlock(1)
+    b1.phis += Phi(Seq(ConstOperand(2, 4), RegisterOperand(10, 4)), RegisterOperand(11, 4))
+    b1.phis += Phi(Seq(ConstOperand(1, 4), RegisterOperand(11, 4)), RegisterOperand(10, 4))
+    val b2 = new AsmBasicBlock(2)
+    val b3 = new AsmBasicBlock(3)
+
+    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX), Set(),
+      """  subq $16, %rsp
+        |.L0:
+        |  movl $2, %eax
+        |  movl $1, %ecx
+        |.L1:
+        |.L2:
+        |  movl %ecx, (%rsp)  # spill
+        |  movl %eax, 8(%rsp) # spill
+        |  movl 8(%rsp), %eax
+        |  movl (%rsp), %ecx
+        |  movl %ecx, 8(%rsp)
+        |  movl %eax, (%rsp)
+        |  movl (%rsp), %ecx  # reload
+        |  movl 8(%rsp), %eax # reload
+        |.L3:
+        |  addq $16, %rsp
+        |  ret""")
+  }
+
 }

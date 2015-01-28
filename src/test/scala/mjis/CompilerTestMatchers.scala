@@ -178,8 +178,7 @@ trait CompilerTestMatchers {
 
   class RegisterAllocatorMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[AsmFunction] {
     override def apply(function: AsmFunction): MatchResult = {
-      new FunctionRegisterAllocator(function, regs, callerSaveRegs,
-        tempRegNo1 = AMD64Registers.RBP, tempRegNo2 = AMD64Registers.R15).allocateRegs()
+      new FunctionRegisterAllocator(function, regs, callerSaveRegs).allocateRegs()
 
       val program = new AsmProgram()
       program.functions += function

@@ -1,5 +1,6 @@
 package mjis
 
+import mjis.asm.AMD64Registers._
 import mjis.asm._
 import org.scalatest._
 import scala.collection.JavaConversions._
@@ -306,6 +307,53 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     l1.addRange(7, 7)
 
     l1.toString shouldBe "0{0}: [3,5[, [7,7["
+  }
+
+  it should "contain nothing if empty" in {
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.contains(0) shouldBe false
+    l1.containsIncl(0) shouldBe false
+  }
+
+  "An occupation map" should "report occupations" in {
+    val o = new OccupationMap(Seq(RAX))
+
+    val l1 = new LivenessInterval(DummyRegOp)
+    l1.addRange(3, 5)
+    l1.addRange(7, 9)
+
+    val l2 = new LivenessInterval(DummyRegOp)
+    l2.addRange(5, 6)
+
+    o.addInterval(l1, RAX)
+    o.addInterval(l2, RAX)
+
+    o.nonEndingOccupationAt(2) shouldBe Map(RAX -> None)
+    o.nonStartingOccupationAt(2) shouldBe Map(RAX -> None)
+
+    o.nonEndingOccupationAt(3) shouldBe Map(RAX -> Some(l1))
+    o.nonStartingOccupationAt(3) shouldBe Map(RAX -> None)
+
+    o.nonEndingOccupationAt(4) shouldBe Map(RAX -> Some(l1))
+    o.nonStartingOccupationAt(4) shouldBe Map(RAX -> Some(l1))
+
+    o.nonEndingOccupationAt(5) shouldBe Map(RAX -> Some(l2))
+    o.nonStartingOccupationAt(5) shouldBe Map(RAX -> Some(l1))
+
+    o.nonEndingOccupationAt(6) shouldBe Map(RAX -> None)
+    o.nonStartingOccupationAt(6) shouldBe Map(RAX -> Some(l2))
+
+    o.nonEndingOccupationAt(7) shouldBe Map(RAX -> Some(l1))
+    o.nonStartingOccupationAt(7) shouldBe Map(RAX -> None)
+
+    o.nonEndingOccupationAt(8) shouldBe Map(RAX -> Some(l1))
+    o.nonStartingOccupationAt(8) shouldBe Map(RAX -> Some(l1))
+
+    o.nonEndingOccupationAt(9) shouldBe Map(RAX -> None)
+    o.nonStartingOccupationAt(9) shouldBe Map(RAX -> Some(l1))
+
+    o.nonEndingOccupationAt(10) shouldBe Map(RAX -> None)
+    o.nonStartingOccupationAt(10) shouldBe Map(RAX -> None)
   }
 
 }
