@@ -9,10 +9,10 @@ import java.io.BufferedWriter
 trait Phase[+O] {
   def name: String = getClass.getSimpleName.toLowerCase
   protected def getResult(): O
-  def dumpResult(writer: BufferedWriter): Unit
+  def dumpResult(writer: BufferedWriter): Unit = {}
   lazy val result: O = getResult()
   def forceResult(): Unit = result
-  def findings: List[Finding]
+  def findings: List[Finding] = List()
 }
 
 trait AnalysisPhase[O] extends Phase[O] {

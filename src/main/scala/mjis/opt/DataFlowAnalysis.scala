@@ -30,7 +30,7 @@ object DataFlowAnalysis {
     val m = mutable.Map[Block, A]().withDefaultValue(bot)
 
     val worklist = NodeCollector.fromBlockWalk(g.walkBlocks).to[mutable.Queue]
-    val backEdges = Digraph.transpose(g.getBlockEdges)
+    val cfGraph = g.getBlockGraph.transposed
 
     while (worklist.nonEmpty) {
       val block = worklist.dequeue()
@@ -38,7 +38,7 @@ object DataFlowAnalysis {
 
       if (value != m(block)) {
         m(block) = value
-        backEdges(block).foreach(worklist.enqueue(_))
+        cfGraph.edges(block).foreach(worklist.enqueue(_))
       }
     }
 

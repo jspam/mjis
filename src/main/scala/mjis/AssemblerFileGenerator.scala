@@ -26,9 +26,7 @@ abstract class AssemblerFileGenerator(config: Config) extends Phase[Unit] {
     fw.flush()
   }
 
-  val findings = List()
-
-  def dumpResult(writer: BufferedWriter) = {
+  override def dumpResult(writer: BufferedWriter) = {
     Source.fromFile(config.asmOutFile.toFile).foreach(writer.write(_))
   }
 }
@@ -88,8 +86,8 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
       emit(".p2align 4,,15")
       emit(s"${function.name}:", indent = false)
 
-      for (Seq(pred, block) <- (null +: function.basicBlocks).sliding(2)) {
-        if (block.predecessors.flatten.exists(_ != pred)) emit(".p2align 4,,15")
+      for (block <- function.basicBlocks) {
+        if (function.isLoopHeader(block)) emit(".p2align 4,,15")
         emit(
           (block match {
             case function.prologue => "# Prologue"

@@ -129,13 +129,6 @@ class FunctionRegisterAllocator(function: AsmFunction,
     withPersistentDefault(_ => ListBuffer[(Operand, Operand)]())
 
 
-  private def isLoopHeader(b: AsmBasicBlock) =
-    function.basicBlocks.drop(function.basicBlocks.indexOf(b)).exists(s => s.successors.contains(b))
-
-  private def getLoopEnd(b: AsmBasicBlock) =
-    function.basicBlocks.filter(s => s.successors.contains(b)).last
-
-
   private def buildLivenessIntervals() = {
     // Records for each block which variables are live at its beginning.
     val liveIn = mutable.Map[AsmBasicBlock, Set[RegisterOperand]]().withDefaultValue(Set())
@@ -195,8 +188,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
       // Phi functions are a definition for their destination operands
       live --= b.phis.map(_.dest)
 
-      if (isLoopHeader(b)) {
-        val loopEnd = getLoopEnd(b)
+      if (function.isLoopHeader(b)) {
+        val loopEnd = function.getLoopEnd(b)
         for (op <- live) interval(op).addRange(blockStartPos(b), blockEndPos(loopEnd))
       }
 

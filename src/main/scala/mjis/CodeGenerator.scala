@@ -8,7 +8,7 @@ import mjis.asm._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
 import mjis.opt.NodeCollector
-import mjis.util.Digraph
+import mjis.util.{SCCLoop, SCCTreeNode, SCCLeaf, Digraph}
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
 
@@ -21,8 +21,7 @@ object CodeGenerator {
 }
 
 class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
-  def findings = List()
-  def dumpResult(a: BufferedWriter) = {
+  override def dumpResult(a: BufferedWriter) = {
     a.write(new MjisAssemblerFileGenerator(result, null).generateCode())
   }
   val resultProgram = new AsmProgram()
@@ -110,39 +109,25 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     }
 
     private def linearizeBlocks(): Seq[Block] = {
-      // keep blocks of a loop together by recursively using a topological ordering of the condensation graph
-      val edges = Digraph.transpose(g.getBlockEdges)
-      def rec(start: Block, blocks: Set[Block]): Seq[Block] =
-        if (blocks.size == 1) blocks.toSeq
-        else Digraph.findStronglyConnectedComponents(edges, start, Some(blocks)).flatMap {
-          case (dominator, scc) =>
-            // break the cycle
-            for ((src, dests) <- edges)
-              dests -= dominator
-            rec(dominator, scc)
-        }
-      rec(g.getStartBlock, Digraph.getTopologicalSorting(edges, g.getStartBlock).toSet)
+      // keep blocks of a loop together by recursively using a topological ordering of the condensation graphs
+      g.getBlockGraph.transposed.getSCCTree(g.getStartBlock).flatMap(_.nodes)
     }
 
     private def createControlFlow(node: Node, nextBlock: Option[AsmBasicBlock]): Seq[Instruction] = {
       def successorBlock(node: Node) = BackEdges.getOuts(node).iterator().next().node.asInstanceOf[Block]
       def successorBlockOperand(node: Node) = new BasicBlockOperand(basicBlocks(successorBlock(node)))
-      def isFallthrough(node: Node) = Some(successorBlock(node).getNr) == nextBlock.map(_.nr)
-      def jmp(node: Node) =
-        if (isFallthrough(node)) Seq()
-        else Seq(asm.Jmp(successorBlockOperand(node)))
 
       node match {
         case _: nodes.Jmp =>
           basicBlocks(node.block).successors += basicBlocks(successorBlock(node))
-          jmp(node)
+          Seq()
 
         case ReturnExtr(retvalOption) =>
           basicBlocks(node.block).successors += basicBlocks(successorBlock(node))
-          (retvalOption match {
+          retvalOption match {
             case Some(retval) => Seq(Mov(getOperand(retval), RegisterOperand(RAX, g.methodType.getResType(0).getSizeBytes)))
             case None => Seq()
-          }) ++ jmp(node)
+          }
 
         case CondExtr(cmp: nodes.Cmp) =>
           val result = mutable.ListBuffer[Instruction]()
@@ -152,7 +137,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case left: ConstOperand => (getOperand(cmp.getRight), left, cmp.getRelation.inversed())
             case left: Operand => (left, getOperand(cmp.getRight), cmp.getRelation)
           }
-          result += asm.Cmp(rightOp, leftOp).withComment(s"Evaluate $cmp (actual relation: $relation)")
 
           val successors = BackEdges.getOuts(node).map(_.node.asInstanceOf[nodes.Proj]).toList
           val projTrue = successors.find(_.getNum == nodes.Cond.pnTrue)
@@ -162,16 +146,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projTrue.get))
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projFalse.get))
 
-          // Prefer fallthrough. It just so happens that this will use unconditional jumps for loop iterations.
-          if (isFallthrough(projTrue.get)) {
-            result += JmpConditional(successorBlockOperand(projFalse.get), relation, negate = true)
-            result ++= jmp(projTrue.get)
-          } else {
-            result += JmpConditional(successorBlockOperand(projTrue.get), relation, negate = false)
-            result ++= jmp(projFalse.get)
-          }
-
-          result
+          basicBlocks(node.block).relation = relation
+          Seq(asm.Cmp(rightOp, leftOp).withComment(s"Evaluate $cmp (actual relation: $relation)"))
 
         case _ => Seq()
       }

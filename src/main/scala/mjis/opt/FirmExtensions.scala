@@ -3,6 +3,7 @@ package mjis.opt
 import firm._
 import firm.nodes._
 import mjis.opt.FirmExtractors._
+import mjis.util.Digraph
 import scala.collection.JavaConversions._
 import scala.collection.immutable.ListMap
 
@@ -26,10 +27,10 @@ object FirmExtensions {
           GraphBase.exchange(proj, node.getPred(0))
     }
 
-    def getBlockEdges: Map[Block, Seq[Block]] = ListMap(
+    def getBlockGraph: Digraph[Block] = new Digraph(ListMap(
       NodeCollector.fromBlockWalk(g.walkBlocks)
       .map(b => b -> b.getPreds.map(_.block).filter(_ != null).toSeq): _*
-    )
+    ))
 
     def getDominators: Map[Block, Set[Block]] = {
       DataFlowAnalysis.iterateBlocks[Set[Block]](g, NodeCollector.fromBlockWalk(g.walkBlocks).toSet,
