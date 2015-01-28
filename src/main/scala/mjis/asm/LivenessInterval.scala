@@ -122,8 +122,15 @@ class LivenessInterval(val regOp: RegisterOperand) extends Ordered[LivenessInter
 
   def andChildren = Seq(this) ++ this.splitChildren.values().toSeq
 
-  def childAt(pos: Int): Option[LivenessInterval] = {
+  /** Returns the split child interval that contains the given position, but does not start there. */
+  def childAtExcl(pos: Int): Option[LivenessInterval] = {
+    this.splitChildren.headMap(pos, false).lastEntry() match {
+      case null => if (this.containsIncl(pos)) Some(this) else None
+      case cand => if (cand.getValue.containsIncl(pos)) Some(cand.getValue) else None
+    }
+  }
 
+  def childAt(pos: Int): Option[LivenessInterval] = {
     this.splitChildren.floorEntry(pos) match {
       case null => if (this.containsIncl(pos)) Some(this) else None
       case cand => if (cand.getValue.containsIncl(pos)) Some(cand.getValue) else None

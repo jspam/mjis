@@ -16,6 +16,26 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     Firm.finish()
   }
 
+  def buildFunction(cfEdges: (AsmBasicBlock, AsmBasicBlock)*) = {
+    val fun = new AsmFunction("test")
+
+    for ((pred, succ) <- cfEdges) {
+      if (!fun.basicBlocks.contains(pred)) fun.basicBlocks :+= pred
+      if (!fun.basicBlocks.contains(succ)) fun.basicBlocks :+= succ
+      pred.successors += succ
+      succ.predecessors += Some(pred)
+    }
+
+    fun.prologue.successors += fun.basicBlocks.head
+    fun.basicBlocks.head.predecessors += Some(fun.prologue)
+
+    fun.epilogue.predecessors += Some(fun.basicBlocks.last)
+    fun.basicBlocks.last.successors += fun.epilogue
+
+    fun.basicBlocks = (fun.prologue :: fun.basicBlocks) :+ fun.epilogue
+    fun
+  }
+
   "The register allocator" should "keep values in one register where possible" in {
     /* function(i) => return i+2 */
     Seq(
@@ -132,6 +152,40 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ActivationRecordOperand(0, 8), RegisterOperand(RAX, 8))
     ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX), Set(),
       """  movq (%rsp), %rax""")
+  }
+
+  it should "insert correct moves when an interval is split at a block boundary" in {
+    val b0 = new AsmBasicBlock(0)
+    b0.instructions += Mov(ConstOperand(4, 4), RegisterOperand(10, 4))
+
+    val b1 = new AsmBasicBlock(1)
+    b1.instructions += Call(LabelOperand("_foobar"), Seq())
+
+    val b2 = new AsmBasicBlock(2)
+
+    val b3 = new AsmBasicBlock(3)
+    b3.phis += Phi(Seq(ConstOperand(1, 4), ConstOperand(8, 4)), RegisterOperand(11, 4))
+    b3.instructions += Mov(RegisterOperand(11, 4), AddressOperand(base = Some(RegisterOperand(RBX, 8)), sizeBytes = 4))
+    b3.instructions += Mov(RegisterOperand(10, 4), AddressOperand(base = Some(RegisterOperand(RBX, 8)), sizeBytes = 4))
+
+    val fun = buildFunction((b0, b1), (b0, b2), (b1, b3), (b2, b3))
+
+    fun should succeedAllocatingRegistersWith(Seq(RAX), Set(),
+      """  subq $8, %rsp
+        |.L0:
+        |  movl $4, %eax
+        |.L1:
+        |  call _foobar
+        |  movl %eax, 4(%rsp)
+        |  movl $1, %eax
+        |.L2:
+        |  movl %eax, 4(%rsp)
+        |  movl $8, %eax
+        |.L3:
+        |  movl %eax, (%rbx)
+        |  movl 4(%rsp), %eax
+        |  movl %eax, (%rbx)
+        |  addq $8, %rsp""")
   }
 
 }
