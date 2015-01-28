@@ -36,16 +36,27 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fun
   }
 
-  "The register allocator" should "keep values in one register where possible" in {
+  "The register allocator" should "allocate registers for a simple function" in {
     /* function(i) => return i+2 */
     Seq(
       Mov(RegisterOperand(RAX, 4), RegisterOperand(10, 4)),
       Add(ConstOperand(2, 4), RegisterOperand(10, 4)),
       Mov(RegisterOperand(10, 4), RegisterOperand(RDX, 4))
     ) should succeedAllocatingRegistersInstrSeqWith(Seq(RDX, RAX), Set(),
-      """  movl %eax, %eax
+      """  # movl %eax, %eax (optimized away)
         |  addl $2, %eax
         |  movl %eax, %edx""")
+  }
+
+  it should "avoid blocked registers" in {
+    Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      Call(LabelOperand("_foobar"), Seq()), // blocks EAX
+      Mov(RegisterOperand(10, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4))
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), callerSaveRegs = Set(RAX),
+      """  movl $0, %ebx
+        |  call _foobar
+        |  movl %ebx, (%rsp)""")
   }
 
   it should "spill register contents if necessary" in {
@@ -109,7 +120,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       """.L1:
         |.L2:
         |  movb $0, %al  # from resolving phi
-        |  movb %al, %al # reg 10 has been assigned register al
+        |  # movb %al, %al # optimized away # reg 10 has been assigned register al
         |  ret""")
   }
 
@@ -186,6 +197,19 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl 4(%rsp), %eax
         |  movl %eax, (%rbx)
         |  addq $8, %rsp""")
+  }
+
+  it should "use the same register for multiple connected intervals if possible" in {
+    Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),  // gets assigned EBX because EAX is blocked
+      Call(LabelOperand("_foobar"), Seq()),             // blocks EAX
+      Mov(RegisterOperand(10, 4), RegisterOperand(11, 4)), // EAX is available for REG11 here, but EBX should be taken
+      Mov(RegisterOperand(11, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4))
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), callerSaveRegs = Set(RAX),
+      """  movl $0, %ebx
+        |  call _foobar
+        |  # movl %ebx, %ebx # optimized away
+        |  movl %ebx, (%rsp)""")
   }
 
 }
