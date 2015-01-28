@@ -105,7 +105,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           regOp(n))
 
       function.epilogue.controlFlowInstructions +=
-        (if (g.methodType.getNRess > 0) Ret(g.methodType.getResType(0).getSizeBytes) else Ret)
+        (if (g.methodType.getNRess > 0) Ret(g.methodType.getResType(0).getSizeBytes) else Ret())
       function
     }
 
@@ -305,7 +305,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               val returnsValue = methodType.getNRess > 0
 
               resultInstrs +=
-                (if (returnsValue) mjis.asm.CallWithReturn(LabelOperand(methodName), methodType.getResType(0).getSizeBytes, paramRegisters)
+                (if (returnsValue) mjis.asm.Call(LabelOperand(methodName), methodType.getResType(0).getSizeBytes, paramRegisters)
                 else mjis.asm.Call(LabelOperand(methodName), paramRegisters))
 
               if (stackParams.nonEmpty)
