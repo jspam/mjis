@@ -26,7 +26,11 @@ object Identities extends Optimization(needsBackEdges = true) {
   def _optimize(g: Graph): Unit = {
     g.walkTopological(new NodeVisitor.Default {
       override def defaultVisit(node: Node): Unit = node match {
-        case n@AddExtr(x, ConstExtr(0)) => exchange(n, x)
+        case n@AddExtr(x, ConstExtr(0)) =>
+          if (n.getMode != x.getMode)
+            exchange(n, g.newConv(n.getBlock, x, n.getMode))
+          else
+            exchange(n, x)
         case n@MulExtr(x, ConstExtr(1)) => exchange(n, x)
         case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
           exchange(n, g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode))
