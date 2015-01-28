@@ -84,9 +84,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq %rsi, %REG0{8}
         |  movl %edx, %REG1{4}
         |.L0:
-        |  movslq %REG1{4}, %REG2{8}
-        |  movl (%REG0{8},%REG2{8},4), %REG4{4}
-        |  movl %REG4{4}, %eax
+        |  movl (%REG0{8},%REG1{8},4), %REG2{4}
+        |  movl %REG2{4}, %eax
         |.L1:
         |  ret"""))
   }
@@ -97,11 +96,9 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq %rsi, %REG0{8}   # xs
         |  movl %edx, %REG1{4}   # i
         |.L0:
-        |  movslq %REG1{4}, %REG2{8}
-        |  movl (%REG0{8},%REG2{8},4), %REG4{4}
-        |  movslq %REG4{4}, %REG5{8}
-        |  movl (%REG0{8},%REG5{8},4), %REG7{4}
-        |  movl %REG7{4}, %eax
+        |  movl (%REG0{8},%REG1{8},4), %REG2{4}
+        |  movl (%REG0{8},%REG2{8},4), %REG3{4}
+        |  movl %REG3{4}, %eax
         |.L1:
         |  ret"""))
   }
@@ -113,8 +110,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %edx, %REG1{4}
         |  movl %ecx, %REG2{4}
         |.L0:
-        |  movslq %REG1{4}, %REG3{8}
-        |  movl %REG2{4}, (%REG0{8},%REG3{8},4)
+        |  movl %REG2{4}, (%REG0{8},%REG1{8},4)
         |.L1:
         |  ret"""))
   }

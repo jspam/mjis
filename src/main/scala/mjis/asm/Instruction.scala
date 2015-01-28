@@ -50,7 +50,7 @@ object OpId {
 sealed abstract class Operand(val sizeBytes: Int)
 case class RegisterOperand(regNr: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
 // base + offset * scale + displacement
-case class AddressOperand(base: Option[Operand] = None, offset: Option[Operand] = None, scale: Int = 1, displacement: Int = 0, override val sizeBytes: Int) extends Operand(sizeBytes)
+case class AddressOperand(base: Option[RegisterOperand] = None, offset: Option[RegisterOperand] = None, scale: Int = 1, displacement: Int = 0, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class ConstOperand(value: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class LabelOperand(name: String) extends Operand(0)
 case class BasicBlockOperand(basicBlock: AsmBasicBlock) extends Operand(0)
