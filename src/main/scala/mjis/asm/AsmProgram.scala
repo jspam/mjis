@@ -1,5 +1,7 @@
 package mjis.asm
 
+import firm.Relation
+
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.ArrayBuffer
 
@@ -10,6 +12,8 @@ class AsmBasicBlock(val nr: Int = -1) {
   val controlFlowInstructions = ListBuffer[Instruction]()
   def allInstructions = instructions.iterator ++ controlFlowInstructions.iterator
 
+  /** For successors.size == 2: Jump to successors(0) iff relation is fulfilled */
+  var relation: Relation = null
   val successors = ArrayBuffer[AsmBasicBlock]()
   // `predecessors` contains None entries for blocks that are not in the function's list of basic blocks
   // (because they are unreachable) and Bad predecessors.
@@ -26,6 +30,11 @@ class AsmFunction(val name: String) {
 
   def controlFlowEdges: Seq[(AsmBasicBlock, AsmBasicBlock)] =
     this.basicBlocks.flatMap(b => b.predecessors.flatten.map((_, b)))
+
+  def isLoopHeader(b: AsmBasicBlock) =
+    basicBlocks.drop(basicBlocks.indexOf(b)).exists(_.successors.contains(b))
+
+  def getLoopEnd(b: AsmBasicBlock) = basicBlocks.filter(_.successors.contains(b)).last
 }
 
 class AsmProgram {

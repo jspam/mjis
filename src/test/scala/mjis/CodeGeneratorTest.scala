@@ -231,7 +231,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movb %dl, %REG0{1}  # argB
         |.L0:
         |  cmpb $1, %REG0{1}
-        |  jne .L2
+        |  je .L2
         |.L1:
         |  jmp .L3
         |.L2:
@@ -248,17 +248,17 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %esi, %REG0{4}
         |.L0:
         |  cmpl $0, %REG0{4}
-        |  jle .L2
+        |  jg .L2
         |.L1:
-        |  movl $1, %eax
+        |  movl $0, %eax
         |  jmp .L3
         |.L2:
-        |  movl $0, %eax
+        |  movl $1, %eax
         |.L3:
         |  ret"""))
   }
 
-  it should "use unconditional jumps for loop iterations" in {
+  it should "generate good loop code" in {
     fromMembers(
       """public boolean foo() {
         |  while (foo());
@@ -268,23 +268,23 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       """_4Test_foo:
       |  movq %rdi, %REG0{8}
       |.L0:
+      |  jmp .L2
       |.L1:
+      |.L2:
       |  movq %REG0{8}, %rdi
       |  call _4Test_foo
       |  movb %al, %REG1{1}
       |  cmpb $1, %REG1{1}
-      |  jne .L3
-      |.L2:
-      |  jmp .L1
+      |  je .L1
       |.L3:
+      |  jmp .L5
       |.L4:
+      |.L5:
       |  movq %REG0{8}, %rdi
       |  call _4Test_foo
       |  movb %al, %REG2{1}
       |  cmpb $1, %REG2{1}
-      |  je .L6
-      |.L5:
-      |  jmp .L4
+      |  jne .L4
       |.L6:
       |  movb $1, %al
       |.L7:

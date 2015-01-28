@@ -17,11 +17,11 @@ class Optimizer(input: Unit) extends Phase[Unit] {
   }
 
   private def removeCriticalEdges(g: Graph): Unit = {
-    val backEdges = Digraph.transpose(g.getBlockEdges)
+    val cfGraph = g.getBlockGraph.transposed
     for (block <- NodeCollector.fromBlockWalk(g.walkBlocks))
       if (block.getPreds.count(!_.isInstanceOf[Bad]) > 1)
         for ((pred, idx) <- block.getPreds.zipWithIndex if !pred.isInstanceOf[Bad])
-          if (backEdges(pred.block).size > 1) {
+          if (cfGraph.edges(pred.block).size > 1) {
             val newBlock = g.newBlock(Array(pred))
             block.setPred(idx, g.newJmp(newBlock))
           }
