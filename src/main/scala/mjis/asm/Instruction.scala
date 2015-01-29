@@ -87,22 +87,17 @@ sealed class Instruction(val opId: Int, val opcode: String, operandsWithSpec: (O
   }
   val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)
   val operandSpecs = Seq[OperandSpec](operandsWithSpec.map(_._2):_*)
-  def suffix = this match {
-    case Call(_) | Cdq() | Ret() => ""
-    case Mov(src, dest) => src match {
-      case _ : ConstOperand => suffixForSize(dest.sizeBytes)
-      case _ =>
-        assert(src.sizeBytes <= dest.sizeBytes)
-        if (src.sizeBytes < dest.sizeBytes) "s" + suffixForSize(src.sizeBytes) + suffixForSize(dest.sizeBytes)
-        else suffixForSize(dest.sizeBytes)
-    }
+  def suffix = this.opcode match {
+    case "call" | "cdq" | "ret" => ""
     case _ =>
       val (constOperands, nonConstOperands) = operands.partition(_.isInstanceOf[ConstOperand])
       if (nonConstOperands.isEmpty) {
         suffixForSize(0)
       } else {
-        assert(nonConstOperands.tail.forall(_.sizeBytes == nonConstOperands.head.sizeBytes))
-        assert(constOperands.forall(_.sizeBytes <= nonConstOperands.head.sizeBytes))
+        assert(nonConstOperands.tail.forall(_.sizeBytes == nonConstOperands.head.sizeBytes),
+          s"$this: not all operands have the same size")
+        assert(constOperands.forall(_.sizeBytes <= nonConstOperands.head.sizeBytes),
+          s"$this: A const operand is bigger than the rest of the operands")
         suffixForSize(nonConstOperands.head.sizeBytes)
       }
   }
