@@ -121,7 +121,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
 
 
   /** Additional move instructions with parallel move semantics. The keys must be
-    * odd numbers. */
+    * odd numbers or start positions of blocks. */
   val insertedInstrs = mutable.Map[Int, mutable.ListBuffer[(Operand, Operand)]]().
     withPersistentDefault(_ => ListBuffer[(Operand, Operand)]())
 
@@ -397,7 +397,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
     for ((pred, succ) <- function.controlFlowEdges) {
       val insertionPos =
         if (succ.predecessors.flatten.length == 1)
-          blockStartPos(succ) + 1
+          blockStartPos(succ)
         else {
           assert(pred.successors.size == 1, s"Critical edge from ${pred.nr} (successors " +
             pred.successors.map(_.nr).mkString(", ") + s") to ${succ.nr} (predecessors " +
@@ -473,7 +473,9 @@ class FunctionRegisterAllocator(function: AsmFunction,
   private def insertInstrs() = {
     for (b <- function.basicBlocks) {
       var numInsertedInstrs = 0
-      for ((pos, idx) <- (blockStartPos(b) + 1 until blockEndPos(b) + 1 by 2).zipWithIndex) {
+      // Instructions for `blockStartPos(b)` are also inserted at index 0, but before those
+      // for `blockStartPos(b) + 1`.
+      for ((pos, idx) <- (blockStartPos(b), 0) +: (blockStartPos(b) + 1 until blockEndPos(b) + 1 by 2).zipWithIndex) {
         val nonIdentityMoves = insertedInstrs(pos).filter(t => t._1 != t._2)
         assert(nonIdentityMoves.toMap.size == nonIdentityMoves.size) // no duplicate destination operands
         val phiInstrs = new PhiCodeGenerator(nonIdentityMoves.toMap, tempRegNo1, tempRegNo2).getInstructions()
