@@ -6,7 +6,7 @@ import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
 
 
-object ConstantFolding extends Optimization(needsBackEdges = true) {
+object ConstantFolding extends DeferredOptimization(needsBackEdges = true) {
 
   private val unknown = TargetValue.getUnknown
   private val conflicting = TargetValue.getBad
@@ -34,7 +34,7 @@ object ConstantFolding extends Optimization(needsBackEdges = true) {
 
   private def fromBool(b: Boolean): TargetValue = if (b) TargetValue.getBTrue else TargetValue.getBFalse
 
-  override def _optimize(g: Graph): Unit = {
+  override def __optimize(g: Graph): Unit = {
     val tarvals = DataFlowAnalysis.iterate[TargetValue](g, unknown, (node, values) => {
       def liftBin(op: (TargetValue, TargetValue) => TargetValue) = liftBinary(op, values(0), values(1))
 
@@ -79,8 +79,7 @@ object ConstantFolding extends Optimization(needsBackEdges = true) {
           case _: Div | _: Mod =>
             // the Div / Mod node itself is not exchanged, instead its result Proj
             // will be replaced
-            g.killMemoryNode(node)
-            changed = true
+            killMemoryNode(node)
           case _: Proj if node.getMode == Mode.getX =>
             if (tarval == TargetValue.getBTrue)
               exchange(node, g.newJmp(node.getBlock))
