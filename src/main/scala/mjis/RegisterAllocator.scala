@@ -203,7 +203,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
     // Unhandled: Intervals which start after `position` and do not have a register assigned.
     // Using a priority queue because interval splitting might insert new intervals into unhandled.
     // Order by `-start` because the priority queue dequeues entries with higher values first.
-    val unhandled = mutable.PriorityQueue[LivenessInterval]()(Ordering.by(-_.start))
+    val unhandled = mutable.PriorityQueue[LivenessInterval]()(
+      Ordering.by(i => (-i.start, i.regOp.regNr /* for determinism */)))
 
     val (physicalRegIntervals, virtualRegIntervals) = intervals.values.partition(_.regOp.regNr < 0)
     unhandled ++= virtualRegIntervals
