@@ -327,4 +327,16 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L1:
         |  ret"""))
   }
+
+  it should "generate correct lea instructions" in {
+    fromMembers("public int foo(int x, int y) { return x+3+8*y; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |  movl %edx, %REG1{4}
+        |.L0:
+        |  leal 3(%REG0{4},%REG1{4},8), %REG2{4}
+        |  movl %REG2{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
 }

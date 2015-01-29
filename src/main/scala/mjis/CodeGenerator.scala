@@ -183,7 +183,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             base = base.map(getOperand(_).asInstanceOf[RegisterOperand]),
             offset = offset.map(getOperand(_).asInstanceOf[RegisterOperand]),
             scale = 1 << shift,
-            displacement = baseDisplacement + offsetDisplacement << shift,
+            displacement = baseDisplacement + (offsetDisplacement << shift),
             sizeBytes = sizeBytes)
         case _ =>
           toVisit += node
