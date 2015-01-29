@@ -31,6 +31,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
     fun.epilogue.predecessors += Some(fun.basicBlocks.last)
     fun.basicBlocks.last.successors += fun.epilogue
+    fun.epilogue.instructions += Ret()
 
     fun.basicBlocks = (fun.prologue :: fun.basicBlocks) :+ fun.epilogue
     fun
@@ -196,7 +197,8 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %eax, (%rbx)
         |  movl 4(%rsp), %eax
         |  movl %eax, (%rbx)
-        |  addq $8, %rsp""")
+        |  addq $8, %rsp
+        |  ret""")
   }
 
   it should "use the same register for multiple connected intervals if possible" in {

@@ -9,8 +9,6 @@ class AsmBasicBlock(val nr: Int = -1) {
   /* Phi functions at the beginning of this block, with parallel copy semantics */
   val phis = ListBuffer[Phi]()
   val instructions = ListBuffer[Instruction]()
-  val controlFlowInstructions = ListBuffer[Instruction]()
-  def allInstructions = instructions.iterator ++ controlFlowInstructions.iterator
 
   /** For successors.size == 2: Jump to successors(0) iff relation is fulfilled */
   var relation: Relation = null

@@ -39,7 +39,7 @@ class BlockOrdering(program: AsmProgram) extends Phase[AsmProgram] {
           case `next` => Seq()
           case _ => Seq(asm.Jmp(BasicBlockOperand(dest)))
         }
-        block.controlFlowInstructions ++= (block.successors.size match {
+        block.instructions ++= (block.successors.size match {
           case 2 =>
             // Prefer fallthrough
             if (block.successors(0) == next)
