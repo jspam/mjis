@@ -89,10 +89,12 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
       val nextBlock = function.basicBlocks.zip(function.basicBlocks.tail).toMap
 
+      for (n <- NodeCollector.fromWalk(g.walkTopological))
+        basicBlocks(n.block).instructions ++= instructions.getOrElse(n, Seq()) map(_.withComment(s" - $n"))
+
       for (n <- NodeCollector.fromWalk(g.walkTopological)) {
         val basicBlock = basicBlocks(n.block)
-        basicBlock.instructions ++= instructions.getOrElse(n, Seq()) map(_.withComment(s" - $n"))
-        basicBlock.controlFlowInstructions ++= createControlFlow(n, nextBlock.get(basicBlock)) map(_.withComment(s" - $n"))
+        basicBlock.instructions ++= createControlFlow(n, nextBlock.get(basicBlock)) map (_.withComment(s" - $n"))
       }
       if (!backEdgesWereEnabled) BackEdges.disable(g)
 
@@ -103,7 +105,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           else ActivationRecordOperand(8 * (argNum - ParamRegisters.length + 1 /* return address */), n.getMode.getSizeBytes),
           regOp(n))
 
-      function.epilogue.controlFlowInstructions +=
+      function.epilogue.instructions +=
         (if (g.methodType.getNRess > 0) Ret(g.methodType.getResType(0).getSizeBytes) else Ret())
       function
     }

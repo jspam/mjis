@@ -214,6 +214,7 @@ trait CompilerTestMatchers {
 
       basicBlock.successors += function.epilogue
       function.epilogue.predecessors += Some(basicBlock)
+      function.epilogue.instructions += Ret()
 
       new RegisterAllocatorMatcher(regs, callerSaveRegs, expected).apply(function)
     }
