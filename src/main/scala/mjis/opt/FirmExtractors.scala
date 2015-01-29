@@ -33,6 +33,13 @@ object FirmExtractors {
     }
   }
 
+  object GenConvExtr {
+    def unapply(node: Node): Option[Node] = node match {
+      case ConvExtr(n) => Some(n)
+      case _ => Some(node)
+    }
+  }
+
   object ProjExtr {
     def unapply(node: Node): Option[(Node, Int)] = node match {
       case proj: Proj => Some((proj.getPred, proj.getNum))
@@ -61,10 +68,25 @@ object FirmExtractors {
     }
   }
 
+  object GenAddExtr {
+    def unapply(node: Node): Option[(Option[Node], Int)] = node match {
+      case ConstExtr(c) => Some((None, c))
+      case AddExtr(n, ConstExtr(c)) => Some((Some(n), c))
+      case _ => Some((Some(node), 0))
+    }
+  }
+
   object ShlExtr {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case shl: Shl => Some((shl.getLeft, shl.getRight))
       case _ => None
+    }
+  }
+
+  object GenShlExtr {
+    def unapply(node: Node): Option[(Node, Int)] = node match {
+      case ShlExtr(l, ConstExtr(r)) => Some((l, r))
+      case _ => Some((node, 0))
     }
   }
 

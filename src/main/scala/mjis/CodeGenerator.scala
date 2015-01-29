@@ -169,36 +169,23 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createValue(node: Node): Seq[Instruction] = {
       def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = node match {
-        // TODO: Use both displacement and offset?
-        case AddExtr(base, ConstExtr(displacement)) =>
-          toVisit += base
+        case AddExtr(
+          GenAddExtr(base, baseDisplacement),
+          GenShlExtr(
+            GenConvExtr(GenAddExtr(offset, offsetDisplacement)),
+            shift@(0 | 1 | 2 | 3)
+          )
+        ) =>
+          toVisit ++= Seq(base, offset).flatten
           AddressOperand(
-            base = Some(getOperand(base)),
-            displacement = displacement,
-            sizeBytes = sizeBytes)
-        case AddExtr(base, ShlExtr(offset, ConstExtr(shift@(1 | 2 | 3)))) =>
-          toVisit ++= Seq(base, offset)
-          AddressOperand(
-            base = Some(getOperand(base)),
-            offset = Some(getOperand(offset)),
+            base = base.map(getOperand(_).asInstanceOf[RegisterOperand]),
+            offset = offset.map(getOperand(_).asInstanceOf[RegisterOperand]),
             scale = 1 << shift,
-            sizeBytes = sizeBytes)
-        case AddExtr(ShlExtr(offset, ConstExtr(shift@(1 | 2 | 3))), base) =>
-          toVisit ++= Seq(base, offset)
-          AddressOperand(
-            base = Some(getOperand(base)),
-            offset = Some(getOperand(offset)),
-            scale = 1 << shift,
-            sizeBytes = sizeBytes)
-        case AddExtr(base, offset) =>
-          toVisit ++= Seq(base, offset)
-          AddressOperand(
-            base = Some(getOperand(base)),
-            offset = Some(getOperand(offset)),
+            displacement = baseDisplacement + offsetDisplacement << shift,
             sizeBytes = sizeBytes)
         case _ =>
           toVisit += node
-          AddressOperand(base = Some(getOperand(node)), sizeBytes = sizeBytes)
+          AddressOperand(base = Some(getOperand(node).asInstanceOf[RegisterOperand]), sizeBytes = sizeBytes)
       }
 
       node match {

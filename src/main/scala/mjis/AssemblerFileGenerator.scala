@@ -38,7 +38,9 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     case r: AddressOperand =>
       val params = Seq[Option[String]](
         r.base.map(opToString),
-        r.offset.map(opToString),
+        // Semantically, it makes sense for the base to be 8 bytes and the index to be 4 bytes, but that's not how the
+        // assembler syntax likes it
+        r.offset.map(offset => opToString(offset.copy(sizeBytes = r.base.map(_.sizeBytes).getOrElse(offset.sizeBytes)))),
         if (r.scale != 1) Some(r.scale.toString) else None
       ).flatten
       val displacement = if (r.displacement != 0) r.displacement.toString else ""

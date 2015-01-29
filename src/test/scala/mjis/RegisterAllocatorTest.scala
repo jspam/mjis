@@ -93,7 +93,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  call _foobar
         |  movl $2, %edx
         |  movq (%rsp), %rcx # reload
-        |  movl $3, (%rcx,%edx)
+        |  movl $3, (%rcx,%rdx)
         |  movl $42, (%rcx)""")
   }
 
@@ -135,7 +135,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       """  movl $0, %eax
         |  movq $0, %rbx
         |  movq $2, %rsp
-        |  movl $0, (%rbx,%eax)
+        |  movl $0, (%rbx,%rax)
         |  movq %rsp, %rbx""")
   }
 
