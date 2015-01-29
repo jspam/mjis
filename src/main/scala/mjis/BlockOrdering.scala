@@ -43,9 +43,9 @@ class BlockOrdering(program: AsmProgram) extends Phase[AsmProgram] {
           case 2 =>
             // Prefer fallthrough
             if (block.successors(0) == next)
-              Seq(JmpConditional(BasicBlockOperand(block.successors(1)), block.relation, negate = true))
+              Seq(JmpConditional(BasicBlockOperand(block.successors(1)), block.relation.negated))
             else {
-              Seq(JmpConditional(BasicBlockOperand(block.successors(0)), block.relation, negate = false)) ++ jmp(block.successors(1))
+              Seq(JmpConditional(BasicBlockOperand(block.successors(0)), block.relation)) ++ jmp(block.successors(1))
             }
           case 1 => jmp(block.successors(0))
           case 0 => Seq()
