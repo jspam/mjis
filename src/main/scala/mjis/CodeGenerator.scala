@@ -24,12 +24,10 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
   override def dumpResult(a: BufferedWriter) = {
     a.write(new MjisAssemblerFileGenerator(result, null).generateCode())
   }
-  val resultProgram = new AsmProgram()
 
   override def getResult(): AsmProgram = {
-    Program.getGraphs.foreach(g => {
-      resultProgram.functions += new MethodCodeGenerator(g).getResult()
-    })
+    val resultProgram = new AsmProgram()
+    resultProgram.functions ++= Program.getGraphs.map { new MethodCodeGenerator(_).getResult() }
     resultProgram
   }
 
@@ -229,7 +227,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           toVisit ++= node.getPreds
           node match {
             case n: nodes.And => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.And(getOperand(n.getRight), regOp(n)))
-            case n: nodes.Add => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Add(getOperand(n.getRight), regOp(n)))
             case n: nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
             case n: nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
 
