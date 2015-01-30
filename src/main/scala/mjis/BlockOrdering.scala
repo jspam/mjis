@@ -34,7 +34,7 @@ class BlockOrdering(program: AsmProgram) extends Phase[AsmProgram] {
   override def getResult(): AsmProgram = {
     for (function <- program.functions) {
       optimizeBlockOrder(function)
-      for (Seq(block, next) <- function.basicBlocks.sliding(2)) {
+      for (Seq(block, next) <- (function.basicBlocks ++ Seq(null)).sliding(2)) {
         def jmp(dest: AsmBasicBlock) = dest match {
           case `next` => Seq()
           case _ => Seq(asm.Jmp(BasicBlockOperand(dest)))
