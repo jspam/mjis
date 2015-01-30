@@ -13,7 +13,7 @@ class RedundantLoadEliminationTest extends FlatSpec with Matchers with BeforeAnd
     Firm.finish()
   }
 
-  "Redundant Load elimination" should "eliminate redundant member loads" in {
+  "Redundant Load elimination" should "eliminate redundant member loads-after-stores" in {
     """
       |public int i;
       |public int before(Test t, int i) {
@@ -30,7 +30,7 @@ class RedundantLoadEliminationTest extends FlatSpec with Matchers with BeforeAnd
       """.stripMargin)
   }
 
-  it should "eliminate redundant array loads" in {
+  it should "eliminate redundant array loads-after-stores" in {
     """
       |public int before(int[] xs, int i, int j) {
       |  xs[i] = j;
@@ -41,6 +41,22 @@ class RedundantLoadEliminationTest extends FlatSpec with Matchers with BeforeAnd
         |public int after(int[] xs, int i, int j) {
         |  xs[i] = j;
         |  return j;
+        |}
+      """.stripMargin)
+  }
+
+  "Redundant Load elimination" should "eliminate redundant loads-after-loads" in {
+    """
+      |public int i;
+      |public int before(Test t) {
+      |  return t.i + t.i;
+      |}
+    """.stripMargin should optimizeTo(RedundantLoadElimination, after = Seq(CommonSubexpressionElimination))(
+      """
+        |public int i;
+        |public int after(Test t) {
+        |  int i = t.i;
+        |  return i + i;
         |}
       """.stripMargin)
   }
