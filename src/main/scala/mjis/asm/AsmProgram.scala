@@ -22,7 +22,7 @@ class AsmBasicBlock(val nr: Int = -1) {
 class AsmFunction(val name: String) {
   // `prologue` and `epilogue` are also contained in `basicBlocks`.
   val prologue = new AsmBasicBlock()
-  val epilogue = new AsmBasicBlock()
+  var epilogue = new AsmBasicBlock()
   var basicBlocks = List[AsmBasicBlock]()
   var activationRecordSize = 0
 

@@ -73,11 +73,9 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
       firmBlocks.head.predecessors += Some(function.prologue)
       function.prologue.successors += firmBlocks.head
+      function.epilogue = basicBlocks(g.getEndBlock)
 
-      firmBlocks.last.successors += function.epilogue
-      function.epilogue.predecessors += Some(firmBlocks.last)
-
-      function.basicBlocks = function.prologue :: firmBlocks ++ Seq(function.epilogue)
+      function.basicBlocks = function.prologue :: firmBlocks
 
       for ((firmBlock, asmBlock) <- basicBlocks) {
         asmBlock.predecessors ++= firmBlock.getPreds.map(b =>

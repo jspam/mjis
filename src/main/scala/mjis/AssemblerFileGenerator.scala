@@ -93,7 +93,6 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
         emit(
           (block match {
             case function.prologue => "# Prologue"
-            case function.epilogue => "# Epilogue"
             case _ if block.nr >= 0 => s".L${block.nr}: # Block ${block.nr}"
             case _ => "# Unnamed block"
           })

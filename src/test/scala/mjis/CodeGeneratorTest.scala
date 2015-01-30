@@ -298,6 +298,15 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  ret"""))
   }
 
+  it should "generate code for a trivial infinite loop" in {
+    fromMembers("public void foo() { while (true); }") should succeedGeneratingCodeWith(template(
+    """_4Test_foo:
+      |.L0:
+      |.L1:
+      |.L2:
+      |  jmp .L1"""))
+  }
+
   it should "generate code for division by a constant" in {
     fromMembers("public int foo(int x) { return x / 2; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
