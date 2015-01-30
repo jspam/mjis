@@ -164,7 +164,7 @@ trait CompilerTestMatchers {
     override def apply(code: String): MatchResult = {
       val codeGenerator = assertExec[CodeGenerator](code)
       // add jumps
-      val program = new BlockOrdering(codeGenerator.resultProgram).result
+      val program = new BlockOrdering(codeGenerator.result).result
       val asmGenerator = new MjisAssemblerFileGenerator(program, null)
       val generatedCode = asmGenerator.generateCode()
 
