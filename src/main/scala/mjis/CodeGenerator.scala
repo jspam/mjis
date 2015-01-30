@@ -317,6 +317,38 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case _ => Seq(Mov(getOperand(n.getValue), getAddressOperand(n.getPtr, n.getType.getSizeBytes)))
           }
 
+        case n: nodes.Mux =>
+          toVisit ++= Seq(n.getFalse, n.getTrue) ++ n.getSel.getPreds // don't visit the Cmp node itself
+          val cmp = n.getSel.asInstanceOf[nodes.Cmp]
+          val cmpLeft = getOperand(cmp.getLeft)
+          val cmpRight = getOperand(cmp.getRight)
+          val ifFalse = getOperand(n.getFalse)
+          val ifTrue = getOperand(n.getTrue)
+
+          // Conditional move does not take immediates, so try to make trueOperand a non-constant
+          // if it happens to be equal to the left operand of the comparison.
+          val (relation, trueOperand, falseOperand) = (cmp.getRelation, cmpRight, ifTrue, ifFalse) match {
+            // y = if (left == const) const else b  ==>  y = if (left == const) left else b
+            case (Relation.Equal, _: ConstOperand, `cmpRight`, _) => (cmp.getRelation, cmpLeft, ifFalse)
+            // y = if (left != const) b else const  ==>  y = if (left == const) left else b
+            case (Relation.UnorderedLessGreater, _: ConstOperand, _, `cmpRight`) => (cmp.getRelation.negated(), cmpLeft, ifTrue)
+            case _ => (cmp.getRelation, ifTrue, ifFalse)
+          }
+
+          trueOperand match {
+            case _: ConstOperand => Seq(
+              Mov(trueOperand, regOp(n, 1)).withComment("Load cmov argument"),
+              Mov(falseOperand, regOp(n)),
+              asm.Cmp(cmpLeft, cmpRight).withComment(s"Evaluate $cmp"),
+              MovConditional(regOp(n, 1), regOp(n), relation)
+            )
+            case _ => Seq(
+              Mov(falseOperand, regOp(n)),
+              asm.Cmp(cmpLeft, cmpRight).withComment(s"Evaluate $cmp"),
+              MovConditional(trueOperand, regOp(n), relation)
+            )
+          }
+
         case _ =>
           // non-special patterns
           toVisit ++= node.getPreds

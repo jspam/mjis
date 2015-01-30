@@ -96,6 +96,9 @@ object Identities extends NodeBasedOptimization() {
       killMemoryNode(mod)
       // |x % 2^k| = x & (modulo-1)
       exchange(proj, g.newAnd(proj.getBlock, x, g.newConst(modulo - 1, x.getMode), x.getMode))
+    case mux@MuxExtr(c, _, _) if c.isInstanceOf[Const] =>
+      val const = c.asInstanceOf[Const]
+      exchange(mux, if (const.getTarval == Mode.getb().getOne) mux.getPred(2) else mux.getPred(1))
     case _ =>
   }
 

@@ -13,7 +13,7 @@ object CommonSubexpressionElimination extends NodeBasedOptimization {
   val m = mutable.Map[AnyRef, Node]()
 
   def getData: PartialFunction[Node, AnyRef] = {
-    case c: Const => c.getTarval.asLong.underlying()
+    case c: Const if c.getMode != Mode.getb => c.getTarval.asLong.underlying()
     case _: Add | _: Sub | _: Minus | _: Mul | _: Div | _: Mod | _: Sel | _: Conv | _: Cond | _: Phi => null // no data
     case proj: Proj => (proj.getPred, proj.getNum)
     case cmp: Cmp => cmp.getRelation
