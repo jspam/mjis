@@ -167,40 +167,42 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createValue(node: Node): Seq[Instruction] = {
       def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = node match {
-        case AddExtr(base, ConstExtr(displacement)) =>
+        case AddExtr(base, ConstExtr(offset)) =>
           toVisit += base
           AddressOperand(
             base = Some(getOperand(base).asInstanceOf[RegisterOperand]),
-            displacement = displacement,
+            offset = offset,
             sizeBytes = sizeBytes)
         case AddExtr(
-          GenAddExtr(base, displacement),
+          GenAddExtr(base, offset),
           GenShlExtr(
-            GenConvExtr(offset),
+            GenConvExtr(index),
             shift@(0 | 1 | 2 | 3)
           )
         ) =>
-          toVisit ++= Seq(base, Some(offset)).flatten
+          toVisit ++= Seq(base, Some(index)).flatten
           AddressOperand(
             base = base.map(getOperand(_).asInstanceOf[RegisterOperand]),
-            offset = Some(getOperand(offset).asInstanceOf[RegisterOperand]),
-            scale = 1 << shift,
-            displacement = displacement,
+            indexAndScale = Some((
+              getOperand(index).asInstanceOf[RegisterOperand],
+              1 << shift)),
+            offset = offset,
             sizeBytes = sizeBytes)
-        case AddExtr(base, offset) =>
-          toVisit ++= Seq(base, offset)
+        case AddExtr(base, index) =>
+          toVisit ++= Seq(base, index)
           AddressOperand(
             base = Some(getOperand(base).asInstanceOf[RegisterOperand]),
-            offset = Some(getOperand(offset).asInstanceOf[RegisterOperand]),
+            indexAndScale = Some((getOperand(index).asInstanceOf[RegisterOperand], 1)),
             sizeBytes = sizeBytes)
         case GenConvExtr(ShlExtr(
-          GenConvExtr(offset),
+          GenConvExtr(index),
           ConstExtr(shift@(0 | 1 | 2 | 3))
         )) =>
-          toVisit += offset
+          toVisit += index
           AddressOperand(
-            offset = Some(getOperand(offset).asInstanceOf[RegisterOperand]),
-            scale = 1 << shift,
+            indexAndScale = Some((
+              getOperand(index).asInstanceOf[RegisterOperand],
+              1 << shift)),
             sizeBytes = sizeBytes)
         case GenConvExtr(other) =>
           toVisit += other
@@ -280,22 +282,22 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
                 resultInstrs += Mov(srcOp, destOp).withComment(s"Load register argument")
               }
 
-              val stackPointerDisplacement = 8 * stackParams.length
+              val stackPointerOffset = 8 * stackParams.length
               if (stackParams.nonEmpty) {
-                resultInstrs += Sub(intConstOp(stackPointerDisplacement), RegisterOperand(RSP, 8)).withComment(s"Move stack pointer for parameters")
+                resultInstrs += Sub(intConstOp(stackPointerOffset), RegisterOperand(RSP, 8)).withComment(s"Move stack pointer for parameters")
                 // Push rest of parameters onto the stack in reverse order
                 for ((param, i) <- stackParams.zipWithIndex.reverse) {
                   val srcOp = getOperand(param)
                   val tempOp = RegisterOperand(n.idx, srcOp.sizeBytes) // needed if srcOp is a memory operand
                   resultInstrs += Mov(srcOp, tempOp).
                     withComment(s"Reload stack argument").
-                    withStackPointerDisplacement(stackPointerDisplacement)
+                    withStackPointerOffset(stackPointerOffset)
                   resultInstrs += Mov(tempOp, AddressOperand(
                     base = Some(RegisterOperand(RSP, 8)),
-                    displacement = 8 * i,
+                    offset = 8 * i,
                     sizeBytes = srcOp.sizeBytes)).
                     withComment(s"Push stack argument").
-                    withStackPointerDisplacement(stackPointerDisplacement)
+                    withStackPointerOffset(stackPointerOffset)
                 }
               }
 
@@ -308,7 +310,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
                 else mjis.asm.Call(LabelOperand(methodName), paramRegisters))
 
               if (stackParams.nonEmpty)
-                resultInstrs += Add(intConstOp(stackPointerDisplacement), RegisterOperand(RSP, 8)).withComment(s"Restore stack pointer")
+                resultInstrs += Add(intConstOp(stackPointerOffset), RegisterOperand(RSP, 8)).withComment(s"Restore stack pointer")
 
               if (returnsValue) {
                 resultInstrs += Mov(RegisterOperand(RAX, methodType.getResType(0).getSizeBytes), regOp(n))

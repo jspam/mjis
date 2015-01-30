@@ -94,7 +94,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
     instr.operands.zip(instr.operandSpecs) foreach { case (op, spec) => op match {
       case r: RegisterOperand if r.regNr >= 0 || PhysicalRegisters.contains(r.regNr) =>
         result(r) |= spec
-      case a: AddressOperand => Seq(a.base, a.offset) foreach {
+      case a: AddressOperand => Seq[Option[Operand]](a.base, a.indexAndScale.map(_._1)) foreach {
         case Some(r: RegisterOperand) if r.regNr >= 0 || PhysicalRegisters.contains(r.regNr) =>
           result(r) |= OperandSpec.READ
         case _ =>
@@ -449,7 +449,9 @@ class FunctionRegisterAllocator(function: AsmFunction,
       case (a: AddressOperand, idx) =>
         instr.operands(idx) = a.copy(
           base = a.base.map(mapping(_).asInstanceOf[RegisterOperand]),
-          offset = a.offset.map(mapping(_).asInstanceOf[RegisterOperand])
+          indexAndScale = a.indexAndScale.map {
+            case (index, scale) => (mapping(index).asInstanceOf[RegisterOperand], scale)
+          }
         )
       case _ =>
     }
@@ -512,7 +514,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
             case a: ActivationRecordOperand =>
               instr.operands(idx) = AddressOperand(
                 base = Some(rsp),
-                displacement = a.offset + activationRecordSize + instr.stackPointerDisplacement,
+                offset = a.offset + activationRecordSize + instr.stackPointerOffset,
                 sizeBytes = a.sizeBytes)
             case _ =>
           }

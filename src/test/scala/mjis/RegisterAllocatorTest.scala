@@ -86,7 +86,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(2, 4), RegisterOperand(11, 4)), // gets assigned EDX (reg10 is spilled!)
       // REG10 is reloaded before this instruction, but may not use EDX although its liveness interval ends here.
       Mov(ConstOperand(3, 4), AddressOperand(base = Some(RegisterOperand(10, 8)),
-        offset = Some(RegisterOperand(11, 4)), sizeBytes = 4)),
+        indexAndScale = Some((RegisterOperand(11, 4), 1)), sizeBytes = 4)),
       Mov(ConstOperand(42, 4), AddressOperand(base = Some(RegisterOperand(10, 8)), sizeBytes = 4))
     ) should succeedAllocatingRegistersInstrSeqWith(Seq(RDX, RCX), callerSaveRegs = Set(RDX, RCX),
       """  movq $0, %rdx
@@ -130,7 +130,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
       Mov(ConstOperand(0, 8), RegisterOperand(11, 8)),
       Mov(ConstOperand(2, 4), RegisterOperand(RSP, 8)),
-      Mov(ConstOperand(0, 4), AddressOperand(base = Some(RegisterOperand(11, 8)), offset = Some(RegisterOperand(10, 4)), sizeBytes = 4)),
+      Mov(ConstOperand(0, 4), AddressOperand(base = Some(RegisterOperand(11, 8)), indexAndScale = Some((RegisterOperand(10, 4), 1)), sizeBytes = 4)),
       Mov(RegisterOperand(RSP, 8), RegisterOperand(11, 8))
     ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), Set(),
       """  movl $0, %eax
