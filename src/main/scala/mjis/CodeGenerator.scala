@@ -167,23 +167,46 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createValue(node: Node): Seq[Instruction] = {
       def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = node match {
+        case AddExtr(base, ConstExtr(displacement)) =>
+          toVisit += base
+          AddressOperand(
+            base = Some(getOperand(base).asInstanceOf[RegisterOperand]),
+            displacement = displacement,
+            sizeBytes = sizeBytes)
         case AddExtr(
-          GenAddExtr(base, baseDisplacement),
+          GenAddExtr(base, displacement),
           GenShlExtr(
-            GenConvExtr(GenAddExtr(offset, offsetDisplacement)),
+            GenConvExtr(offset),
             shift@(0 | 1 | 2 | 3)
           )
         ) =>
-          toVisit ++= Seq(base, offset).flatten
+          toVisit ++= Seq(base, Some(offset)).flatten
           AddressOperand(
             base = base.map(getOperand(_).asInstanceOf[RegisterOperand]),
-            offset = offset.map(getOperand(_).asInstanceOf[RegisterOperand]),
+            offset = Some(getOperand(offset).asInstanceOf[RegisterOperand]),
             scale = 1 << shift,
-            displacement = baseDisplacement + (offsetDisplacement << shift),
+            displacement = displacement,
             sizeBytes = sizeBytes)
-        case _ =>
-          toVisit += node
-          AddressOperand(base = Some(getOperand(node).asInstanceOf[RegisterOperand]), sizeBytes = sizeBytes)
+        case AddExtr(base, offset) =>
+          toVisit ++= Seq(base, offset)
+          AddressOperand(
+            base = Some(getOperand(base).asInstanceOf[RegisterOperand]),
+            offset = Some(getOperand(offset).asInstanceOf[RegisterOperand]),
+            sizeBytes = sizeBytes)
+        case GenConvExtr(ShlExtr(
+          GenConvExtr(offset),
+          ConstExtr(shift@(0 | 1 | 2 | 3))
+        )) =>
+          toVisit += offset
+          AddressOperand(
+            offset = Some(getOperand(offset).asInstanceOf[RegisterOperand]),
+            scale = 1 << shift,
+            sizeBytes = sizeBytes)
+        case GenConvExtr(other) =>
+          toVisit += other
+          AddressOperand(
+            base = Some(getOperand(other).asInstanceOf[RegisterOperand]),
+            sizeBytes = sizeBytes)
       }
 
       node match {
