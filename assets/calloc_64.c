@@ -18,6 +18,7 @@ void *brk(char *ptr) {
 
 uint64_t rest_bytes = 0;
 void *cur_brk = NULL;
+void *last_unique_pointer = NULL;
 
 void *malloc(uint64_t cnt) {
   if (cnt == 0)
@@ -45,6 +46,14 @@ void *malloc(uint64_t cnt) {
 }
 
 void *calloc(uint64_t nmemb, uint64_t size) {
+  // We don't *actually* need to allocate any memory for 0 byte objects.
+  // What we instead do is hand out unique pointers that don't point to usable memory
+  // anyways.
+  if (size == 0) {
+    last_unique_pointer--;
+    return last_unique_pointer;
+  }
+
   uint64_t nbytes = nmemb * size;
   uint64_t predicted_pointer = ((uint64_t) cur_brk - rest_bytes);
   uint64_t padding = size - (predicted_pointer % size);

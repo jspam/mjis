@@ -75,6 +75,15 @@ malloc:
 	 * Resulting pointer is aligned to `size` bytes.
 	 */
 calloc:
+	testq	%rsi, %rsi
+	jne	.not_zero_byte_allocation
+	movq	last_unique_pointer(%rip), %rax
+	subq	$1, %rax
+	movq	%rax, last_unique_pointer(%rip)
+	ret
+	.p2align 4,,10
+	.p2align 3
+.not_zero_byte_allocation:
 	movq	cur_brk(%rip), %rax
 	subq	rest_bytes(%rip), %rax  # rax = predicted_pointer
 	xorl	%edx, %edx
@@ -103,8 +112,12 @@ calloc:
 rest_bytes:
 	.zero	8
 	.globl	cur_brk
-	.align 8
 	.type	cur_brk, @object
 	.size	cur_brk, 8
 cur_brk:
+	.zero	8
+	.globl	last_unique_pointer
+	.type	last_unique_pointer, @object
+	.size	last_unique_pointer, 8
+last_unique_pointer:
 	.zero	8
