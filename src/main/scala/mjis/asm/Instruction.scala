@@ -106,22 +106,10 @@ object Add {
   def unapply(instr: Instruction) = unapply2("add")(instr)
 }
 
-object Inc {
-  def apply(valueAndResult: Operand): Instruction =
-    new Instruction("inc", (valueAndResult, READ | WRITE | MEMORY))
-  def unapply(instr: Instruction) = unapply1("inc")(instr)
-}
-
 object Sub {
   def apply(subtrahend: Operand, minuendAndResult: Operand): Instruction =
     new Instruction("sub", (subtrahend, READ | CONST | MEMORY), (minuendAndResult, READ | WRITE | MEMORY))
   def unapply(instr: Instruction) = unapply2("sub")(instr)
-}
-
-object Dec {
-  def apply(valueAndResult: Operand): Instruction =
-    new Instruction("dec", (valueAndResult, READ | WRITE | MEMORY))
-  def unapply(instr: Instruction) = unapply1("dec")(instr)
 }
 
 object Neg {
