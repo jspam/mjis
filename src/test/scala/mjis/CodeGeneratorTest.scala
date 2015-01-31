@@ -78,6 +78,20 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret"""))
   }
 
+  it should "generate code for slightly simpler arithmetic expression" in {
+    fromMembers("public int foo(int x, int y) { return x + 16 * y; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |  movl %edx, %REG1{4}
+        |.L0:
+        |  movl %REG1{4}, %REG2{4}
+        |  shll $4, %REG2{4}
+        |  leal (%REG0{4},%REG2{4}), %REG3{4}
+        |  movl %REG3{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
   it should "generate code for array loads" in {
     fromMembers("public int foo(int[] xs, int i) { return xs[i]; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
@@ -86,6 +100,19 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L0:
         |  movl (%REG0{8},%REG1{8},4), %REG2{4}
         |  movl %REG2{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for array loads, minding the non-existent sign extension" in {
+    fromMembers("public int foo(int[] xs, int i) { return xs[i+3]; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rsi, %REG0{8}
+        |  movl %edx, %REG1{4}
+        |.L0:
+        |  leal 3(%REG1{4}), %REG2{4}
+        |  movl (%REG0{8},%REG2{8},4), %REG3{4}
+        |  movl %REG3{4}, %eax
         |.L1:
         |  ret"""))
   }
@@ -132,6 +159,17 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L0:
         |  movq $4, %REG0{8}
         |  movl (%REG0{8}), %REG1{4}
+        |  movl %REG1{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate something for non-constant null loads" in {
+    fromMembers("public int foo(int i) { int[] a = null; return a[i]; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl (,%REG0{4},4), %REG1{4}
         |  movl %REG1{4}, %eax
         |.L1:
         |  ret"""))

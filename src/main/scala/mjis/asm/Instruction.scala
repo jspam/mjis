@@ -24,8 +24,8 @@ object Instruction {
 
 sealed abstract class Operand(val sizeBytes: Int)
 case class RegisterOperand(regNr: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-// base + offset * scale + displacement
-case class AddressOperand(base: Option[RegisterOperand] = None, offset: Option[RegisterOperand] = None, scale: Int = 1, displacement: Int = 0, override val sizeBytes: Int) extends Operand(sizeBytes)
+// base + index * scale + offset
+case class AddressOperand(base: Option[RegisterOperand] = None, indexAndScale: Option[(RegisterOperand, Int)] = None, offset: Int = 0, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class ConstOperand(value: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class LabelOperand(name: String) extends Operand(0)
 case class BasicBlockOperand(basicBlock: AsmBasicBlock) extends Operand(0)
@@ -55,9 +55,9 @@ object OperandSpec {
 sealed class Instruction(val opcode: String, operandsWithSpec: (Operand, OperandSpec)*) {
   var comment = ""
   def withComment(comment: String) = { this.comment += comment; this }
-  var stackPointerDisplacement: Int = 0
-  def withStackPointerDisplacement(displacement: Int): Instruction = {
-    this.stackPointerDisplacement = displacement
+  var stackPointerOffset: Int = 0
+  def withStackPointerOffset(offset: Int): Instruction = {
+    this.stackPointerOffset = offset
     this
   }
   val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)

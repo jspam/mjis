@@ -36,15 +36,20 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     case r: RegisterOperand if Registers.contains(r.regNr) => "%" + Registers(r.regNr).subregs(r.sizeBytes)
     case r: RegisterOperand => s"%REG${r.regNr}{${r.sizeBytes}}"
     case r: AddressOperand =>
-      val params = Seq[Option[String]](
-        r.base.map(opToString),
-        // Semantically, it makes sense for the base to be 8 bytes and the index to be 4 bytes, but that's not how the
-        // assembler syntax likes it
-        r.offset.map(offset => opToString(offset.copy(sizeBytes = r.base.map(_.sizeBytes).getOrElse(offset.sizeBytes)))),
-        if (r.scale != 1) Some(r.scale.toString) else None
-      ).flatten
-      val displacement = if (r.displacement != 0) r.displacement.toString else ""
-      s"$displacement(${params.mkString(",")})"
+      val params = r.base.map(opToString).getOrElse("") +:
+        (r.indexAndScale match {
+          case Some((index, scale)) =>
+            // Semantically, it makes sense for the base to be 8 bytes and the index to be 4 bytes, but that's not how the
+            // assembler syntax likes it
+            val fixedIndex = index.copy(sizeBytes = r.base.map(_.sizeBytes).getOrElse(index.sizeBytes))
+            Seq(opToString(fixedIndex)) ++ (scale match {
+              case 1 => Seq()
+              case _ => Seq(scale.toString)
+            })
+          case None => Seq()
+        })
+      val offset = if (r.offset != 0) r.offset.toString else ""
+      s"$offset(${params.mkString(",")})"
     case b: BasicBlockOperand => s".L${b.basicBlock.nr}"
     case l: LabelOperand => l.name
     case c: ConstOperand => s"$$${c.value}"
@@ -59,7 +64,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     val instrAndOperands = instr.opcode + instr.suffix + operandsResult
 
     val comment = instr.comment +
-      (if (instr.stackPointerDisplacement != 0) s" - stackPointerDisplacement = ${instr.stackPointerDisplacement}" else "")
+      (if (instr.stackPointerOffset != 0) s" - stackPointerOffset = ${instr.stackPointerOffset}" else "")
 
     if (comment.nonEmpty)
       // Align comments
