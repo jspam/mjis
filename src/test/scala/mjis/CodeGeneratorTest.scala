@@ -3,6 +3,7 @@ package mjis
 import firm.{Firm, Backend, Mode}
 import mjis.CompilerTestHelper._
 import mjis.CompilerTestMatchers._
+import mjis.opt._
 import org.scalatest._
 
 class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
@@ -196,7 +197,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq (%REG1{8}), %REG2{8}
         |  movq %REG2{8}, %rax
         |.L1:
-        |  ret"""))
+        |  ret"""),
+      excludedOptimizations = Set(Inlining))
   }
 
   it should "generate code for member stores" in {
@@ -221,7 +223,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq $0, (%REG1{8})
         |  movq %REG0{8}, %rax
         |.L1:
-        |  ret"""))
+        |  ret"""),
+      excludedOptimizations = Set(Inlining))
   }
 
   it should "generate code for a method call" in {
@@ -242,7 +245,71 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %eax, %REG3{4}
         |  movl %REG3{4}, %eax
         |.L3:
-        |  ret"""))
+        |  ret"""),
+      excludedOptimizations = Set(Inlining))
+  }
+
+  it should "properly inline a trivial call" in {
+    fromMembers("public void foo() { bar(); } public void bar() { System.out.println(42); }") should succeedGeneratingCodeWith(template(
+    """_4Test_foo:
+      |.L0:
+      |.L1:
+      |  movl $42, %edi
+      |  call System_out_println
+      |.L2:
+      |.L3:
+      |  ret
+      |
+      |_4Test_bar:
+      |.L4:
+      |  movl $42, %edi
+      |  call System_out_println
+      |.L5:
+      |  ret"""))
+  }
+
+  it should "properly inline recursive calls" in {
+    val blockSize = 20
+    fromMembers(
+      ("""
+        |public boolean foo() {
+        |  int i = 42;
+        |  if (foo()) {""" + "System.out.println(i);" * blockSize + """
+        |  }
+        |  return true;
+        |}
+      """).stripMargin) should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movq %rdi, %REG0{8}
+        |.L0:
+        |.L1:
+        |	movq %REG0{8}, %rdi
+        |	call _4Test_foo
+        |	movb %al, %REG1{1}
+        |.L2:
+        |	cmpb $1, %REG1{1}
+        |	je .L4
+        |.L3:
+        |	jmp .L5
+        |.L4:
+      """
+        +
+      """|  movl $42, %edi
+         |  call System_out_println
+      """ * blockSize +
+      """|.L5:
+         |.L6:
+         |.L7:
+      """
+        +
+      """|  movl $42, %edi
+         |  call System_out_println
+      """ * blockSize +
+      """|.L8:
+         |  movb $1, %al
+         |.L9:
+         |  ret"""))
+
   }
 
   it should "generate code for System.out.println" in {
@@ -266,7 +333,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movq %REG0{8}, %rdi
         |  call _4Test_foo
         |.L1:
-        |  ret"""))
+        |  ret"""),
+    excludedOptimizations = Set(Inlining))
   }
 
   it should "generate code for Phis" in {
@@ -300,7 +368,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L2:
         |  movl $1, %eax
         |.L3:
-        |  ret"""))
+        |  ret"""),
+    excludedOptimizations = Set(Inlining))
   }
 
   it should "generate good loop code" in {
@@ -333,7 +402,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |.L6:
       |  movb $1, %al
       |.L7:
-      |  ret"""))
+      |  ret"""),
+      excludedOptimizations = Set(Inlining))
   }
 
   it should "generate code for a trivial infinite loop" in {

@@ -16,7 +16,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     Program.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-Optimizer"))
   }
 
-  private def removeCriticalEdges(g: Graph): Unit = {
+  def removeCriticalEdges(g: Graph): Unit = {
     val cfGraph = g.getBlockGraph.transposed
     for (block <- NodeCollector.fromBlockWalk(g.walkBlocks))
       if (block.getPreds.count(!_.isInstanceOf[Bad]) > 1)
@@ -27,9 +27,12 @@ class Optimizer(input: Unit) extends Phase[Unit] {
           }
   }
 
-  val highLevelOptimizations = List(LoopStrengthReduction, RedundantLoadElimination)
-  val generalOptimizations = List(
+  var highLevelOptimizations = List(LoopStrengthReduction, RedundantLoadElimination)
+  var generalOptimizations = List(
     ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities)
+  // The following optimizations mustn't be iterated with other optimizations
+  // because of possible interactions leading to infinite loops
+  var volatileOptimizations = List(Inlining)
 
   def exec(optimizations: List[Optimization]): Unit = {
     // always run all optimizations
@@ -38,6 +41,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
 
   override protected def getResult(): Unit = {
     exec(generalOptimizations ++ highLevelOptimizations)
+    volatileOptimizations.foreach(_.optimize())
     Util.lowerSels()
     exec(generalOptimizations)
 

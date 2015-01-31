@@ -11,7 +11,7 @@ abstract class Optimization(needsBackEdges: Boolean = false) {
 
   def optimize(): Boolean = {
     // always optimize all graphs
-    Program.getGraphs.toSeq.map(optimize).exists(b => b)
+    Program.getGraphs.map(optimize).toList.exists(b => b)
   }
 
   var changed = false
