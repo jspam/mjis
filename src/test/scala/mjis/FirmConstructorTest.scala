@@ -219,8 +219,9 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |start = Start
         |mem_before_call = Proj M M, start
         |const1 = Const 1 Is
+        |const0 = Const 0 Is
         |addr_calloc = Addr calloc
-        |call = Call calloc, mem_before_call, addr_calloc, const1, const1
+        |call = Call calloc, mem_before_call, addr_calloc, const1, const0
         |mem_after_call = Proj M M, call
         |return = Return, mem_after_call
         |end = End, return
