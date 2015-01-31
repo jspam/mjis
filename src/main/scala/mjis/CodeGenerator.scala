@@ -214,12 +214,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       node match {
         // special tree patterns that don't necessarily visit all predecessors
 
-        case n@AddExtr(incr, ConstExtr(1)) =>
-          toVisit ++= Seq(incr)
-          Seq(Mov(getOperand(incr), regOp(n)), Inc(regOp(n)))
-        case n@AddExtr(incr, ConstExtr(-1)) =>
-          toVisit ++= Seq(incr)
-          Seq(Mov(getOperand(incr), regOp(n)), Dec(regOp(n)))
         case n: nodes.Add => Seq(Lea(getAddressOperand(n, n.getMode.getSizeBytes), regOp(n)))
 
         case n: nodes.Load =>
