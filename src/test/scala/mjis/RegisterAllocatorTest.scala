@@ -37,6 +37,11 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fun
   }
 
+  def setCustomRet(fun: AsmFunction, ret: Instruction): Unit = {
+    fun.epilogue.instructions.clear()
+    fun.epilogue.instructions += ret
+  }
+
   "The register allocator" should "allocate registers for a simple function" in {
     /* function(i) => return i+2 */
     Seq(
@@ -99,23 +104,14 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "handle Phi functions for non-existing predecessors" in {
-    val fun = new AsmFunction("test")
-
     val b1 = new AsmBasicBlock(1)
-    fun.prologue.successors += b1
-    b1.predecessors += Some(fun.prologue)
 
     val b2 = new AsmBasicBlock(2)
-    b2.predecessors ++= Seq(Some(b1), None)
-    b1.successors += b2
     b2.phis += Phi(Seq(ConstOperand(0, 1), ConstOperand(1, 1)), RegisterOperand(10, 1))
     b2.instructions += Mov(RegisterOperand(10, 1), RegisterOperand(RAX, 1))
 
-    fun.basicBlocks = List(fun.prologue, b1, b2, fun.epilogue)
-
-    fun.epilogue.predecessors += Some(b2)
-    b2.successors += fun.epilogue
-    fun.epilogue.instructions += Ret(1)
+    val fun = buildFunction((b1, b2))
+    setCustomRet(fun, Ret(1))
 
     fun should succeedAllocatingRegistersWith(Seq(RAX), Set(),
       """.L1:
@@ -186,12 +182,11 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       """  subq $8, %rsp
         |.L0:
         |  movl $4, %eax
+        |  movl %eax, 4(%rsp)
         |.L1:
         |  call _foobar
-        |  movl %eax, 4(%rsp)
         |  movl $1, %eax
         |.L2:
-        |  movl %eax, 4(%rsp)
         |  movl $8, %eax
         |.L3:
         |  movl %eax, (%rbx)
@@ -288,6 +283,36 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl 8(%rsp), %eax # reload
         |.L3:
         |  addq $16, %rsp
+        |  ret""")
+  }
+
+  it should "spill registers that live through a loop before the loop" in {
+    val before = new AsmBasicBlock(0)
+    before.instructions += Mov(ConstOperand(0, 8), RegisterOperand(10, 8))
+
+    val header = new AsmBasicBlock(1)
+
+    val body = new AsmBasicBlock(2)
+    body.instructions += Call(LabelOperand("_foobar"), Seq())
+
+    val after = new AsmBasicBlock(3)
+    after.instructions += Mov(RegisterOperand(10, 8),
+      AddressOperand(base = Some(RegisterOperand(10, 8)), sizeBytes = 8))
+
+    val fun = buildFunction((before, header), (header, body), (body, header), (header, after))
+
+    fun should succeedAllocatingRegistersWith(Seq(RAX), callerSaveRegs = Set(RAX),
+      """  subq $8, %rsp
+        |.L0:
+        |  movq $0, %rax
+        |  movq %rax, (%rsp)
+        |.L1:
+        |.L2:
+        |  call _foobar
+        |.L3:
+        |  movq (%rsp), %rax
+        |  movq %rax, (%rax)
+        |  addq $8, %rsp
         |  ret""")
   }
 
