@@ -4,13 +4,19 @@ import mjis.asm._
 
 import scala.collection.mutable
 
+object PhiCodeGenerator {
+  val MaxTempRegisters = 2
+}
+
 /** Creates Mov instructions for a map of parallel moves. */
-class PhiCodeGenerator(inputPhi: Map[Operand, Operand], cycleTempRegNr: Int, memMoveTempRegNr: Int) {
+class PhiCodeGenerator(inputPhi: Map[Operand, Operand]) {
   // A phi permutation interpreted as a graph looks as follows: Each node has indegree <= 1
   // (because each register is written to at most once) and arbitrary outdegree.
   // Each of the connected subgraphs is thus either acyclic (and therefore a tree) or contains
   // exactly one cycle (else there would be a node with indegree >= 2).
   // Each of the nodes in the cycle can optionally be the root of a tree.
+
+  var tempRegNrs = Seq[Int]()
 
   val originalDestOp = mutable.Map[Operand, Operand]()
 
@@ -28,6 +34,8 @@ class PhiCodeGenerator(inputPhi: Map[Operand, Operand], cycleTempRegNr: Int, mem
 
   // Roots of standalone trees
   private val roots = mutable.ArrayBuffer[Operand]()
+
+  buildCyclesAndRoots()
 
   /* Returns a unified version (all sizeBytes stripped out) of an operand.
    * Only these unified operands are used in the dependency graph construction
@@ -64,11 +72,19 @@ class PhiCodeGenerator(inputPhi: Map[Operand, Operand], cycleTempRegNr: Int, mem
     unifiedPhi.keys.foreach(buildCyclesAndRootsRec(_, Nil, visited))
   }
 
-  private def mov(srcOp: Operand, destOp: Operand) = (srcOp, destOp) match {
-    case (_: ActivationRecordOperand, _: ActivationRecordOperand) => Seq(
-      Mov(srcOp, RegisterOperand(memMoveTempRegNr, srcOp.sizeBytes)),
-      Mov(RegisterOperand(memMoveTempRegNr, destOp.sizeBytes), destOp)
-    )
+  private def mov(srcOp: Operand, destOp: Operand, inCycle: Boolean) = (srcOp, destOp) match {
+    case (_: ActivationRecordOperand, _: ActivationRecordOperand) =>
+      val tempRegNr = if (inCycle) {
+        assert(tempRegNrs.size >= 2, "Need two temporary registers to create memory-to-memory moves in cycles.")
+        tempRegNrs(1)
+      } else {
+        assert(tempRegNrs.size >= 1, "Need a temporary register to create memory-to-memory moves.")
+        tempRegNrs(0)
+      }
+      Seq(
+        Mov(srcOp, RegisterOperand(tempRegNr, srcOp.sizeBytes)),
+        Mov(RegisterOperand(tempRegNr, destOp.sizeBytes), destOp)
+      )
     case _ => Seq(Mov(srcOp, destOp))
   }
 
@@ -88,29 +104,39 @@ class PhiCodeGenerator(inputPhi: Map[Operand, Operand], cycleTempRegNr: Int, mem
     ordered.flatMap { destOpUnified =>
       val destOp = originalDestOp(destOpUnified)
       val srcOp = inputPhi(destOp)
-      mov(srcOp, destOp)
+      mov(srcOp, destOp, inCycle = false)
     } map(_.withComment(s" - acyclic permutation starting at $rootOp"))
   }
 
   /** Writes the given cyclic permutation using a temporary register. */
   private def getInstructionsForCycle(cycle: List[Operand]): Seq[Instruction] = {
     assert(cycle.length >= 2)
+    assert(tempRegNrs.size >= 1, "Need a temporary register to create instructions for cycles.")
     val comment = " - cyclic permutation " + cycle.mkString(" -> ")
 
-    val tempRegister = RegisterOperand(cycleTempRegNr, originalDestOp(cycle.head).sizeBytes)
+    val tempRegister = RegisterOperand(tempRegNrs(0), originalDestOp(cycle.head).sizeBytes)
 
     (Mov(inputPhi(originalDestOp(cycle.head)), tempRegister) +:
     cycle.tail.flatMap { destOpUnified =>
       val destOp = originalDestOp(destOpUnified)
       val srcOp = inputPhi(destOp)
-      mov(srcOp, destOp)
+      mov(srcOp, destOp, inCycle = true)
     }.toSeq :+
     Mov(tempRegister, originalDestOp(cycle.head))) map(_.withComment(comment))
   }
 
-  def getInstructions(): Seq[Instruction] = {
-    buildCyclesAndRoots()
+  lazy val neededTempRegs = {
+    def isMemOp(op: Operand) = op.isInstanceOf[ActivationRecordOperand] || op.isInstanceOf[AddressOperand]
+    if (cycles.nonEmpty)
+      // Need one temp register for the cycle,
+      // and another one if there are memory-to-memory moves in the cycle.
+      if (cycles.exists(_.sliding(2).exists(s => isMemOp(s(0)) && isMemOp(s(1))))) 2 else 1
+    else
+      // Memory-to-memory moves need a temp register
+      if (inputPhi.exists(t => isMemOp(t._1) && isMemOp(t._2))) 1 else 0
+  }
 
+  def getInstructions(): Seq[Instruction] = {
     // Stand-alone roots
     roots.flatMap(rootOp => getInstructionsForTree(rootOp, null)) ++
     // Cycle nodes can themselves be the root of a tree

@@ -32,12 +32,14 @@ class LivenessInterval(val regOp: RegisterOperand) extends Ordered[LivenessInter
   def start = ranges.firstEntry().getValue.start
   def end = ranges.lastEntry().getValue.end
 
-  def contains(position: Int) = if (position < this.start || (position > this.start && position >= this.end)) false
+  def contains(position: Int) =
+    if (this.ranges.isEmpty || position < this.start || (position > this.start && position >= this.end)) false
     else ranges.headMap(position, true).lastEntry() match {
       case null => false
       case candidate => candidate.getValue.contains(position)
     }
-  def containsIncl(position: Int) = if (position < this.start || (position > this.start && position > this.end)) false
+  def containsIncl(position: Int) =
+    if (this.ranges.isEmpty || position < this.start || (position > this.start && position > this.end)) false
     else ranges.headMap(position, true).lastEntry() match {
       case null => false
       case candidate => candidate.getValue.containsIncl(position)
@@ -140,4 +142,29 @@ class LivenessInterval(val regOp: RegisterOperand) extends Ordered[LivenessInter
   override def toString =
     (if (this.regOp.regNr < 0) Registers(this.regOp.regNr).subregs(this.regOp.sizeBytes) + "/" else "") +
     s"${this.regOp.regNr}{${this.regOp.sizeBytes}}: " + ranges.values().mkString(", ")
+}
+
+/** Data structure to retrieve information about the occupation of physical registers
+  * that are used by multiple liveness intervals. */
+class OccupationMap(val PhysicalRegisters: Seq[Int]) {
+  private val occupationMap = PhysicalRegisters.map {
+    regNr => regNr -> new java.util.TreeMap[Int, LivenessInterval]()
+  }.toMap
+
+  def addInterval(it: LivenessInterval, regNr: Int) =
+    it.ranges.values.foreach { range => occupationMap(regNr).put(range.start, it) }
+
+  /** For each physical register, returns (if it exists) the liveness interval that contains the specified
+   * position and does not end there. */
+  def nonEndingOccupationAt(pos: Int): Map[Int, Option[LivenessInterval]] =
+    PhysicalRegisters.map { regNr => regNr ->
+      Option(occupationMap(regNr).headMap(pos, /* inclusive */ true).lastEntry()).map(_.getValue).filter(_.contains(pos))
+    }.toMap
+
+  /** For each physical register, returns (if it exists) the liveness interval that contains the specified
+    * position and does not start there. */
+  def nonStartingOccupationAt(pos: Int): Map[Int, Option[LivenessInterval]] =
+    PhysicalRegisters.map { regNr => regNr ->
+      Option(occupationMap(regNr).headMap(pos, /* inclusive */ false).lastEntry()).map(_.getValue).filter(_.containsIncl(pos))
+    }.toMap
 }
