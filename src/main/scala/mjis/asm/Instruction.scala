@@ -189,6 +189,12 @@ object Mov {
   def unapply(instr: Instruction) = unapply2("mov")(instr)
 }
 
+object Xchg {
+  def apply(src: Operand, dest:Operand) : Instruction =
+    new Instruction("xchg", (src, READ | WRITE | MEMORY), (dest, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2("xchg")(instr)
+}
+
 object Jmp {
   def apply(dest: BasicBlockOperand) : Instruction = new Instruction("jmp", (dest, READ))
   def unapply(instr: Instruction) = unapply1("jmp")(instr)
