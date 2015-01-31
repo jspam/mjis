@@ -31,7 +31,8 @@ object LoopStrengthReduction extends DeferredOptimization(needsBackEdges = true)
 
     g.walk(new NodeVisitor.Default {
       override def visit(sel: Sel): Unit = inductionVars.get(sel.getIndex) match {
-        case Some(v) =>
+        // only optimize if either the base or index register can be reused
+        case Some(v) if BackEdges.getNOuts(sel.getPtr) == 1 || BackEdges.getNOuts(v.value) == 1 =>
           val condBlock = v.value.block
           val loopStartBlock = condBlock.getPred(0).block
           // the base address must be constant when entering the loop
@@ -49,7 +50,7 @@ object LoopStrengthReduction extends DeferredOptimization(needsBackEdges = true)
             setPred(ptr, 1, ptrIncrAdd)
             exchange(sel, ptr)
           }
-        case None =>
+        case _ =>
       }
     })
   }
