@@ -8,7 +8,6 @@ import mjis.asm._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
 import mjis.opt.NodeCollector
-import mjis.util.{SCCLoop, SCCTreeNode, SCCLeaf, Digraph}
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
 
@@ -52,6 +51,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     val usedParams = mutable.Map[Int, Node]()
     val toVisit = mutable.Queue[Node]()
 
+    val inductionVarAdds = g.getInductionVariables.map(_.incrAdd).toSet[Node]
+
     def getResult(): AsmFunction = {
       val backEdgesWereEnabled = BackEdges.enabled(g)
       BackEdges.enable(g)
@@ -85,8 +86,20 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
       val nextBlock = function.basicBlocks.zip(function.basicBlocks.tail).toMap
 
-      for (n <- NodeCollector.fromWalk(g.walkTopological))
-        basicBlocks(n.block).instructions ++= instructions.getOrElse(n, Seq()) map(_.withComment(s" - $n"))
+      val yoloScheduling = mutable.HashMap[AsmBasicBlock, Seq[Instruction]]().withPersistentDefault(_ => Seq())
+
+      for (n <- NodeCollector.fromWalk(g.walkTopological)) {
+        val basicBlock = basicBlocks(n.block)
+        var instrs = instructions.getOrElse(n, Seq()) map (_.withComment(s" - $n"))
+
+        // delay scheduling of single-use induction variable adds in order to force them into a single register
+        if (inductionVarAdds(n) && BackEdges.getNOuts(n) == 1)
+          yoloScheduling(basicBlock) ++= instrs
+        else
+          basicBlock.instructions ++= instrs
+      }
+
+      basicBlocks.values.foreach(b => b.instructions ++= yoloScheduling(b))
 
       for (n <- NodeCollector.fromWalk(g.walkTopological)) {
         val basicBlock = basicBlocks(n.block)
