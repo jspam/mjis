@@ -375,8 +375,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
             active -= it
           }
           for (it <- inactive if it.regOp.regNr >= 0 && physReg(it) == reg) {
-            // TODO: only if next usage is before end of current?
-            splitInterval(it, it.nextUsagePos(position))
+            // TODO: only if next alive pos is before end of current?
+            splitInterval(it, it.nextAlivePos(position).get)
           }
           true
         }
