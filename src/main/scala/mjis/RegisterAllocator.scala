@@ -270,8 +270,15 @@ class FunctionRegisterAllocator(function: AsmFunction,
         result(spilledInterval) = activationRecordOperand(interval.regOp)
 
         spilledInterval.nextUsage(position) match {
-          // TODO: Possible optimization: split at first use position *that requires a register*
-          case Some(nextUsage) => splitInterval(spilledInterval, nextUsage.getKey)
+          case Some(nextUsage) =>
+            val nextUsagePos = nextUsage.getKey
+            // TODO: Possible optimization: split at first use position *that requires a register*
+            // Split at a position with minimal loop depth before the next usage (if the register pressure there is
+            // too high at this point, it can just be spilled again).
+            val loopDepths = blocksInPosRange(position + 1, nextUsagePos).map(b => b -> loopDepth(b))
+            val reloadBlock = loopDepths.toSeq.reverse.minBy(_._2)._1 // find the last element with min loop depth
+            val splitPos = blockEndPos(reloadBlock) min nextUsagePos
+            splitInterval(spilledInterval, splitPos)
           case None =>
         }
       }

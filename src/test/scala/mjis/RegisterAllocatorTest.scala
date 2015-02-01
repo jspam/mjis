@@ -316,4 +316,33 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret""")
   }
 
+  it should "reload registers that are needed in a loop before the loop" in {
+    val before = new AsmBasicBlock(0)
+    before.instructions += Mov(ConstOperand(0, 4), RegisterOperand(10, 4))
+    before.instructions += Call(LabelOperand("_foobar"), Seq())
+
+    val header = new AsmBasicBlock(1)
+
+    val body = new AsmBasicBlock(2)
+    body.instructions += Mov(RegisterOperand(10, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4))
+
+    val after = new AsmBasicBlock(3)
+
+    val fun = buildFunction((before, header), (header, body), (body, header), (header, after))
+
+    fun should succeedAllocatingRegistersWith(Seq(RAX), callerSaveRegs = Set(RAX),
+      """  subq $8, %rsp
+        |.L0:
+        |  movl $0, %eax
+        |  movl %eax, 4(%rsp)
+        |  call _foobar
+        |  movl 4(%rsp), %eax
+        |.L1:
+        |.L2:
+        |  movl %eax, (%rsp)
+        |.L3:
+        |  addq $8, %rsp
+        |  ret""")
+  }
+
 }
