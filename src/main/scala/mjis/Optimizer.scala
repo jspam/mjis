@@ -3,7 +3,7 @@ package mjis
 import firm._
 import java.io.BufferedWriter
 import firm.nodes.Bad
-import mjis.util.{Digraph, FirmDumpHelper}
+import mjis.util.FirmDumpHelper
 import mjis.opt._
 import mjis.opt.FirmExtensions._
 import scala.collection.JavaConversions._

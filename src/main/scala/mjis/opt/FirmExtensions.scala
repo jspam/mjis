@@ -47,10 +47,7 @@ object FirmExtensions {
   implicit class CallExt(call: Call) {
     def getCalledGraph: Option[Graph] = {
       val ent = call.getPtr.asInstanceOf[Address].getEntity
-      if (ent == null)
-        None
-      else
-        Option(ent.getGraph)
+      Option(ent.getGraph)
     }
   }
 
