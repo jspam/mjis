@@ -461,7 +461,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
             succ.phis.find(_.dest.regNr == it.regOp.regNr) match {
               case Some(phi) => phi.srcs(succ.predecessors.indexOf(Some(pred))) match {
                 case c: ConstOperand => c
-                case r: RegisterOperand => mapping(interval(r).childAt(blockEndPos(pred)).get)
+                case r: RegisterOperand => mapping(interval(r).childAtExcl(blockEndPos(pred)).get)
                 case _ => ???
               }
               case None =>
@@ -511,6 +511,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
     def replaceRegOp(pos: Int)(regOp: RegisterOperand): Operand = {
       if (regOp.regNr < 0) regOp
       else mapping(interval(regOp).childAt(pos).get)
+      // childAt(pos) is uniquely defined because intervals may not be split
+      // at the position of an instruction.
     }
 
     for (b <- function.basicBlocks) {
