@@ -12,7 +12,7 @@ import scala.collection.immutable.ListMap
  * ...
  * incrAdd = Add(value, incr)
  */
-case class InductionVariable(value: Phi, start: Const, incr: Const, incrAdd: Add)
+case class InductionVariable(value: Phi, start: Node, incr: Const, incrAdd: Add)
 
 object FirmExtensions {
 
@@ -33,9 +33,8 @@ object FirmExtensions {
     }
 
     def getInductionVariables: Seq[InductionVariable] = {
-      // TODO: recognize loop-invariant start and incr nodes instead of just constant ones
       NodeCollector.fromWalk(g.walk).map(node => node match {
-        case PhiExtr(start: Const, incrAdd@AddExtr(`node`, incr: Const)) =>
+        case PhiExtr(start, incrAdd@AddExtr(`node`, incr: Const)) =>
           Some(InductionVariable(node.asInstanceOf[Phi], start, incr, incrAdd.asInstanceOf[Add]))
         case _ => None
       }).flatten

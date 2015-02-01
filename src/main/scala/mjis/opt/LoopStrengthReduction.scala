@@ -38,10 +38,7 @@ object LoopStrengthReduction extends DeferredOptimization(needsBackEdges = true)
           // the base address must be constant when entering the loop
           if (dominators(loopStartBlock).contains(sel.getPtr.block)) {
             val elementBytes = sel.getType.asInstanceOf[ArrayType].getElementType.getSizeBytes
-            val baseAddress = g.newAdd(loopStartBlock, sel.getPtr,
-              g.newConst(v.start.getTarval.asInt() * elementBytes, Mode.getIs),
-              Mode.getP
-            )
+            val baseAddress = g.newSel(loopStartBlock, sel.getPtr, v.start, sel.getType)
             val ptr = g.newPhi(condBlock, Array(baseAddress, g.newDummy(Mode.getP)), Mode.getP)
             val ptrIncrAdd = g.newAdd(v.incrAdd.block, ptr,
               g.newConst(v.incr.getTarval.asInt() * elementBytes, Mode.getIs),
