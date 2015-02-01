@@ -1,0 +1,21 @@
+class DivByConst {
+  public static void main(String[] args) { new DivByConst().test(); }
+  public void test() {
+    int i = -1000;
+    int divisor = $$;
+    while (i <= 1000) {
+      assertDiv(i, divisor, i/divisor);
+      i = i + 1;
+    }
+    i = 2147483647 - 1000;
+    while (i != -2147483648 + 1000) {
+      assertDiv(i, divisor, i/divisor);
+      i = i + 1;
+    }
+  }
+  public void assertDiv(int dividend, int divisor, int result) {
+    if (dividend / divisor != result) {
+      System.out.println(dividend);
+    }
+  }
+}

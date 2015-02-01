@@ -1,10 +1,13 @@
 package mjis
 
+import java.nio.file.{Paths, Files}
+
 import firm.{Firm, Backend, Mode}
 import mjis.CompilerTestHelper._
 import mjis.CompilerTestMatchers._
 import mjis.opt._
 import org.scalatest._
+import scala.collection.JavaConversions._
 
 class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
@@ -415,20 +418,15 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  jmp .L1"""))
   }
 
-  it should "generate code for division by a constant" in {
-    fromMembers("public int foo(int x) { return x / 2; }") should succeedGeneratingCodeWith(template(
-      """_4Test_foo:
-        |  movl %esi, %REG0{4}
-        |.L0:
-        |  movl %REG0{4}, %eax
-        |  cdq
-        |  movl $2, %REG1{4}
-        |  idivl %REG1{4}
-        |  movl %eax, %REG1{4}
-        |  movl %REG1{4}, %eax
-        |.L1:
-        |  ret"""))
+  for (divisor <- 2.to(16).flatMap(i => Seq(i, -i)) ++ Seq(1 << 16, 1 << 31, (1 << 31) - 1)) {
+    it should s"generate code for division by $divisor" in {
+      Files.write(Paths.get("divByConst-test.check"), Array[Byte]())
+      Files.write(Paths.get("divByConst-test.mj"),
+        Files.readAllLines(Paths.get("assets/divByConst-test.mj")).map(_.replaceAll("\\$\\$", divisor.toString)))
+      "divByConst-test.mj" should passIntegrationTest(Seq("--no-inline"))
+    }
   }
+
 
   it should "generate code for modulo division by a constant" in {
     fromMembers("public int foo(int x) { return x % 2; }") should succeedGeneratingCodeWith(template(
