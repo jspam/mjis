@@ -161,7 +161,7 @@ object FirmGraphTestHelper {
     })
     constr.finish()
     graph.check()
-    FirmDumpHelper.dumpGraph(graph, "-FirmGraphTestHelper")
+    FirmDumpHelper.dumpGraph(graph, "FirmGraphTestHelper")
     graph
   }
 

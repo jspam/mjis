@@ -13,7 +13,7 @@ class Optimizer(input: Unit, config: Config) extends Phase[Unit] {
   override val findings = List[Finding]()
 
   override def dumpResult(writer: BufferedWriter): Unit = {
-    Program.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-Optimizer"))
+    Program.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "Optimizer"))
   }
 
   def removeCriticalEdges(g: Graph): Unit = {

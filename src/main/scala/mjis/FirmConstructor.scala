@@ -37,7 +37,7 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
   override protected def getResult(): Unit = transformProgram(input)
 
   override def dumpResult(writer: BufferedWriter): Unit = {
-    FirmProgram.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "-FirmConstructor"))
+    FirmProgram.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "FirmConstructor"))
   }
 
   private def createMethodEntity(cls: ClassDecl, method: MethodDecl) = {
