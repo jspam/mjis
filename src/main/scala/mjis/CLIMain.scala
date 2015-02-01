@@ -34,6 +34,9 @@ object CLIMain extends App {
     opt[Unit]("timings") action { (phase, config) =>
       config.copy(printTimings = true)
     } text ("Print the running time of each phase to stdout")
+    opt[Unit]("no-inline") action { (phase, config) =>
+      config.copy(inlining = false)
+    } text ("Deactivate inlining")
     arg[Path]("<file>") optional () action { (file, config) =>
       config.copy(file = Some(file))
     } validate { file =>

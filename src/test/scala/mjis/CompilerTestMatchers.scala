@@ -154,7 +154,7 @@ trait CompilerTestMatchers {
 
       before.foreach(_.optimize())
 
-      new Optimizer(()).dumpResult(null)
+      new Optimizer((), Config()).dumpResult(null)
 
       (new FirmGraphIsomorphismMatcher(afterGraph.get))(beforeGraph.get)
     }
@@ -164,7 +164,7 @@ trait CompilerTestMatchers {
     override def apply(code: String): MatchResult = {
       assertExec[FirmConstructor](code)
 
-      val opt = new Optimizer(())
+      val opt = new Optimizer((), Config())
       opt.generalOptimizations = opt.generalOptimizations.filter(!excludedOptimizations.contains(_))
       opt.highLevelOptimizations = opt.highLevelOptimizations.filter(!excludedOptimizations.contains(_))
       opt.volatileOptimizations = opt.volatileOptimizations.filter(!excludedOptimizations.contains(_))
