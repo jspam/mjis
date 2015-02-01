@@ -130,6 +130,12 @@ object Mul {
       (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RDX, left.sizeBytes), WRITE | IMPLICIT))
   def unapply(instr: Instruction) = unapply1("mul")(instr)
 }
+object IMul {
+  def apply(left: Operand): Instruction =
+    new Instruction("imul", (left, READ | MEMORY),
+      (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RDX, left.sizeBytes), WRITE | IMPLICIT))
+  def unapply(instr: Instruction) = unapply1("imul")(instr)
+}
 
 object IDiv {
   def apply(left: Operand): Instruction =
@@ -149,6 +155,16 @@ object Shl {
   def apply(shift: ConstOperand, valueAndResult: Operand): Instruction =
     new Instruction("shl", (shift, READ | CONST), (valueAndResult, READ | WRITE | MEMORY))
   def unapply(instr: Instruction) = unapply2("shl")(instr)
+}
+object Shr {
+  def apply(shift: ConstOperand, valueAndResult: Operand): Instruction =
+    new Instruction("shr", (shift, READ | CONST), (valueAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2("shr")(instr)
+}
+object Sar {
+  def apply(shift: ConstOperand, valueAndResult: Operand): Instruction =
+    new Instruction("sar", (shift, READ | CONST), (valueAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply2("sar")(instr)
 }
 
 object Cmp {

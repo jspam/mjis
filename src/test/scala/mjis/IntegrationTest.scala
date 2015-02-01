@@ -10,11 +10,11 @@ class IntegrationTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   for (file <- testFiles) {
     file.getName should "produce correct output with the FIRM backend" in {
-      file.getPath should passIntegrationTest(useFirmBackend = true)
+      file.getPath should passIntegrationTest(Seq("--compile-firm"))
     }
 
     it should "produce correct output with our backend" in {
-      file.getPath should passIntegrationTest(useFirmBackend = false)
+      file.getPath should passIntegrationTest(Seq())
     }
   }
 }

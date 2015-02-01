@@ -10,6 +10,7 @@ import mjis.opt.FirmExtensions._
 import mjis.opt.NodeCollector
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
+import mjis.util.PowerOfTwo
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -224,6 +225,66 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             sizeBytes = sizeBytes)
       }
 
+      def divByConstant(dividend: Node, divisor: Int): Seq[Instruction] = {
+        // See http://support.amd.com/TechDocs/25112.PDF pages 189 and following
+        def log2(i: Long) = {
+          assert(i > 0)
+          def rec(i: Long, acc: Int): Int = i match {
+            case 0 => acc
+            case _ => rec(i >> 1, acc + 1)
+          }
+          rec(i >> 1, 0)
+        }
+
+        assert(dividend.getMode == Mode.getIs)
+        val r = regOp(node)
+        val eax = RegisterOperand(AMD64Registers.RAX, 4)
+        val edx = RegisterOperand(AMD64Registers.RDX, 4)
+        val (instrs: Seq[Instruction], resultReg) = Math.abs(divisor.toLong) match {
+          case 1 => ??? // handled by Identities
+          case 2 => (Seq(
+            Mov(getOperand(dividend), r),
+            Cmp(ConstOperand(1 << 31, 4), r),
+            new Instruction("sbb", (ConstOperand(-1, 4), OperandSpec.READ), (r, OperandSpec.READ | OperandSpec.WRITE)),
+            Sar(ConstOperand(1, 4), r)
+          ), r)
+          case d@PowerOfTwo(pow) => (Seq(
+            Mov(getOperand(dividend), eax),
+            Cdq(4),
+            And(ConstOperand((d - 1).toInt, 4), edx),
+            Add(edx, eax),
+            Sar(ConstOperand(pow, 4), eax)
+          ), eax)
+          case d =>
+            /* Determine algorithm (a), multiplier (m), and shift factor (s) for 32-bit
+            signed integer division. Based on: Granlund, T.; Montgomery, P.L.:
+            "Division by Invariant Integers using Multiplication". SIGPLAN Notices,
+            Vol. 29, June 1994, page 61.
+            */
+            var l = log2(d)
+            val j = (1l << 31) % d
+            val k = (1l << (32 + l)) / ((1l << 31) - j)
+            var m_low = (1l << (32 + l)) / d
+            var m_high = ((1l << (32 + l)) + k) / d
+            while (((m_low >> 1) < (m_high >> 1)) && (l > 0)) {
+              m_low >>= 1
+              m_high >>= 1
+              l -= 1
+            }
+            val m = m_high.toInt
+            (Seq(
+              Mov(ConstOperand(m, 4), eax),
+              IMul(getOperand(dividend)),
+              Mov(getOperand(dividend), eax)) ++
+              (if ((m_high >> 31) != 0) Seq(Add(eax, edx)) else Seq()) ++ Seq(
+              Sar(ConstOperand(l, 4), edx),
+              Shr(ConstOperand(31, 4), eax),
+              Add(eax, edx)
+            ), edx)
+        }
+        instrs ++ (if (divisor < 0) Seq(Neg(resultReg)) else Seq()) :+ Mov(resultReg, r)
+      }
+
       node match {
         // special tree patterns that don't necessarily visit all predecessors
 
@@ -268,6 +329,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
                 Mov(tempRegister, regOp(n)))
 
+            case DivExtr(dividend, ConstExtr(divisor)) if divisor != 0 => divByConstant(dividend, divisor)
             case n : firm.nodes.Div => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RAX, 4), regOp(n)))
             case n : firm.nodes.Mod => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RDX, 4), regOp(n)))
 

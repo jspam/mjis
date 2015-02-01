@@ -154,7 +154,7 @@ trait CompilerTestMatchers {
 
       before.foreach(_.optimize())
 
-      new Optimizer(()).dumpResult(null)
+      new Optimizer((), Config()).dumpResult(null)
 
       (new FirmGraphIsomorphismMatcher(afterGraph.get))(beforeGraph.get)
     }
@@ -164,7 +164,7 @@ trait CompilerTestMatchers {
     override def apply(code: String): MatchResult = {
       assertExec[FirmConstructor](code)
 
-      val opt = new Optimizer(())
+      val opt = new Optimizer((), Config())
       opt.generalOptimizations = opt.generalOptimizations.filter(!excludedOptimizations.contains(_))
       opt.highLevelOptimizations = opt.highLevelOptimizations.filter(!excludedOptimizations.contains(_))
       opt.volatileOptimizations = opt.volatileOptimizations.filter(!excludedOptimizations.contains(_))
@@ -236,13 +236,12 @@ trait CompilerTestMatchers {
 
   lazy val ClassPath: String = Seq("sbt", "export compile:fullClasspath").lineStream.last
 
-  class IntegrationTestMatcher(useFirmBackend: Boolean) extends Matcher[String] {
+  class IntegrationTestMatcher(options: Seq[String]) extends Matcher[String] {
 
-    def compileCmd(path: String, useFirmBackend: Boolean) = Seq("java", "-cp", ClassPath, "mjis/CLIMain") ++
-      (if (useFirmBackend) Seq("--compile-firm", path) else Seq(path))
+    def compileCmd(path: String) = Seq("java", "-cp", ClassPath, "mjis/CLIMain", path) ++ options
 
     def apply(path: String) = {
-      val p = Process(compileCmd(path, useFirmBackend), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"
+      val p = Process(compileCmd(path), None, ("LD_LIBRARY_PATH", "lib")) #&& "./a.out"
       var err = ""
       val out = try {
         p.!!(ProcessLogger(err += _ + "\n"))
@@ -256,7 +255,7 @@ trait CompilerTestMatchers {
         s"""Expected output is not equal to actual output
           |test file: $path
           |expected:
-          |$check
+          |${check.take(10000)}
           |actual:
           |$out""".stripMargin,
         "Expected output is equal to actual output\n")
@@ -279,7 +278,7 @@ trait CompilerTestMatchers {
     new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, expectedString)
   def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
     new RegisterAllocatorMatcher(regs, callerSaveRegs, expectedString)
-  def passIntegrationTest(useFirmBackend: Boolean) = new IntegrationTestMatcher(useFirmBackend)
+  def passIntegrationTest(options: Seq[String]) = new IntegrationTestMatcher(options)
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)
   def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, before, to)

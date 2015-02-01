@@ -8,7 +8,7 @@ import mjis.opt._
 import mjis.opt.FirmExtensions._
 import scala.collection.JavaConversions._
 
-class Optimizer(input: Unit) extends Phase[Unit] {
+class Optimizer(input: Unit, config: Config) extends Phase[Unit] {
 
   override val findings = List[Finding]()
 
@@ -32,7 +32,7 @@ class Optimizer(input: Unit) extends Phase[Unit] {
     ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities)
   // The following optimizations mustn't be iterated with other optimizations
   // because of possible interactions leading to infinite loops
-  var volatileOptimizations = List(Inlining)
+  var volatileOptimizations = if (config.inlining) List(Inlining) else List()
 
   def exec(optimizations: List[Optimization]): Unit = {
     // always run all optimizations
