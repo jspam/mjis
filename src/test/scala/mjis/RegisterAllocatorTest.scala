@@ -1,8 +1,9 @@
 package mjis
 
-import firm.{Relation, Firm}
+import firm.Firm
 import mjis.asm._
 import mjis.asm.AMD64Registers._
+import mjis.util.Digraph
 import org.scalatest._
 import mjis.CompilerTestMatchers._
 
@@ -16,9 +17,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     Firm.finish()
   }
 
-  def buildFunction(cfEdges: (AsmBasicBlock, AsmBasicBlock)*) = {
-    val fun = new AsmFunction("test")
-
+  def addBlocks(fun: AsmFunction, cfEdges: (AsmBasicBlock, AsmBasicBlock)*): AsmFunction = {
     for ((pred, succ) <- cfEdges) {
       if (!fun.basicBlocks.contains(pred)) fun.basicBlocks :+= pred
       if (!fun.basicBlocks.contains(succ)) fun.basicBlocks :+= succ
@@ -36,6 +35,13 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     fun.basicBlocks = (fun.prologue :: fun.basicBlocks) :+ fun.epilogue
     fun
   }
+
+  def buildFunction(name: String, cfEdges: (AsmBasicBlock, AsmBasicBlock)*): AsmFunction = {
+    val fun = new AsmFunction(name)
+    addBlocks(fun, cfEdges:_*)
+  }
+
+  def buildFunction(cfEdges: (AsmBasicBlock, AsmBasicBlock)*): AsmFunction = buildFunction("test", cfEdges:_*)
 
   def setCustomRet(fun: AsmFunction, ret: Instruction): Unit = {
     fun.epilogue.instructions.clear()
@@ -340,6 +346,64 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L1:
         |.L2:
         |  movl %eax, (%rsp)
+        |.L3:
+        |  addq $8, %rsp
+        |  ret""")
+  }
+
+  it should "not save caller-save registers that aren't used in the called function" in {
+    val b11 = new AsmBasicBlock(0)
+    b11.instructions += Mov(RegisterOperand(RDI, 4), RegisterOperand(RAX, 4))
+    val b12 = new AsmBasicBlock(1)
+    val fun1 = buildFunction("fun1", (b11, b12))
+
+    val b21 = new AsmBasicBlock(2)
+    b21.instructions ++= Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      Call(LabelOperand("fun1"), Seq()),
+      Mov(RegisterOperand(10, 4), RegisterOperand(RAX, 4))
+    )
+    val b22 = new AsmBasicBlock(3)
+    val main = buildFunction("__main", (b21, b22))
+
+    val prog = new AsmProgram(List(fun1, main), new Digraph[AsmFunction](Map(main -> Seq(fun1), fun1 -> Seq())))
+
+    prog should succeedAllocatingRegistersForProgramWith(Seq(RAX, RDI, RSI), callerSaveRegs = Set(RAX, RDI, RSI),
+      """fun1:
+        |.L0:
+        |  movl %edi, %eax
+        |.L1:
+        |  ret
+        |
+        |__main:
+        |.L2:
+        |  movl $0, %esi    # esi is a caller-save register, but not needed by fun1
+        |  call fun1
+        |  movl %esi, %eax
+        |.L3:
+        |  ret""")
+  }
+
+  it should "save all caller-save registers when calling an external function" in {
+    val b1 = new AsmBasicBlock(2)
+    b1.instructions ++= Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      Call(LabelOperand("calloc"), Seq()),
+      Mov(RegisterOperand(10, 4), RegisterOperand(RAX, 4))
+    )
+    val b2 = new AsmBasicBlock(3)
+    val main = buildFunction("__main", (b1, b2))
+
+    val prog = new AsmProgram(List(main), new Digraph[AsmFunction](Map(main -> Seq())))
+
+    prog should succeedAllocatingRegistersForProgramWith(Seq(RAX), callerSaveRegs = Set(RAX),
+      """__main:
+        |  subq $8, %rsp
+        |.L0:
+        |  movl $0, %eax
+        |  movl %eax, 4(%rsp)
+        |  call calloc
+        |  movl 4(%rsp), %eax
         |.L3:
         |  addq $8, %rsp
         |  ret""")

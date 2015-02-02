@@ -36,9 +36,9 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     val callGraph = new Digraph[AsmFunction](callEdges)
     val mainFunction = functions.values.find(_.name == "__main").get
 
-    val resultProgram = new AsmProgram()
-    resultProgram.functions ++= (if (onlyReachableFromMain) callGraph.getTopologicalSorting(mainFunction) else functions.values.toSeq)
-    resultProgram
+    new AsmProgram(
+      if (onlyReachableFromMain) callGraph.getTopologicalSorting(mainFunction) else functions.values.toSeq,
+      new Digraph[AsmFunction](callEdges))
   }
 
   def intConstOp(i: Int): Operand = ConstOperand(i, Mode.getIs.getSizeBytes)

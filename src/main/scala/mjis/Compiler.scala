@@ -49,8 +49,9 @@ object Compiler {
         // so .head won't necessarily pick out the right one
         phases += new Lexer(input)
       else {
-        assert(cls.getConstructors.size == 1)
-        val ctor = cls.getConstructors.head.asInstanceOf[Constructor[_ <: AnyRef]]
+        val ctors = cls.getConstructors.filter(_.getParameterCount <= 2)
+        assert(ctors.size == 1)
+        val ctor = ctors.head.asInstanceOf[Constructor[_ <: AnyRef]]
         phases += (
           if (ctor.getParameterCount == 1) ctor.newInstance(phases.last.result)
           else ctor.newInstance(phases.last.result, config))

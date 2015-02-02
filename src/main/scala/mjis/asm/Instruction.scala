@@ -180,7 +180,7 @@ object Call {
     new Instruction("call",
       Seq((method, NONE)) ++ registerParams.map((_, READ | IMPLICIT)) ++
       Seq((RegisterOperand(RAX, returnValueSizeBytes), WRITE | IMPLICIT)):_*)
-  def unapply(instr: Instruction) = unapply1("call")(instr)
+  def unapply(instr: Instruction) = if (instr.opcode != "call") None else Some(instr.operands(0).asInstanceOf[LabelOperand])
 }
 
 object Mov {

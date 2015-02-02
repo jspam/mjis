@@ -2,7 +2,7 @@ package mjis
 
 import firm.{Util, Graph}
 import mjis.asm._
-import mjis.util.CCodeGenerator
+import mjis.util.{Digraph, CCodeGenerator}
 
 import org.scalatest.Assertions
 import org.scalatest.matchers.{ MatchResult, Matcher }
@@ -187,12 +187,25 @@ trait CompilerTestMatchers {
     }
   }
 
+  class RegisterAllocatorForProgramMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[AsmProgram] {
+    override def apply(program: AsmProgram): MatchResult = {
+      val allocatedProg = new RegisterAllocator(program, regs, callerSaveRegs).getResult()
+      val generatedCode = new MjisAssemblerFileGenerator(allocatedProg, null).generateCode()
+
+      AsmTestHelper.isIsomorphic(generatedCode,
+        s"""  .text
+           |  .p2align 4,,15
+           |
+           |$expected
+           |""".replace("  ", "\t").stripMargin)
+    }
+  }
+
   class RegisterAllocatorMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[AsmFunction] {
     override def apply(function: AsmFunction): MatchResult = {
       new FunctionRegisterAllocator(function, regs, callerSaveRegs).allocateRegs()
 
-      val program = new AsmProgram()
-      program.functions += function
+      val program = new AsmProgram(List(function), new Digraph[AsmFunction](Map()))
       val asmGenerator = new MjisAssemblerFileGenerator(program, null)
       val generatedCode = asmGenerator.generateCode()
 
@@ -274,6 +287,8 @@ trait CompilerTestMatchers {
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def succeedGeneratingCodeWith(expectedString: String, excludedOptimizations: Set[Optimization] = Set()) = new CodeGeneratorMatcher(expectedString, excludedOptimizations)
+  def succeedAllocatingRegistersForProgramWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
+    new RegisterAllocatorForProgramMatcher(regs, callerSaveRegs, expectedString)
   def succeedAllocatingRegistersInstrSeqWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
     new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, expectedString)
   def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =

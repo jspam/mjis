@@ -17,19 +17,23 @@ object RegisterAllocator {
   def nextEven(i: Int) = i + i%2
   def nextOdd(i: Int) = i + (1 - i%2)
   def prevOdd(i: Int) = i - (1 - i%2)
+
+  val DefaultGPRegisters = Seq(RAX, RBX, RDI, RSI, RDX, RCX, R8, R9, R10, R11, R12, R13, R14, R15, RBP)
 }
 
-class RegisterAllocator(input: AsmProgram) extends Phase[AsmProgram] {
+class RegisterAllocator(input: AsmProgram, val PhysicalRegisters: Seq[Int], val CallerSaveRegisters: Set[Int]) extends Phase[AsmProgram] {
+  def this(input: AsmProgram) = this(input, RegisterAllocator.DefaultGPRegisters, AMD64Registers.CallerSaveRegisters)
+
   override def getResult(): AsmProgram = {
-    for (f <- input.functions) new FunctionRegisterAllocator(f,
-      Seq(RAX, RBX, RDI, RSI, RDX, RCX, R8, R9, R10, R11, R12, R13, R14, R15, RBP),
-      AMD64Registers.CallerSaveRegisters).allocateRegs()
+    val usedRegsPerFunction = mutable.Map[String, Set[Int]]()
+    val mainFunction = input.functions.find(_.name == "__main").get
+    for (f <- input.callGraph.getTopologicalSorting(mainFunction).reverseIterator) {
+      usedRegsPerFunction(f.name) = new FunctionRegisterAllocator(
+        f, PhysicalRegisters, CallerSaveRegisters, usedRegsPerFunction
+      ).allocateRegs()
+    }
     input
   }
-
-  override def dumpResult(writer: BufferedWriter): Unit = {}
-
-  override def findings = List[Finding]()
 }
 
 /**
@@ -47,7 +51,8 @@ class RegisterAllocator(input: AsmProgram) extends Phase[AsmProgram] {
  */
 class FunctionRegisterAllocator(function: AsmFunction,
   val PhysicalRegisters: Seq[Int],
-  val CallerSaveRegisters: Set[Int] = Set()) {
+  val CallerSaveRegisters: Set[Int] = Set(),
+  val UsedRegistersPerFunction: scala.collection.Map[String, Set[Int]] = Map()) {
   // TODO: Use the ordering defined by PhysicalRegisters; e.g. in functions without calls, caller-save registers
   // should be used first.
 
@@ -178,9 +183,13 @@ class FunctionRegisterAllocator(function: AsmFunction,
 
       for ((instr, instrPos) <- instrsWithPos(b).toSeq.reverse) {
         instr match {
-          case Call(_) =>
+          case Call(labelOp) =>
             // Block caller save registers
-            for (reg <- PhysicalRegisters.filter(CallerSaveRegisters)) {
+            val callerSaveRegisters = UsedRegistersPerFunction.get(labelOp.name) match {
+              case Some(usedRegs) => CallerSaveRegisters intersect usedRegs
+              case None => CallerSaveRegisters
+            }
+            for (reg <- PhysicalRegisters.filter(callerSaveRegisters)) {
               // Assign size 8 to the register operand so that debug output will
               // work nicely.
               interval(RegisterOperand(reg, 8)).addRange(instrPos, instrPos)
@@ -699,17 +708,20 @@ class FunctionRegisterAllocator(function: AsmFunction,
     }
   }
 
-  def allocateRegs(): Unit = {
+  def allocateRegs(): Set[Int] = {
     buildLivenessIntervals()
     val mapping = linearScan()
     optimizeSplitPositions(mapping)
     resolveAndDeconstructSSA(mapping)
     applyMapping(mapping)
     insertInstrs(mapping)
-    saveCalleeSaveRegs(
+    val usedRegisters =
       // used physical registers + registers mapped to liveness intervals (of virtual registers)
       (intervals.keys.filter(_ < 0) ++
-      mapping.values.flatMap { case r: RegisterOperand => Some(r.regNr); case _ => None }).toSet)
+      mapping.values.flatMap { case r: RegisterOperand => Some(r.regNr); case _ => None }).toSet
+    saveCalleeSaveRegs(usedRegisters)
     convertArOperands()
+
+    usedRegisters
   }
 }
