@@ -32,6 +32,7 @@ object FirmGraphTestHelper {
     val modeNrs: scala.collection.immutable.Map[String, Int] = Map(
       "M" -> firm.nodes.Start.pnM,
       "T_args" -> firm.nodes.Start.pnTArgs,
+      "T_result" -> firm.nodes.Call.pnTResult,
       "Res" -> firm.nodes.Load.pnRes,
       "ResDiv" -> firm.nodes.Div.pnRes,
       "ResMod" -> firm.nodes.Mod.pnRes

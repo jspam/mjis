@@ -28,7 +28,7 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
     }
   }
 
-  var highLevelOptimizations = List(LoopStrengthReduction, RedundantLoadElimination)
+  var highLevelOptimizations = List(LoopStrengthReduction, RedundantLoadElimination, UnusedParameterElimination)
   var generalOptimizations = List(
     ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities) ++
     (if (!config.useFirmBackend) Seq(ConditionalMoves) else Seq())
