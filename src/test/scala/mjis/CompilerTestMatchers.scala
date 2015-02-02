@@ -172,6 +172,7 @@ trait CompilerTestMatchers {
       opt.result
 
       val codeGenerator = new CodeGenerator(())
+      codeGenerator.onlyReachableFromMain = false
 
       // add jumps
       val program = new BlockOrdering(codeGenerator.result).result
