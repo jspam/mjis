@@ -427,22 +427,6 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
     }
   }
 
-
-  it should "generate code for modulo division by a constant" in {
-    fromMembers("public int foo(int x) { return x % 2; }") should succeedGeneratingCodeWith(template(
-      """_4Test_foo:
-        |  movl %esi, %REG0{4}
-        |.L0:
-        |  movl %REG0{4}, %eax
-        |  cdq
-        |  movl $2, %REG1{4}
-        |  idivl %REG1{4}
-        |  movl %edx, %REG1{4}
-        |  movl %REG1{4}, %eax
-        |.L1:
-        |  ret"""))
-  }
-
   it should "generate correct lea instructions" in {
     fromMembers("public int foo(int x, int y) { return x+3+8*y; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
