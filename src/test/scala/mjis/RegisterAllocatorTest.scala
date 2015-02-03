@@ -55,7 +55,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Add(ConstOperand(2, 4), RegisterOperand(10, 4)),
       Mov(RegisterOperand(10, 4), RegisterOperand(RDX, 4))
     ) should succeedAllocatingRegistersInstrSeqWith(Seq(RDX, RAX), Set(),
-      """  # movl %eax, %eax (optimized away)
+      """  movl %eax, %eax
         |  addl $2, %eax
         |  movl %eax, %edx""")
   }
@@ -123,7 +123,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       """.L1:
         |.L2:
         |  movb $0, %al  # from resolving phi
-        |  # movb %al, %al # optimized away # reg 10 has been assigned register al
+        |  movb %al, %al # reg 10 has been assigned register al
         |  ret""")
   }
 
@@ -211,7 +211,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), callerSaveRegs = Set(RAX),
       """  movl $0, %ebx
         |  call _foobar
-        |  # movl %ebx, %ebx # optimized away
+        |  movl %ebx, %ebx
         |  movl %ebx, (%rsp)""")
   }
 
@@ -260,6 +260,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %eax, %ecx
         |  movl 4(%rsp), %eax
         |.L3:
+        |  movl %eax, %eax
         |  addq $8, %rsp
         |  ret""")
   }
@@ -404,6 +405,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %eax, 4(%rsp)
         |  call calloc
         |  movl 4(%rsp), %eax
+        |  movl %eax, %eax
         |.L3:
         |  addq $8, %rsp
         |  ret""")
