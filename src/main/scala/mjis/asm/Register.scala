@@ -20,6 +20,23 @@ object AMD64Registers {
   val R15 = -15
   val RBP = -16
 
+  val XMM0 = -100
+  val XMM1 = -101
+  val XMM2 = -102
+  val XMM3 = -103
+  val XMM4 = -104
+  val XMM5 = -105
+  val XMM6 = -106
+  val XMM7 = -107
+  val XMM8 = -108
+  val XMM9 = -109
+  val XMM10 = -110
+  val XMM11 = -111
+  val XMM12 = -112
+  val XMM13 = -113
+  val XMM14 = -114
+  val XMM15 = -115
+
   val Registers = Map[Int, Register] (
     RSP -> Register(Map(8 -> "rsp", 4 -> "esp", 2 -> "sp", 1 -> "spl")),
     RBP -> Register(Map(8 -> "rbp", 4 -> "ebp", 2 -> "bp", 1 -> "bpl")),
@@ -36,7 +53,26 @@ object AMD64Registers {
     R12 -> Register(Map(8 -> "r12", 4 -> "r12d", 2 -> "r12w", 1 -> "r12b")),
     R13 -> Register(Map(8 -> "r13", 4 -> "r13d", 2 -> "r13w", 1 -> "r13b")),
     R14 -> Register(Map(8 -> "r14", 4 -> "r14d", 2 -> "r14w", 1 -> "r14b")),
-    R15 -> Register(Map(8 -> "r15", 4 -> "r15d", 2 -> "r15w", 1 -> "r15b"))
+    R15 -> Register(Map(8 -> "r15", 4 -> "r15d", 2 -> "r15w", 1 -> "r15b")),
+
+    // movd/movs will select the appropriate instruction suffix,
+    // no need to differentiate registers by their name
+    XMM0 -> Register(Map(128 -> "xmm0")),
+    XMM1 -> Register(Map(128 -> "xmm1")),
+    XMM2 -> Register(Map(128 -> "xmm2")),
+    XMM3 -> Register(Map(128 -> "xmm3")),
+    XMM4 -> Register(Map(128 -> "xmm4")),
+    XMM5 -> Register(Map(128 -> "xmm5")),
+    XMM6 -> Register(Map(128 -> "xmm6")),
+    XMM7 -> Register(Map(128 -> "xmm7")),
+    XMM8 -> Register(Map(128 -> "xmm8")),
+    XMM9 -> Register(Map(128 -> "xmm9")),
+    XMM10 -> Register(Map(128 -> "xmm10")),
+    XMM11 -> Register(Map(128 -> "xmm11")),
+    XMM12 -> Register(Map(128 -> "xmm12")),
+    XMM13 -> Register(Map(128 -> "xmm13")),
+    XMM14 -> Register(Map(128 -> "xmm14")),
+    XMM15 -> Register(Map(128 -> "xmm15"))
   )
 
   // Registers to pass parameters in (in order)
@@ -44,5 +80,6 @@ object AMD64Registers {
 
   val CallerSaveRegisters = Set(RAX, RDI, RSI, RDX, RCX, R8, R9, R10, R11)
   val CalleeSaveRegisters = Set(RBP, RBX, R12, R13, R14, R15)
+  val SSERegisters = Set(XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8, XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15)
 }
 

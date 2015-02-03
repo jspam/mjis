@@ -1,7 +1,5 @@
 package mjis
 
-import java.io.BufferedWriter
-
 import mjis.asm.OperandSpec._
 import mjis.asm._
 import mjis.asm.AMD64Registers._
@@ -21,15 +19,19 @@ object RegisterAllocator {
   val DefaultGPRegisters = Seq(RAX, RBX, RDI, RSI, RDX, RCX, R8, R9, R10, R11, R12, R13, R14, R15, RBP)
 }
 
-class RegisterAllocator(input: AsmProgram, val PhysicalRegisters: Seq[Int], val CallerSaveRegisters: Set[Int]) extends Phase[AsmProgram] {
-  def this(input: AsmProgram) = this(input, RegisterAllocator.DefaultGPRegisters, AMD64Registers.CallerSaveRegisters)
+class RegisterAllocator(input: AsmProgram, val PhysicalRegisters: Seq[Int],
+    val CallerSaveRegisters: Set[Int], val SSERegisters: Set[Int]) extends Phase[AsmProgram] {
+  def this(input: AsmProgram) = this(input, RegisterAllocator.DefaultGPRegisters, AMD64Registers.CallerSaveRegisters, AMD64Registers.SSERegisters)
 
   override def getResult(): AsmProgram = {
-    val usedRegsPerFunction = mutable.Map[String, Set[Int]]()
+    val usedRegsPerFunction = mutable.Map[String, Set[Int]](
+      "calloc"             -> CallerSaveRegisters, // but no SSE registers
+      "System_out_println" -> CallerSaveRegisters
+    )
     val mainFunction = input.functions.find(_.name == "__main").get
     for (f <- input.callGraph.getTopologicalSorting(mainFunction).reverseIterator) {
       usedRegsPerFunction(f.name) = new FunctionRegisterAllocator(
-        f, PhysicalRegisters, CallerSaveRegisters, usedRegsPerFunction
+        f, PhysicalRegisters, CallerSaveRegisters, SSERegisters, usedRegsPerFunction
       ).allocateRegs()
     }
     input
@@ -52,6 +54,7 @@ class RegisterAllocator(input: AsmProgram, val PhysicalRegisters: Seq[Int], val 
 class FunctionRegisterAllocator(function: AsmFunction,
   val PhysicalRegisters: Seq[Int],
   val CallerSaveRegisters: Set[Int] = Set(),
+  val SSERegisters: Set[Int] = Set(),
   val UsedRegistersPerFunction: scala.collection.Map[String, Set[Int]] = Map()) {
   // TODO: Use the ordering defined by PhysicalRegisters; e.g. in functions without calls, caller-save registers
   // should be used first.
@@ -83,6 +86,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
   /** The lifetime interval for each (virtual and physical) register, indexed by register number.
     * In case of interval splitting, only the parent interval is stored here. */
   private val intervals = mutable.Map[Int, LivenessInterval]()
+
+  private val sseIntervals = SSERegisters.map(regNr => regNr -> new LivenessInterval(RegisterOperand(regNr, 128))).toMap
 
   /** Preferred physical register for each liveness interval. */
   private val registerHints = mutable.Map[LivenessInterval, Int]()
@@ -187,15 +192,18 @@ class FunctionRegisterAllocator(function: AsmFunction,
       for ((instr, instrPos) <- instrsWithPos(b).toSeq.reverse) {
         instr match {
           case Call(labelOp) =>
-            // Block caller save registers
-            val callerSaveRegisters = UsedRegistersPerFunction.get(labelOp.name) match {
-              case Some(usedRegs) => CallerSaveRegisters intersect usedRegs
-              case None => CallerSaveRegisters
+            // Block caller save registers and SSE registers
+            val (callerSaveRegisters, callerSaveSSERegisters) = UsedRegistersPerFunction.get(labelOp.name) match {
+              case Some(usedRegs) => (CallerSaveRegisters intersect usedRegs, SSERegisters intersect usedRegs)
+              case None => (CallerSaveRegisters, SSERegisters)
             }
             for (reg <- PhysicalRegisters.filter(callerSaveRegisters)) {
               // Assign size 8 to the register operand so that debug output will
               // work nicely.
               interval(RegisterOperand(reg, 8)).addRange(instrPos, instrPos)
+            }
+            for (regNr <- callerSaveSSERegisters) {
+              sseIntervals(regNr).addRange(instrPos, instrPos)
             }
           case Mov(src: RegisterOperand, dest: RegisterOperand) if dest.regNr >= 0
             && (PhysicalRegisters.contains(src.regNr) || src.regNr >= 0) =>
@@ -283,22 +291,36 @@ class FunctionRegisterAllocator(function: AsmFunction,
       def spillInterval(interval: LivenessInterval) = {
         val spilledInterval = splitInterval(interval, position, appendToUnhandled = false)
         // do not append to unhandled -- it has been handled by assigning an AR operand!
-        result(spilledInterval) = activationRecordOperand(interval.regOp)
 
         val usagesAfterSpill = spilledInterval.usages.tailMap(position, true).toSeq
-
-        // If the interval is only used once afterwards and this usage can be from memory, don't bother reloading
-        if (usagesAfterSpill.size == 1 &&
-            !instrsWithMemoryReferences.contains(usagesAfterSpill.head._1) &&
-            usagesAfterSpill.head._2.contains(MEMORY)) {
-          instrsWithMemoryReferences += usagesAfterSpill.head._1
-        } else if (usagesAfterSpill.size >= 1) {
+        val rest = if (usagesAfterSpill.nonEmpty) {
           // Reload at a position with minimal loop depth before the next usage
           val maxSplitPos = usagesAfterSpill.head._1
           val loopDepths = blocksInPosRange(position + 1, maxSplitPos).map(b => b -> loopDepth(b))
           val reloadBlock = loopDepths.toSeq.reverse.minBy(_._2)._1 // find the last element with min loop depth
           val splitPos = blockEndPos(reloadBlock) min maxSplitPos
-          splitInterval(spilledInterval, splitPos)
+          splitInterval(spilledInterval, splitPos, appendToUnhandled = false)
+        } else spilledInterval // no need to split
+
+        // Spill to SSE if an SSE register is available
+        val availableSSERegs = SSERegisters.toSeq.filter(regNr => !sseIntervals(regNr).intersects(spilledInterval)).sortBy(-_)
+        if (availableSSERegs.nonEmpty) {
+          // Prefer an SSE register whose liveness does not end exactly here
+          // (to avoid potentially costly cyclic permutations involving SSE registers)
+          val regNr = availableSSERegs.find(regNr => !sseIntervals(regNr).containsIncl(position)).getOrElse(availableSSERegs.head)
+          result(spilledInterval) = SSERegisterOperand(regNr, spilledInterval.regOp.sizeBytes max 4)
+          spilledInterval.ranges.values.foreach(r => sseIntervals(regNr).addRange(r.start, r.end))
+          if (rest != spilledInterval) unhandled += rest
+        } else {
+          result(spilledInterval) = activationRecordOperand(interval.regOp)
+
+          // If the interval is only used once afterwards and this usage can be from memory, don't bother reloading
+          if (usagesAfterSpill.size == 1 &&
+              !instrsWithMemoryReferences.contains(usagesAfterSpill.head._1) &&
+              usagesAfterSpill.head._2.contains(MEMORY)) {
+            instrsWithMemoryReferences += usagesAfterSpill.head._1
+            result(rest) = result(spilledInterval)
+          } else if (rest != spilledInterval) unhandled += rest
         }
       }
 
@@ -662,6 +684,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
                 val rewrittenPermutation = permutation.map { case (dest, src) => rewrite(dest) -> rewrite(src) }
                 val phiGen2 = new PhiCodeGenerator(rewrittenPermutation)
                 phiGen2.tempRegNrs = phiGen.tempRegNrs ++ regNrsToSpill
+                assert(phiGen2.tempRegNrs.size >= phiGen2.neededTempRegs, "Not enough temporary registers. Whoops.")
                 spillInstrs ++ phiGen2.getInstructions() ++ reloadInstrs
               } else {
                 spillInstrs ++ phiGen.getInstructions() ++ reloadInstrs
@@ -727,7 +750,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
     insertInstrs(mapping)
     val usedRegisters =
       // used physical registers + registers mapped to liveness intervals (of virtual registers)
-      (intervals.keys.filter(_ < 0) ++
+      (intervals.keys.filter(_ < 0) ++ sseIntervals.filter(_._2.ranges.nonEmpty).map(_._1) ++
       mapping.values.flatMap { case r: RegisterOperand => Some(r.regNr); case _ => None }).toSet
     saveCalleeSaveRegs(usedRegisters)
     convertArOperands()

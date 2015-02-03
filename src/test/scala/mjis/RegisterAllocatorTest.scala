@@ -90,6 +90,25 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl $43, (%rax)""")
   }
 
+  it should "spill register contents into SSE registers if available" in {
+    Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 8)),
+      Mov(ConstOperand(41, 4), AddressOperand(base = Some(RegisterOperand(10, 8)), sizeBytes = 4)),
+      Mov(ConstOperand(0, 4), RegisterOperand(11, 8)),
+      Mov(ConstOperand(42, 4), AddressOperand(base = Some(RegisterOperand(10, 8)), sizeBytes = 4)),
+      Mov(ConstOperand(43, 4), AddressOperand(base = Some(RegisterOperand(11, 8)), sizeBytes = 4))
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX) /* we only have one register */, sseRegs = Set(XMM0, XMM1), expected =
+      """  movq $0, %rax      # REG10 => RAX
+        |  movl $41, (%rax)
+        |  movq %rax, %xmm0   # spill REG10
+        |  movq $0, %rax      # REG11 => RAX
+        |  movq %rax, %xmm1    # spill REG11
+        |  movq %xmm0, %rax   # reload REG10 => RAX
+        |  movl $42, (%rax)
+        |  movq %xmm1, %rax    # reload REG11 => RAX
+        |  movl $43, (%rax)""")
+  }
+
   it should "respect liveness intervals ending at the following instruction when reloading" in {
     Seq(
       Mov(ConstOperand(0, 8), RegisterOperand(10, 8)), // gets assigned EDX

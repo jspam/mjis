@@ -187,9 +187,9 @@ trait CompilerTestMatchers {
     }
   }
 
-  class RegisterAllocatorForProgramMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[AsmProgram] {
+  class RegisterAllocatorForProgramMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], sseRegs: Set[Int], expected: String) extends Matcher[AsmProgram] {
     override def apply(program: AsmProgram): MatchResult = {
-      val allocatedProg = new RegisterAllocator(program, regs, callerSaveRegs).getResult()
+      val allocatedProg = new RegisterAllocator(program, regs, callerSaveRegs, sseRegs).getResult()
       val generatedCode = new MjisAssemblerFileGenerator(allocatedProg, null).generateCode()
 
       AsmTestHelper.isIsomorphic(generatedCode,
@@ -201,9 +201,9 @@ trait CompilerTestMatchers {
     }
   }
 
-  class RegisterAllocatorMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[AsmFunction] {
+  class RegisterAllocatorMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], sseRegs: Set[Int], expected: String) extends Matcher[AsmFunction] {
     override def apply(function: AsmFunction): MatchResult = {
-      new FunctionRegisterAllocator(function, regs, callerSaveRegs).allocateRegs()
+      new FunctionRegisterAllocator(function, regs, callerSaveRegs, sseRegs).allocateRegs()
 
       val program = new AsmProgram(List(function), new Digraph[AsmFunction](Map()))
       val asmGenerator = new MjisAssemblerFileGenerator(program, null)
@@ -224,7 +224,7 @@ trait CompilerTestMatchers {
     }
   }
 
-  class RegisterAllocatorInstrSeqMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], expected: String) extends Matcher[Seq[Instruction]] {
+  class RegisterAllocatorInstrSeqMatcher(regs: Seq[Int], callerSaveRegs: Set[Int], sseRegs: Set[Int], expected: String) extends Matcher[Seq[Instruction]] {
     override def apply(instrs: Seq[Instruction]): MatchResult = {
       val function = new AsmFunction("test")
 
@@ -239,7 +239,7 @@ trait CompilerTestMatchers {
       function.epilogue.predecessors += Some(basicBlock)
       function.epilogue.instructions += Ret()
 
-      new RegisterAllocatorMatcher(regs, callerSaveRegs, expected).apply(function)
+      new RegisterAllocatorMatcher(regs, callerSaveRegs, sseRegs, expected).apply(function)
     }
   }
 
@@ -287,12 +287,12 @@ trait CompilerTestMatchers {
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def succeedGeneratingCodeWith(expectedString: String, excludedOptimizations: Set[Optimization] = Set()) = new CodeGeneratorMatcher(expectedString, excludedOptimizations)
-  def succeedAllocatingRegistersForProgramWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), expected: String = "") =
-    new RegisterAllocatorForProgramMatcher(regs, callerSaveRegs, expected)
+  def succeedAllocatingRegistersForProgramWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), sseRegs: Set[Int] = Set(), expected: String = "") =
+    new RegisterAllocatorForProgramMatcher(regs, callerSaveRegs, sseRegs, expected)
   def succeedAllocatingRegistersInstrSeqWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), sseRegs: Set[Int] = Set(), expected: String = "") =
-    new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, expected)
-  def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), expected: String = "") =
-    new RegisterAllocatorMatcher(regs, callerSaveRegs, expected)
+    new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, sseRegs, expected)
+  def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), sseRegs: Set[Int] = Set(), expected: String = "") =
+    new RegisterAllocatorMatcher(regs, callerSaveRegs, sseRegs, expected)
   def passIntegrationTest(options: Seq[String]) = new IntegrationTestMatcher(options)
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)

@@ -26,6 +26,7 @@ object Instruction {
 
 sealed abstract class Operand(val sizeBytes: Int)
 case class RegisterOperand(regNr: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
+case class SSERegisterOperand(regNr: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
 // base + index * scale + offset
 case class AddressOperand(base: Option[RegisterOperand] = None, indexAndScale: Option[(RegisterOperand, Int)] = None, offset: Int = 0, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class ConstOperand(value: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
@@ -65,7 +66,7 @@ sealed class Instruction(val opcode: String, operandsWithSpec: (Operand, Operand
   val operands = ListBuffer[Operand](operandsWithSpec.map(_._1):_*)
   val operandSpecs = Seq[OperandSpec](operandsWithSpec.map(_._2):_*)
   def suffix = this.opcode match {
-    case "call" | "cdq" | "ret" => ""
+    case "call" | "cdq" | "ret" | "movd" | "movq" => ""
     case _ =>
       val (constOperands, nonConstOperands) = operands.partition(_.isInstanceOf[ConstOperand])
       if (nonConstOperands.isEmpty) {
@@ -212,6 +213,14 @@ object MovConditional {
     case "cmovl" | "cmovge" | "cmovg" | "cmovle" | "cmove" | "cmovne" => Some((instr.operands(0), instr.operands(1)))
     case _ => None
   }
+}
+
+object MovSSE {
+  def apply(src: Operand, dest: Operand, sizeBytes: Int) : Instruction =
+    new Instruction(if (sizeBytes == 4) "movd" else "movq", (src, READ | CONST | MEMORY), (dest, WRITE | MEMORY))
+  def unapply(instr: Instruction) =
+    if (instr.opcode == "movd" || instr.opcode == "movq") Some((instr.operands(0), instr.operands(1)))
+    else None
 }
 
 object Jmp {
