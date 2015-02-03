@@ -41,11 +41,19 @@ class Optimizer(input: Unit, config: Config) extends Phase[Unit] {
 
   override protected def getResult(): Unit = {
     exec(generalOptimizations ++ highLevelOptimizations)
+    Program.getGraphs.foreach(g => {
+      bindings.binding_irgopt.remove_bads(g.ptr)
+      bindings.binding_irgopt.remove_unreachable_code(g.ptr)
+    })
     volatileOptimizations.foreach(_.optimize())
     Util.lowerSels()
     exec(generalOptimizations)
 
     Program.getGraphs.foreach(removeCriticalEdges)
+    Program.getGraphs.foreach(g => {
+      bindings.binding_irgopt.remove_bads(g.ptr)
+      bindings.binding_irgopt.remove_unreachable_code(g.ptr)
+    })
   }
 
 }
