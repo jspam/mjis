@@ -4,7 +4,7 @@ import org.scalatest._
 import mjis.asm._
 import scala.collection.mutable.ListBuffer
 
-class PeepholeOptimizationTest extends FlatSpec with Matchers with BeforeAndAfter {
+class PeepholeOptimizerTest extends FlatSpec with Matchers with BeforeAndAfter {
 
   val reg0 = RegisterOperand(0, 4)
   val reg1 = RegisterOperand(1, 4)
@@ -19,24 +19,28 @@ class PeepholeOptimizationTest extends FlatSpec with Matchers with BeforeAndAfte
   val add01 = Add(reg0, reg1)
   val addC10 = Add(c1, reg0)
 
-  it should "remove mov $x $x" in {
+  "Peephole Optimization" should "remove mov $x $x" in {
     val instructions = ListBuffer(add01, mov22, mov00)
-    new PeepholeOptimizer(null).optimizeSequence(instructions) shouldBe ListBuffer(add01)
+    new PeepholeOptimizer(null).optimizeSequence(instructions)
+    instructions shouldBe ListBuffer(add01)
   }
 
   it should "replace mov $x $y, mov $z $y with mov $x $y" in {
     val instructions = ListBuffer(mov20, mov10)
-    new PeepholeOptimizer(null).optimizeSequence(instructions) shouldBe ListBuffer(mov10)
+    new PeepholeOptimizer(null).optimizeSequence(instructions)
+    instructions shouldBe ListBuffer(mov10)
   }
 
   it should "replace mov $x $y, mov $y $x with mov $x $y" in {
     val instructions = ListBuffer(mov10, mov01)
-    new PeepholeOptimizer(null).optimizeSequence(instructions) shouldBe ListBuffer(mov10)
+    new PeepholeOptimizer(null).optimizeSequence(instructions)
+    instructions shouldBe ListBuffer(mov10)
   }
 
   it should "apply pattern matching multiple times" in {
     val instructions = ListBuffer(mov10, mov22, mov10)
-    new PeepholeOptimizer(null).optimizeSequence(instructions) shouldBe ListBuffer(mov10)
+    new PeepholeOptimizer(null).optimizeSequence(instructions)
+    instructions shouldBe ListBuffer(mov10)
   }
 
 }
