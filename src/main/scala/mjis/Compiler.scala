@@ -15,7 +15,8 @@ object Compiler {
   type Pipeline = List[Class[_ <: Phase[_]]]
   private val defaultPipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
     classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[CodeGenerator], classOf[RegisterAllocator],
-    classOf[BlockOrdering], classOf[MjisAssemblerFileGenerator], classOf[GccRunner])
+    classOf[BlockOrdering], classOf[PeepholeOptimizer],
+    classOf[MjisAssemblerFileGenerator], classOf[GccRunner])
   private val firmCompilePipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
     classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[FirmAssemblerFileGenerator],
     classOf[GccRunner])
