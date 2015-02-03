@@ -303,22 +303,22 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         case n: nodes.Load =>
           toVisit ++= Seq(n.getMem)
           n.getPtr match {
-            case c: nodes.Const =>
-              // null access
+            case _: nodes.Const | _: nodes.Unknown =>
+              // null or undefined access
               Seq(
-                Mov(getOperand(c), regOp(c)),
-                Mov(AddressOperand(base = Some(regOp(c)), sizeBytes = n.getLoadMode.getSizeBytes), regOp(n))
+                Mov(getOperand(n.getPtr), regOp(n.getPtr)),
+                Mov(AddressOperand(base = Some(regOp(n.getPtr)), sizeBytes = n.getLoadMode.getSizeBytes), regOp(n))
               )
             case _ => Seq(Mov(getAddressOperand(n.getPtr, n.getLoadMode.getSizeBytes), regOp(n)))
           }
         case n: nodes.Store =>
           toVisit ++= Seq(n.getMem, n.getValue)
           n.getPtr match {
-            case c: nodes.Const =>
-              // null access
+            case _: nodes.Const | _: nodes.Unknown =>
+              // null or undefined access
               Seq(
-                Mov(getOperand(c), regOp(c)),
-                Mov(getOperand(n.getValue), AddressOperand(base = Some(regOp(c)), sizeBytes = n.getType.getSizeBytes))
+                Mov(getOperand(n.getPtr), regOp(n.getPtr)),
+                Mov(getOperand(n.getValue), AddressOperand(base = Some(regOp(n.getPtr)), sizeBytes = n.getType.getSizeBytes))
               )
             case _ => Seq(Mov(getOperand(n.getValue), getAddressOperand(n.getPtr, n.getType.getSizeBytes)))
           }
