@@ -15,6 +15,19 @@
 	 */
 main:
 	call __main
+	# flush stdout buffer
+	movq	$1, %rax            # sycall 1: write
+	movq	$1, %rdi
+	movq	$buf, %rsi
+	movq	buf_size(%rip), %rdx
+	syscall
+	# exit(0)
 	movq $60, %rax            # system call numer for sys_exit
 	movq $0, %rdi             # exit code
 	syscall
+
+/*
+ * Data
+ */
+	.comm	buf_size,4,4
+	.comm	buf,4096,64
