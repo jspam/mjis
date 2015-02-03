@@ -1,7 +1,9 @@
 package mjis.asm
 
 import firm.Relation
+import mjis.util.Digraph
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.ArrayBuffer
 
@@ -35,6 +37,4 @@ class AsmFunction(val name: String) {
   def getLoopEnd(b: AsmBasicBlock) = basicBlocks.filter(_.successors.contains(b)).last
 }
 
-class AsmProgram {
-  val functions = ListBuffer[AsmFunction]()
-}
+class AsmProgram(val functions: Seq[AsmFunction], val callGraph: Digraph[AsmFunction])

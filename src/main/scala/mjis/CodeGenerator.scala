@@ -10,7 +10,7 @@ import mjis.opt.FirmExtensions._
 import mjis.opt.NodeCollector
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
-import mjis.util.PowerOfTwo
+import mjis.util.{Digraph, PowerOfTwo}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -21,14 +21,24 @@ object CodeGenerator {
 }
 
 class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
+  var onlyReachableFromMain: Boolean = true
+
   override def dumpResult(a: BufferedWriter) = {
     a.write(new MjisAssemblerFileGenerator(result, null).generateCode())
   }
 
   override def getResult(): AsmProgram = {
-    val resultProgram = new AsmProgram()
-    resultProgram.functions ++= Program.getGraphs.map { new MethodCodeGenerator(_).getResult() }
-    resultProgram
+    val functions = Program.getGraphs.map(g => g -> new MethodCodeGenerator(g).getResult()).toMap
+    val callEdges = functions.map {
+      case (graph, fun) => fun -> CallGraph.calls(graph).flatMap(_.getCalledGraph).flatMap(functions.get)
+    }.toMap
+
+    val callGraph = new Digraph[AsmFunction](callEdges)
+    val mainFunction = functions.values.find(_.name == "__main").get
+
+    new AsmProgram(
+      if (onlyReachableFromMain) callGraph.getTopologicalSorting(mainFunction) else functions.values.toSeq,
+      new Digraph[AsmFunction](callEdges))
   }
 
   def intConstOp(i: Int): Operand = ConstOperand(i, Mode.getIs.getSizeBytes)
