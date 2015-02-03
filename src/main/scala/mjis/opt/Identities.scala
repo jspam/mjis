@@ -30,7 +30,6 @@ object Identities extends NodeBasedOptimization() {
     // x % y == x - x / y * y (which is only useful if 'x / y' can be computed by fast division
     case n@ProjExtr(mod@ModExtr(x, y@ConstExtr(_)), Mod.pnRes) =>
       val div = g.newDiv(n.block, mod.asInstanceOf[Mod].getMem, x, y, n.getMode, op_pin_state.op_pin_state_pinned)
-      for (proj@ProjExtr(_, Mod.pnM) <- mod.successors) proj.setPred(0, div)
       exchange(n,
         g.newSub(n.block,
           x,

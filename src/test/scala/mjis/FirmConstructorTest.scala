@@ -119,10 +119,9 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     val mDivMethodEntity = methodEntity("__expected__4Test_m_div", IntType, Seq())
     val mDiv = FirmGraphTestHelper.buildFirmGraph(mDivMethodEntity,
       intArithmeticFirm(
-        """mem = Proj M M, start
-          |divmod = Div Is, mem, const1, const2
+        """mem_before_return = Proj M M, start
+          |divmod = Div Is, mem_before_return, const1, const2
           |retval = Proj Is ResDiv, divmod
-          |mem_before_return = Proj M M, divmod
         """.stripMargin))
     fromMembers("public int m_div() { return 1 / 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mDiv))
   }
@@ -131,10 +130,9 @@ class FirmConstructorTest extends FlatSpec with Matchers with BeforeAndAfter {
     val mModMethodEntity = methodEntity("__expected__4Test_m_mod", IntType, Seq())
     val mMod = FirmGraphTestHelper.buildFirmGraph(mModMethodEntity,
       intArithmeticFirm(
-        """mem = Proj M M, start
-          |divmod = Mod Is, mem, const1, const2
+        """mem_before_return = Proj M M, start
+          |divmod = Mod Is, mem_before_return, const1, const2
           |retval = Proj Is ResMod, divmod
-          |mem_before_return = Proj M M, divmod
         """.stripMargin))
     fromMembers("public int m_mod() { return 1 % 2; }") should succeedFirmConstructingWith(List(getEmptyMainMethodGraph, mMod))
   }
