@@ -31,7 +31,7 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
   var highLevelOptimizations = List(
     LoopStrengthReduction, RedundantLoadElimination, UnusedParameterElimination, PureFunctionCallElimination)
   var generalOptimizations = List(
-    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities) ++
+    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities, LoopInvariantCodeMotion) ++
     (if (!config.useFirmBackend) Seq(ConditionalMoves) else Seq())
   // The following optimizations mustn't be iterated with other optimizations
   // because of possible interactions leading to infinite loops

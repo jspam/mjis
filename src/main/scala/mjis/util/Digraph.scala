@@ -29,7 +29,7 @@ class Digraph[V](val edges: Map[V, Seq[V]]) {
     new Digraph(reverse)
   }
 
-  def getSubgraph(nodes: Set[V]): Digraph[V] = new Digraph(edges.flatMap {
+  def getSubgraph(nodes: scala.collection.Set[V]): Digraph[V] = new Digraph(edges.flatMap {
     case (src, dests) if nodes(src) => Some(src -> dests.filter(nodes))
     case _ => None
   })
@@ -38,10 +38,12 @@ class Digraph[V](val edges: Map[V, Seq[V]]) {
     * in topological order, starting with the one containing `start`.
     */
   def findStronglyConnectedComponents(start: V): Seq[(V, Set[V])] = {
-    val visited = mutable.Set[V]()
-    val transposed = this.transposed
-    getTopologicalSorting(start).flatMap { n =>
-      transposed.getTopologicalSorting(n, visited) match {
+    val forwardVisited = mutable.Set[V]()
+    val backwardVisited = mutable.Set[V]()
+    val topo = getTopologicalSorting(start, forwardVisited)
+    val transposed = this.getSubgraph(forwardVisited).transposed
+    topo.flatMap { n =>
+      transposed.getTopologicalSorting(n, backwardVisited) match {
         case Seq() => None
         case scc => Some((scc.head, scc.toSet))
       }

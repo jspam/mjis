@@ -36,6 +36,10 @@ abstract class Optimization(needsBackEdges: Boolean = false) {
     node.setPred(idx, pred)
     changed = true
   }
+  protected def setBlock(node: Node, block: Block): Unit = {
+    node.setBlock(block)
+    changed = true
+  }
 
   /**
    * "Deletes" a memory node by redirecting the graph's memory flow
