@@ -294,14 +294,12 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
               case Builtins.IntSubDecl => constr.newSub(args(0), args(1), Mode.getIs)
               case Builtins.IntMulDecl => constr.newMul(args(0), args(1), Mode.getIs)
               case Builtins.IntDivDecl =>
-                val divNode = constr.newDiv(constr.getCurrentMem, args(0), args(1),
+                val divNode = constr.newDiv(graph.getInitialMem, args(0), args(1),
                   Mode.getIs, op_pin_state.op_pin_state_pinned)
-                constr.setCurrentMem(constr.newProj(divNode, Mode.getM, firm.nodes.Div.pnM))
                 constr.newProj(divNode, Mode.getIs, firm.nodes.Div.pnRes)
               case Builtins.IntModDecl =>
-                val modNode = constr.newMod(constr.getCurrentMem, args(0), args(1),
+                val modNode = constr.newMod(graph.getInitialMem, args(0), args(1),
                   Mode.getIs, op_pin_state.op_pin_state_pinned)
-                constr.setCurrentMem(constr.newProj(modNode, Mode.getM, firm.nodes.Mod.pnM))
                 constr.newProj(modNode, Mode.getIs, firm.nodes.Mod.pnRes)
 
               case Builtins.IntMinusDecl =>
