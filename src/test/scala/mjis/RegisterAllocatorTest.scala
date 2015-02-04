@@ -280,14 +280,14 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl $1, %ecx
         |.L1:
         |.L2:
-        |  movl %ecx, (%rsp)  # spill
-        |  movl %eax, 8(%rsp) # spill
-        |  movl 8(%rsp), %eax
+        |  movl %eax, (%rsp)  # spill
+        |  movl %ecx, 8(%rsp) # spill
         |  movl (%rsp), %ecx
-        |  movl %ecx, 8(%rsp)
+        |  movl 8(%rsp), %eax
         |  movl %eax, (%rsp)
-        |  movl (%rsp), %ecx  # reload
-        |  movl 8(%rsp), %eax # reload
+        |  movl %ecx, 8(%rsp)
+        |  movl (%rsp), %eax  # reload
+        |  movl 8(%rsp), %ecx # reload
         |.L3:
         |  addq $16, %rsp
         |  ret""")
