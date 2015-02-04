@@ -10,7 +10,7 @@ object TrivialPhiElimination extends NodeBasedOptimization() {
     // skip memory phis
     case _: Phi if node.getMode != Mode.getM =>
 
-      val dependencies = node.getPreds.toSet - node
+      val dependencies = node.getPreds.filter(!_.isInstanceOf[Bad]).toSet - node
 
       if (dependencies.size == 1)
         exchange(node, dependencies.head)
