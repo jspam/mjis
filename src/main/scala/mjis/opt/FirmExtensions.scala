@@ -6,6 +6,7 @@ import mjis.opt.FirmExtractors._
 import mjis.util.Digraph
 import scala.collection.JavaConversions._
 import scala.collection.immutable.ListMap
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * value = Phi(start, incrAdd)
@@ -33,15 +34,40 @@ object FirmExtensions {
     }
 
     def getInductionVariables: Seq[InductionVariable] = {
-      NodeCollector.fromWalk(g.walk).map(node => node match {
+      val result = ArrayBuffer[InductionVariable]()
+      g.walkWith { node => node match {
         case PhiExtr(start, incrAdd@AddExtr(`node`, incr: Const)) =>
-          Some(InductionVariable(node.asInstanceOf[Phi], start, incr, incrAdd.asInstanceOf[Add]))
-        case _ => None
-      }).flatten
+          result += InductionVariable(node.asInstanceOf[Phi], start, incr, incrAdd.asInstanceOf[Add])
+        case _ =>
+      }}
+      result
     }
 
     def methodType: MethodType = g.getEntity.getType.asInstanceOf[MethodType]
 
+    def walkWith(walker: Node => Unit) = {
+      g.walk(new NodeVisitor.Default {
+        override def defaultVisit(node: Node): Unit = walker(node)
+      })
+    }
+
+    def walkTopologicalWith(walker: Node => Unit) = {
+      g.walkTopological(new NodeVisitor.Default {
+        override def defaultVisit(node: Node): Unit = walker(node)
+      })
+    }
+
+    def walkBlocksWith(walker: Block => Unit) = {
+      g.walkBlocks(new BlockWalker {
+        override def visitBlock(block: Block): Unit = walker(block)
+      })
+    }
+
+    def nodeCount = {
+      var numNodes = 0
+      g.walkWith(_ => numNodes += 1)
+      numNodes
+    }
   }
 
   implicit class CallExt(call: Call) {
