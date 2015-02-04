@@ -69,4 +69,10 @@ object FirmExtensions {
 
   }
 
+  implicit class BlockExt(block: Block) {
+
+    def nodes: Iterable[Node] = block.successors.filter(_.getBlock == block)
+
+  }
+
 }

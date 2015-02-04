@@ -5,14 +5,6 @@ import firm.nodes._
 
 import scala.collection.JavaConversions._
 
-/**
- * Constant, pattern-matchable modes
- */
-object Modes {
-  lazy val M = Mode.getM
-  lazy val Is = Mode.getIs
-}
-
 object FirmExtractors {
 
   object NodeExtr {

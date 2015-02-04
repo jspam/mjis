@@ -33,9 +33,9 @@ object Identities extends NodeBasedOptimization() {
       exchange(n, g.newSub(n.getBlock, g.newConst(-c, d.getMode), x, n.getMode))
     // -(-x) == x (while FirmConstructor may not create these, previous identity applications may)
     case n@MinusExtr(MinusExtr(x)) => exchange(n, x)
-    // (c-(x+(-d))) == (c+d)-x
-    case n@SubExtr(d@ConstExtr(c), AddExtr(x, ConstExtr(c2))) =>
-      exchange(n, g.newSub(n.getBlock, g.newConst(c+c2, d.getMode), x, n.getMode))
+    // c-(x+d) == (c-d)-x
+    case n@SubExtr(c: Const, AddExtr(x, d: Const)) =>
+      exchange(n, g.newSub(n.getBlock, g.newConst(c.getTarval.sub(d.getTarval, n.getMode)), x, n.getMode))
     // x-(-y) == x+y
     case n@SubExtr(x, MinusExtr(y)) =>
       exchange(n, g.newAdd(n.getBlock, x, y, n.getMode))
@@ -92,6 +92,8 @@ object Identities extends NodeBasedOptimization() {
           g.newMul(n.block,
             g.newProj(div, n.getMode, Div.pnRes),
             y, n.getMode), n.getMode))
+    case CmpExtr(rel, c: Const, x) =>
+      exchange(node, g.newCmp(node.block, x, c, rel.inversed))
     // x % 2^k ==/!= 0
     case CmpExtr(Relation.Equal | Relation.UnorderedLessGreater, proj@ProjExtr(mod@ModExtr(x, ConstExtr(modulo@PowerOfTwo(_))), Mod.pnRes), ConstExtr(0)) =>
       killMemoryNode(mod)
