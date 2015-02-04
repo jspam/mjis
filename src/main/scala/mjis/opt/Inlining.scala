@@ -51,7 +51,7 @@ object Inlining extends Optimization(needsBackEdges = true) {
   }
 
   // TODO SCIENCE to figure out a good value for this
-  private def maxNodeNum = 100
+  private def maxNodeNum = 300
 
   def shouldInline(call: Call): Boolean = {
     call.getCalledGraph match {
