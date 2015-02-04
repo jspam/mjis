@@ -287,12 +287,12 @@ trait CompilerTestMatchers {
   def succeedFirmConstructingWith(expectedGraphs: List[Graph]) = new FirmConstructorSuccessMatcher(expectedGraphs)
   def succeedGeneratingCCodeWith(expectedString: String) = new CCodeGeneratorSuccessMatcher(expectedString)
   def succeedGeneratingCodeWith(expectedString: String, excludedOptimizations: Set[Optimization] = Set()) = new CodeGeneratorMatcher(expectedString, excludedOptimizations)
-  def succeedAllocatingRegistersForProgramWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
-    new RegisterAllocatorForProgramMatcher(regs, callerSaveRegs, expectedString)
-  def succeedAllocatingRegistersInstrSeqWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
-    new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, expectedString)
-  def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int], expectedString: String) =
-    new RegisterAllocatorMatcher(regs, callerSaveRegs, expectedString)
+  def succeedAllocatingRegistersForProgramWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), expected: String = "") =
+    new RegisterAllocatorForProgramMatcher(regs, callerSaveRegs, expected)
+  def succeedAllocatingRegistersInstrSeqWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), sseRegs: Set[Int] = Set(), expected: String = "") =
+    new RegisterAllocatorInstrSeqMatcher(regs, callerSaveRegs, expected)
+  def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), expected: String = "") =
+    new RegisterAllocatorMatcher(regs, callerSaveRegs, expected)
   def passIntegrationTest(options: Seq[String]) = new IntegrationTestMatcher(options)
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)

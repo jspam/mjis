@@ -54,7 +54,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(RegisterOperand(RAX, 4), RegisterOperand(10, 4)),
       Add(ConstOperand(2, 4), RegisterOperand(10, 4)),
       Mov(RegisterOperand(10, 4), RegisterOperand(RDX, 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RDX, RAX), Set(),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RDX, RAX), expected =
       """  movl %eax, %eax
         |  addl $2, %eax
         |  movl %eax, %edx""")
@@ -65,7 +65,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
       Call(LabelOperand("_foobar"), Seq()), // blocks EAX
       Mov(RegisterOperand(10, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), callerSaveRegs = Set(RAX),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), callerSaveRegs = Set(RAX), expected =
       """  movl $0, %ebx
         |  call _foobar
         |  movl %ebx, (%rsp)""")
@@ -78,7 +78,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(0, 4), RegisterOperand(11, 8)),
       Mov(ConstOperand(42, 4), AddressOperand(base = Some(RegisterOperand(10, 8)), sizeBytes = 4)),
       Mov(ConstOperand(43, 4), AddressOperand(base = Some(RegisterOperand(11, 8)), sizeBytes = 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX) /* we only have one register */, Set(),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX) /* we only have one register */, expected =
       """  movq $0, %rax      # REG10 => RAX
         |  movl $41, (%rax)
         |  movq %rax, 8(%rsp)  # spill REG10
@@ -99,7 +99,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(3, 4), AddressOperand(base = Some(RegisterOperand(10, 8)),
         indexAndScale = Some((RegisterOperand(11, 4), 1)), sizeBytes = 4)),
       Mov(ConstOperand(42, 4), AddressOperand(base = Some(RegisterOperand(10, 8)), sizeBytes = 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RDX, RCX), callerSaveRegs = Set(RDX, RCX),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RDX, RCX), callerSaveRegs = Set(RDX, RCX), expected =
       """  movq $0, %rdx
         |  movq %rdx, (%rsp) # spill
         |  call _foobar
@@ -119,7 +119,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     val fun = buildFunction((b1, b2))
     setCustomRet(fun, Ret(1))
 
-    fun should succeedAllocatingRegistersWith(Seq(RAX), Set(),
+    fun should succeedAllocatingRegistersWith(Seq(RAX), expected =
       """.L1:
         |.L2:
         |  movb $0, %al  # from resolving phi
@@ -134,7 +134,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(2, 4), RegisterOperand(RSP, 8)),
       Mov(ConstOperand(0, 4), AddressOperand(base = Some(RegisterOperand(11, 8)), indexAndScale = Some((RegisterOperand(10, 4), 1)), sizeBytes = 4)),
       Mov(RegisterOperand(RSP, 8), RegisterOperand(11, 8))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), Set(),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), expected =
       """  movl $0, %eax
         |  movq $0, %rbx
         |  movq $2, %rsp
@@ -149,7 +149,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(0, 4), AddressOperand(base = Some(RegisterOperand(10, 4)), sizeBytes = 4)),
       Call(LabelOperand("_foobar"), Seq()),
       Mov(ConstOperand(0, 4), AddressOperand(base = Some(RegisterOperand(10, 4)), sizeBytes = 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RCX), callerSaveRegs = Set(RCX),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RCX), callerSaveRegs = Set(RCX), expected =
       """  movl $0, %ecx
         |  movl %ecx, 4(%rsp)  # spill 1
         |  call _foobar
@@ -164,7 +164,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
   it should "convert existing ActivationRecordOperands" in {
     Seq(
       Mov(ActivationRecordOperand(0, 8), RegisterOperand(RAX, 8))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX), Set(),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX), expected =
       """  movq (%rsp), %rax""")
   }
 
@@ -184,7 +184,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
     val fun = buildFunction((b0, b1), (b0, b2), (b1, b3), (b2, b3))
 
-    fun should succeedAllocatingRegistersWith(Seq(RAX), Set(),
+    fun should succeedAllocatingRegistersWith(Seq(RAX), expected =
       """  subq $8, %rsp
         |.L0:
         |  movl $4, %eax
@@ -208,7 +208,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Call(LabelOperand("_foobar"), Seq()),             // blocks EAX
       Mov(RegisterOperand(10, 4), RegisterOperand(11, 4)), // EAX is available for REG11 here, but EBX should be taken
       Mov(RegisterOperand(11, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), callerSaveRegs = Set(RAX),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RBX), callerSaveRegs = Set(RAX), expected =
       """  movl $0, %ebx
         |  call _foobar
         |  movl %ebx, %ebx
@@ -223,7 +223,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     val b2 = new AsmBasicBlock(2)
     val b3 = new AsmBasicBlock(3)
 
-    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX, RDX), Set(),
+    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX, RDX), expected =
       """.L0:
         |  movl $2, %eax
         |  movl $1, %edx
@@ -246,7 +246,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     val b3 = new AsmBasicBlock(3)
     b3.instructions += Mov(RegisterOperand(20, 4), RegisterOperand(RAX, 4))
 
-    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX, RDX), Set(),
+    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX, RDX), expected =
       """  subq $8, %rsp
         |.L0:
         |  movl $4, %eax
@@ -273,7 +273,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
     val b2 = new AsmBasicBlock(2)
     val b3 = new AsmBasicBlock(3)
 
-    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX), Set(),
+    buildFunction((b0, b1), (b1, b2), (b2, b1), (b1, b3)) should succeedAllocatingRegistersWith(Seq(RAX, RCX), expected =
       """  subq $16, %rsp
         |.L0:
         |  movl $2, %eax
@@ -308,7 +308,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
     val fun = buildFunction((before, header), (header, body), (body, header), (header, after))
 
-    fun should succeedAllocatingRegistersWith(Seq(RAX), callerSaveRegs = Set(RAX),
+    fun should succeedAllocatingRegistersWith(Seq(RAX), callerSaveRegs = Set(RAX), expected =
       """  subq $8, %rsp
         |.L0:
         |  movq $0, %rax
@@ -337,7 +337,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
     val fun = buildFunction((before, header), (header, body), (body, header), (header, after))
 
-    fun should succeedAllocatingRegistersWith(Seq(RAX), callerSaveRegs = Set(RAX),
+    fun should succeedAllocatingRegistersWith(Seq(RAX), callerSaveRegs = Set(RAX), expected =
       """  subq $8, %rsp
         |.L0:
         |  movl $0, %eax
@@ -369,7 +369,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
     val prog = new AsmProgram(List(fun1, main), new Digraph[AsmFunction](Map(main -> Seq(fun1), fun1 -> Seq())))
 
-    prog should succeedAllocatingRegistersForProgramWith(Seq(RAX, RDI, RSI), callerSaveRegs = Set(RAX, RDI, RSI),
+    prog should succeedAllocatingRegistersForProgramWith(Seq(RAX, RDI, RSI), callerSaveRegs = Set(RAX, RDI, RSI), expected =
       """fun1:
         |.L0:
         |  movl %edi, %eax
@@ -397,7 +397,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
     val prog = new AsmProgram(List(main), new Digraph[AsmFunction](Map(main -> Seq())))
 
-    prog should succeedAllocatingRegistersForProgramWith(Seq(RAX), callerSaveRegs = Set(RAX),
+    prog should succeedAllocatingRegistersForProgramWith(Seq(RAX), callerSaveRegs = Set(RAX), expected =
       """__main:
         |  subq $8, %rsp
         |.L0:
@@ -418,7 +418,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Add(RegisterOperand(10, 4), RegisterOperand(11, 4)),
       Mov(RegisterOperand(11, 4), RegisterOperand(RAX, 4)),
       Ret(4)
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RCX), Set(RAX, RCX),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RCX), callerSaveRegs = Set(RAX, RCX), expected =
       """  movl $0, %eax
         |  movl %eax, 4(%rsp)
         |  call _foobar
@@ -440,7 +440,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(ConstOperand(2, 4), RegisterOperand(12, 4)),
       Add(RegisterOperand(10, 4), RegisterOperand(12, 4)),
       Mov(RegisterOperand(12, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RCX), Set(RAX, RCX),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RCX), callerSaveRegs = Set(RAX, RCX), expected =
       """  movl $0, %eax
         |  movl %eax, 4(%rsp)
         |  call _foobar
@@ -459,7 +459,7 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
       Mov(RegisterOperand(10, 4), AddressOperand(base = Some(RegisterOperand(RSP, 8)), sizeBytes = 4)),
       Call(LabelOperand("_foobar"), Seq()),
       Mov(RegisterOperand(10, 4), RegisterOperand(RDX, 4))
-    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RDX), callerSaveRegs = Set(RAX, RDX),
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RDX), callerSaveRegs = Set(RAX, RDX), expected =
       """  movl $0, %eax
         |  movl %eax, (%rsp)
         |  movl %eax, 4(%rsp)
