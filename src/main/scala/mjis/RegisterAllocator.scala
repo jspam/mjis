@@ -605,9 +605,9 @@ class FunctionRegisterAllocator(function: AsmFunction,
             val phiDestRegs = permutation.keys.filter(_.isInstanceOf[RegisterOperand]).asInstanceOf[Iterable[RegisterOperand]]
             val phiDestRegNrs = phiDestRegs.map(_.regNr).toSet
 
-            val freeRegs = PhysicalRegisters.filter(regNr => !occupiedRegNrsWithoutPhi.contains(regNr)
-              && !phiSourceRegNrs.contains(regNr) && !phiDestRegNrs.contains(regNr)).sorted
-            phiGen.tempRegNrs = freeRegs.take(phiGen.neededTempRegs)
+            val (freeRegs, occupiedRegs) = PhysicalRegisters.partition(regNr => !occupiedRegNrsWithoutPhi.contains(regNr)
+              && !phiSourceRegNrs.contains(regNr) && !phiDestRegNrs.contains(regNr))
+            phiGen.tempRegNrs = freeRegs.sorted.take(phiGen.neededTempRegs)
 
             if (freeRegs.size >= phiGen.neededTempRegs) phiGen.getInstructions()
             else {
@@ -617,10 +617,10 @@ class FunctionRegisterAllocator(function: AsmFunction,
               var reloadInstrs = mutable.Seq[Instruction]()
 
               // Try to spill registers that aren't used in the permutation.
-              val (nonPermutationRegNrs, permutationRegNrs) = occupiedRegNrsWithoutPhi.partition(
+              val (nonPermutationRegNrs, permutationRegNrs) = occupiedRegs.partition(
                 regNr => !phiSourceRegNrs.contains(regNr) && !phiDestRegNrs.contains(regNr))
 
-              for (regNr <- nonPermutationRegNrs.take(numRegsToSpill)) {
+              for (regNr <- nonPermutationRegNrs.sorted.take(numRegsToSpill)) {
                 val it = regOccupationsWithoutPhi(regNr).get
                 val regOp = it.regOp.copy(regNr = regNr)
 
@@ -636,7 +636,7 @@ class FunctionRegisterAllocator(function: AsmFunction,
               if (nonPermutationRegNrs.size < numRegsToSpill) {
                 // The spilling could generate memory/memory moves, so play it safe and free the
                 // maximum number of temp registers.
-                val regNrsToSpill = permutationRegNrs.take(PhiCodeGenerator.MaxTempRegisters - phiGen.tempRegNrs.size).toSeq
+                val regNrsToSpill = permutationRegNrs.sorted.take(PhiCodeGenerator.MaxTempRegisters - phiGen.tempRegNrs.size).toSeq
 
                 def arOperand(regNr: Int) = tempArOperands(regNrsToSpill.indexOf(regNr))
                 def rewrite(op: Operand): Operand = op match {
