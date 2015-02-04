@@ -3,7 +3,6 @@ package mjis.opt
 import firm._
 import firm.nodes._
 import mjis.opt.FirmExtractors._
-import mjis.opt.FirmExtensions._
 
 
 object ConstantFolding extends DeferredOptimization(needsBackEdges = true) {
@@ -63,7 +62,15 @@ object ConstantFolding extends DeferredOptimization(needsBackEdges = true) {
           case List(TargetValueExtr(0), _) | List(_, TargetValueExtr(0)) => new TargetValue(0, Mode.getIs)
           case _ => liftBin(_.mul(_))
         }
-        case _: Shl => liftBin(_.shl(_))
+        case _: Shl =>
+          // Shl is the only operation we handle that has operands with different modes
+          // If one of these is statically known and the other unknown, the mode of the
+          // resulting folded value will be that of the known operand, even though we only
+          // want TargetValues for this with mode Is.
+          liftBin(_.shl(_)) match {
+            case TargetValueExtr(l) => new TargetValue(l, Mode.getIs)
+            case x => x
+          }
         case _: Minus => liftUnary(_.neg, values(0))
         case cmp: Cmp => liftBin((x, y) => fromBool(x.compare(y).contains(cmp.getRelation)))
         case ConvExtr(ConstExtr(c)) => new TargetValue(c, node.getMode)
