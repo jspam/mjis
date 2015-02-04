@@ -154,12 +154,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         case CondExtr(cmp: nodes.Cmp) =>
           val result = mutable.ListBuffer[Instruction]()
 
-          // Const operand must be on the left
-          val (leftOp, rightOp, relation) = getOperand(cmp.getLeft) match {
-            case left: ConstOperand => (getOperand(cmp.getRight), left, cmp.getRelation.inversed())
-            case left: Operand => (left, getOperand(cmp.getRight), cmp.getRelation)
-          }
-
           val successors = BackEdges.getOuts(node).map(_.node.asInstanceOf[nodes.Proj]).toList
           val projTrue = successors.find(_.getNum == nodes.Cond.pnTrue)
           val projFalse = successors.find(_.getNum == nodes.Cond.pnFalse)
@@ -168,8 +162,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projTrue.get))
           basicBlocks(node.block).successors += basicBlocks(successorBlock(projFalse.get))
 
-          basicBlocks(node.block).relation = relation
-          Seq(asm.Cmp(rightOp, leftOp).withComment(s"Evaluate $cmp (actual relation: $relation)"))
+          basicBlocks(node.block).relation = cmp.getRelation
+          Seq(asm.Cmp(getOperand(cmp.getLeft), getOperand(cmp.getRight)).withComment(s"Evaluate $cmp"))
 
         case _ => Seq()
       }
@@ -254,7 +248,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           case 1 => ??? // handled by Identities
           case 2 => (Seq(
             Mov(getOperand(dividend), r),
-            Cmp(ConstOperand(1 << 31, 4), r),
+            Cmp(r, ConstOperand(1 << 31, 4)),
             new Instruction("sbb", (ConstOperand(-1, 4), OperandSpec.READ), (r, OperandSpec.READ | OperandSpec.WRITE)),
             Sar(ConstOperand(1, 4), r)
           ), r)

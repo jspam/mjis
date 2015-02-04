@@ -169,7 +169,7 @@ object Sar {
 
 object Cmp {
   def apply(left: Operand, right: Operand): Instruction =
-    new Instruction("cmp", (left, READ | CONST | MEMORY), (right, READ | MEMORY))
+    new Instruction("cmp", (right, READ | CONST | MEMORY), (left, READ | MEMORY))
   def unapply(instr: Instruction) = unapply2("cmp")(instr)
 }
 
