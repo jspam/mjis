@@ -7,7 +7,6 @@ import firm.nodes.{Bad, Node, Block}
 import mjis.asm._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
-import mjis.opt.NodeCollector
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
 import mjis.util.{Digraph, PowerOfTwo}
@@ -70,7 +69,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
       val instructions = mutable.Map[Node, Seq[Instruction]]()
 
-      for (n <- NodeCollector.fromWalk(g.walkTopological)) {
+      g.walkTopologicalWith { n =>
         val isBlockRoot = BackEdges.getOuts(n).exists(e => e.node.block != null && e.node.block != n.block)
         if (isBlockRoot)
           instructions(n) = createValue(n)
@@ -99,7 +98,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
       val yoloScheduling = mutable.HashMap[AsmBasicBlock, Seq[Instruction]]().withPersistentDefault(_ => Seq())
 
-      for (n <- NodeCollector.fromWalk(g.walkTopological)) {
+      g.walkTopologicalWith { n =>
         val basicBlock = basicBlocks(n.block)
         var instrs = instructions.getOrElse(n, Seq()) map (_.withComment(s" - $n"))
 
@@ -112,7 +111,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
       basicBlocks.values.foreach(b => b.instructions ++= yoloScheduling(b))
 
-      for (n <- NodeCollector.fromWalk(g.walkTopological)) {
+      g.walkTopologicalWith { n =>
         val basicBlock = basicBlocks(n.block)
         basicBlock.instructions ++= createControlFlow(n, nextBlock.get(basicBlock)) map (_.withComment(s" - $n"))
       }

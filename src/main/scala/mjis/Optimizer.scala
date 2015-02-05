@@ -18,13 +18,14 @@ class Optimizer(input: Unit, config: Config) extends Phase[Unit] {
 
   def removeCriticalEdges(g: Graph): Unit = {
     val cfGraph = g.getBlockGraph.transposed
-    for (block <- NodeCollector.fromBlockWalk(g.walkBlocks))
+    g.walkBlocksWith { block =>
       if (block.getPreds.count(!_.isInstanceOf[Bad]) > 1)
         for ((pred, idx) <- block.getPreds.zipWithIndex if !pred.isInstanceOf[Bad])
           if (cfGraph.edges(pred.block).size > 1) {
             val newBlock = g.newBlock(Array(pred))
             block.setPred(idx, g.newJmp(newBlock))
           }
+    }
   }
 
   var highLevelOptimizations = List(LoopStrengthReduction, RedundantLoadElimination)

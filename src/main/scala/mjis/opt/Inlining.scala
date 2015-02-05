@@ -64,7 +64,7 @@ object Inlining extends Optimization(needsBackEdges = true) {
         else if (graph.getLastIdx <= maxNodeNum) true
         else
           // since optimizations may remove nodes, we still have to actually count them
-          NodeCollector.fromWalk(graph.walk).size < maxNodeNum
+          graph.nodeCount < maxNodeNum
     }
   }
 
