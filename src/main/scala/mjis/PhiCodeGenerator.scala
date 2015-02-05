@@ -21,8 +21,9 @@ class PhiCodeGenerator(inputPhi: Map[Operand, Operand]) {
   val originalDestOp = mutable.Map[Operand, Operand]()
 
   val unifiedPhi = inputPhi.map { case (dest, src) =>
-    originalDestOp(unifyOp(dest)) = dest
-    unifyOp(dest) -> unifyOp(src)
+    val unifiedDest = unifyOp(dest)
+    originalDestOp(unifiedDest) = dest
+    unifiedDest -> unifyOp(src)
   }.toMap
 
   // Inverse of the Phi map: source operand -> list of registers its value is written to
@@ -42,6 +43,7 @@ class PhiCodeGenerator(inputPhi: Map[Operand, Operand]) {
    * so that permutations like "$0 -> eax, rax -> rbx" are correctly ordered. */
   private def unifyOp: Operand => Operand = {
     case r: RegisterOperand => r.copy(sizeBytes = 0)
+    case s: SSERegisterOperand => s.copy(sizeBytes = 0)
     case a: ActivationRecordOperand => a.copy(sizeBytes = 0)
     case op => op
   }
@@ -72,20 +74,38 @@ class PhiCodeGenerator(inputPhi: Map[Operand, Operand]) {
     unifiedPhi.keys.foreach(buildCyclesAndRootsRec(_, Nil, visited))
   }
 
-  private def mov(srcOp: Operand, destOp: Operand, inCycle: Boolean) = (srcOp, destOp) match {
-    case (_: ActivationRecordOperand, _: ActivationRecordOperand) =>
-      val tempRegNr = if (inCycle) {
-        assert(tempRegNrs.size >= 2, "Need two temporary registers to create memory-to-memory moves in cycles.")
-        tempRegNrs(1)
-      } else {
-        assert(tempRegNrs.size >= 1, "Need a temporary register to create memory-to-memory moves.")
-        tempRegNrs(0)
-      }
-      Seq(
-        Mov(srcOp, RegisterOperand(tempRegNr, srcOp.sizeBytes)),
-        Mov(RegisterOperand(tempRegNr, destOp.sizeBytes), destOp)
-      )
-    case _ => Seq(Mov(srcOp, destOp))
+  private def mov(srcOp: Operand, destOp: Operand, inCycle: Boolean) = {
+    def getTempRegNr(purpose: String) = if (inCycle) {
+      assert(tempRegNrs.size >= 2, s"Need two temporary registers to create $purpose moves in cycles.")
+      tempRegNrs(1)
+    } else {
+      assert(tempRegNrs.size >= 1, s"Need a temporary register to create $purpose moves.")
+      tempRegNrs(0)
+    }
+
+    (srcOp, destOp) match {
+      case (_: ActivationRecordOperand, _: ActivationRecordOperand) =>
+        val tempRegNr = getTempRegNr("memory-to-memory")
+        Seq(
+          Mov(srcOp, RegisterOperand(tempRegNr, srcOp.sizeBytes)),
+          Mov(RegisterOperand(tempRegNr, destOp.sizeBytes), destOp)
+        )
+      case (_: SSERegisterOperand, _: SSERegisterOperand) =>
+        val tempRegNr = getTempRegNr("SSE-to-SSE")
+        Seq(
+          MovSSE(srcOp, RegisterOperand(tempRegNr, 8), 8),
+          MovSSE(RegisterOperand(tempRegNr, 8), destOp, 8)
+        )
+      case (_: ConstOperand, _: SSERegisterOperand) =>
+        val tempRegNr = getTempRegNr("const-to-SSE")
+        Seq(
+          Mov(srcOp, RegisterOperand(tempRegNr, 8)),
+          MovSSE(RegisterOperand(tempRegNr, 8), destOp, 8)
+        )
+      case (_: SSERegisterOperand, _) => Seq(MovSSE(srcOp, destOp, destOp.sizeBytes max 4))
+      case (_, _: SSERegisterOperand) => Seq(MovSSE(srcOp, destOp, srcOp.sizeBytes max 4))
+      case _ => Seq(Mov(srcOp, destOp))
+    }
   }
 
   /** Writes the acyclic register permutation (= tree) starting at `rootOp`, skipping the successor
@@ -116,24 +136,30 @@ class PhiCodeGenerator(inputPhi: Map[Operand, Operand]) {
 
     val tempRegister = RegisterOperand(tempRegNrs(0), originalDestOp(cycle.head).sizeBytes)
 
-    (Mov(inputPhi(originalDestOp(cycle.head)), tempRegister) +:
+    mov(inputPhi(originalDestOp(cycle.head)), tempRegister, inCycle = true) ++
     cycle.tail.flatMap { destOpUnified =>
       val destOp = originalDestOp(destOpUnified)
       val srcOp = inputPhi(destOp)
       mov(srcOp, destOp, inCycle = true)
-    }.toSeq :+
-    Mov(tempRegister, originalDestOp(cycle.head))) map(_.withComment(comment))
+    } ++
+    mov(tempRegister, originalDestOp(cycle.head), inCycle = true) map(_.withComment(comment))
   }
 
   lazy val neededTempRegs = {
-    def isMemOp(op: Operand) = op.isInstanceOf[ActivationRecordOperand] || op.isInstanceOf[AddressOperand]
+    def moveNeedsTempReg(ops: (Operand, Operand) /* dest, src */): Boolean = ops match {
+      case (_: SSERegisterOperand, _: SSERegisterOperand | _: ConstOperand) => true
+      case (_: ActivationRecordOperand | _: AddressOperand, _: ActivationRecordOperand | _: AddressOperand) => true
+      case _ => false
+    }
+    def moveNeedsTempRegList(ops: List[Operand]): Boolean = moveNeedsTempReg((ops(0), ops(1)))
+
     if (cycles.nonEmpty)
       // Need one temp register for the cycle,
-      // and another one if there are memory-to-memory moves in the cycle.
-      if (cycles.exists(_.sliding(2).exists(s => isMemOp(s(0)) && isMemOp(s(1))))) 2 else 1
+      // and another one if there are memory-to-memory/SSE-to-SSE/const-to-SSE moves in the cycle.
+      if (cycles.exists(_.sliding(2).exists(moveNeedsTempRegList))) 2 else 1
     else
-      // Memory-to-memory moves need a temp register
-      if (inputPhi.exists(t => isMemOp(t._1) && isMemOp(t._2))) 1 else 0
+      // Memory-to-memory/SSE-to-SSE/const-to-SSE moves need a temp register
+      if (inputPhi.exists(moveNeedsTempReg)) 1 else 0
   }
 
   def getInstructions(): Seq[Instruction] = {

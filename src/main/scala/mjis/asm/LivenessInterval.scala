@@ -48,7 +48,9 @@ class LivenessInterval(val regOp: RegisterOperand) extends Ordered[LivenessInter
     case Some(nextAlive) => nextAlive < range.end
     case None => false
   }
-  def intersects(that: LivenessInterval): Boolean = this.nextIntersectionWith(that, this.start max that.start).isDefined
+  def intersects(that: LivenessInterval): Boolean =
+    if (this.ranges.isEmpty) false
+    else this.nextIntersectionWith(that, this.start max that.start).isDefined
 
   def nextAlivePos(fromPos: Int): Option[Int] =
     if (this.contains(fromPos)) Some(fromPos)

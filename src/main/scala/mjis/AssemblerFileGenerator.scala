@@ -35,6 +35,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
   private def opToString(op: Operand): String = op match {
     case r: RegisterOperand if Registers.contains(r.regNr) => "%" + Registers(r.regNr).subregs(r.sizeBytes)
     case r: RegisterOperand => s"%REG${r.regNr}{${r.sizeBytes}}"
+    case s: SSERegisterOperand => "%" + Registers(s.regNr).subregs(128)
     case r: AddressOperand =>
       val params = r.base.map(opToString).getOrElse("") +:
         (r.indexAndScale match {
