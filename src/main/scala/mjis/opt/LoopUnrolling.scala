@@ -61,21 +61,21 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
       loop.dominator.nodes.foreach {
         case cmp@CmpExtr(rel, value, ConstExtr(end)) => ivByVal.get(value) match {
           case Some(InductionVariable(_, ConstExtr(start), ConstExtr(step), _)) =>
-            unroll(loop, getIterationCount(rel, start, step, end), cmp.asInstanceOf[Cmp])
+            val iterCount = getIterationCount(rel, start, step, end)
+            // Since the range is statically known, we can predict the exact exit value of the unrolled loop
+            unroll(loop, iterCount, start + (iterCount / maxUnrollCount * maxUnrollCount).toInt * step, cmp.asInstanceOf[Cmp])
           case _ =>
         }
         case _ =>
       }
     }
 
-    def unroll(loop: SCCLoop[Block], iterCount: Long, cmp: Cmp): Unit = {
-      val end = cmp.getRight
-      val loopCount = iterCount / maxUnrollCount
-
+    def unroll(loop: SCCLoop[Block], iterCount: Long, exitVal: Int, cmp: Cmp): Unit = {
       val body = loop.nodes.tail
       val backJmp = loop.dominator.getPred(1) // in-loop jump back to the header
 
-      // TODO: To handle cyclic phis in the loop header, we'd have to raise the phi permutation to the power of `maxUnrollCount`
+      // TODO: To handle inter-dependent phis in the loop header, we'd have to raise the phi permutation
+      // to the power of `maxUnrollCount`
       loop.dominator.nodes.foreach({
         case phi: Phi if phi.getPred(1).block == loop.dominator && phi.getMode != Mode.getM => return
         case _ =>
@@ -89,16 +89,11 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
       // save users of loop header phis, which we'll have to redirect in the end
       val phiUsers = innerLookup.keys.map(phi => phi -> BackEdges.getOuts(phi).filter(e => !loop.nodes.contains(e.node.getBlock)).toList)
 
-      // create new induction variable for exactly `loopCount` iterations
-      val iterAdd = g.newAdd(loop.dominator, g.newDummy(Mode.getIs), g.newConst(1, Mode.getIs), Mode.getIs).asInstanceOf[Add]
-      val iterVal = g.newPhi(loop.dominator, Array(
-        g.newConst(0, Mode.getIs),
-        iterAdd
-      ), Mode.getIs)
-      iterAdd.setLeft(iterVal)
-      exchange(cmp, g.newCmp(loop.dominator, iterVal, g.newConst(loopCount.toInt, Mode.getIs), Relation.Less))
-
       /* duplicate the loop body inside the loop `maxUnrollCount - 1` times */
+
+      cmp.setRelation(Relation.LessGreater)
+      // Make cmp always-false if there's not enough iterations
+      cmp.setRight(if (iterCount < maxUnrollCount) cmp.getLeft else g.newConst(exitVal, Mode.getIs))
 
       var innerCopies = Map[Node, Node]().withDefault(identity)
       for (_ <- 1.until(maxUnrollCount))
