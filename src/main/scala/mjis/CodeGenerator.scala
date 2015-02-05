@@ -192,9 +192,9 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             sizeBytes = sizeBytes)
         case AddExtr(
           GenAddExtr(base, offset),
-          GenShlExtr(
-            GenConvExtr(index),
-            shift@(0 | 1 | 2 | 3)
+          GenMulExtr(
+            Some(GenConvExtr(index)),
+            scale@(1 | 2 | 4 | 8)
           )
         ) =>
           toVisit ++= Seq(base, Some(index)).flatten
@@ -202,7 +202,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             base = base.map(getOperand(_).asInstanceOf[RegisterOperand]),
             indexAndScale = Some((
               getOperand(index).asInstanceOf[RegisterOperand],
-              1 << shift)),
+              scale)),
             offset = offset,
             sizeBytes = sizeBytes)
         case AddExtr(base, index) =>
@@ -211,15 +211,15 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             base = Some(getOperand(base).asInstanceOf[RegisterOperand]),
             indexAndScale = Some((getOperand(index).asInstanceOf[RegisterOperand], 1)),
             sizeBytes = sizeBytes)
-        case GenConvExtr(ShlExtr(
+        case GenConvExtr(MulExtr(
           GenConvExtr(index),
-          ConstExtr(shift@(0 | 1 | 2 | 3))
+          ConstExtr(scale@(1 | 2 | 4 | 8))
         )) =>
           toVisit += index
           AddressOperand(
             indexAndScale = Some((
               getOperand(index).asInstanceOf[RegisterOperand],
-              1 << shift)),
+              scale)),
             sizeBytes = sizeBytes)
         case GenConvExtr(other) =>
           toVisit += other
@@ -324,6 +324,10 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case n: nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
             case n: nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
 
+            case n@MulExtr(x, c@ConstExtr(PowerOfTwo(shift))) =>
+              Seq(Mov(getOperand(x), regOp(n)),
+              Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
+
             case n : nodes.Mul =>
               val tempRegister = RegisterOperand(RAX, n.getMode.getSizeBytes)
               // Normalization moves constants to the right of a Mul node,
@@ -335,11 +339,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case DivExtr(dividend, ConstExtr(divisor)) if divisor != 0 => divByConstant(dividend, divisor)
             case n : firm.nodes.Div => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RAX, 4), regOp(n)))
             case n : firm.nodes.Mod => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RDX, 4), regOp(n)))
-
-            case n@ShlExtr(x, c@ConstExtr(shift)) => Seq(Mov(getOperand(x), regOp(n)),
-              Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
-
-            case n: nodes.Conv => Seq(Mov(getOperand(n.getOp), regOp(n)))
 
             case n@CallExtr(address, params) =>
               val resultInstrs = ListBuffer[Instruction]()
