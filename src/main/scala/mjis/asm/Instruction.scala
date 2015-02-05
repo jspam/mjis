@@ -20,6 +20,8 @@ object Instruction {
   def unapply0(opcode: String)(instr: Instruction): Boolean = instr.opcode == opcode
   def unapply1(opcode: String)(instr: Instruction): Option[Operand] = if (instr.opcode != opcode) None else Some(instr.operands(0))
   def unapply2(opcode: String)(instr: Instruction): Option[(Operand, Operand)] = if (instr.opcode != opcode) None else Some((instr.operands(0), instr.operands(1)))
+
+  def unorderedMasked(relation: Relation) = Relation.fromValue(relation.value & ~Relation.Unordered.value)
 }
 
 sealed abstract class Operand(val sizeBytes: Int)
@@ -189,10 +191,27 @@ object Mov {
   def unapply(instr: Instruction) = unapply2("mov")(instr)
 }
 
-object Xchg {
-  def apply(src: Operand, dest:Operand) : Instruction =
-    new Instruction("xchg", (src, READ | WRITE | MEMORY), (dest, READ | WRITE | MEMORY))
-  def unapply(instr: Instruction) = unapply2("xchg")(instr)
+object MovConditional {
+  def apply(src: Operand, dest: Operand, relation: Relation): Instruction = {
+    val opcode = unorderedMasked(relation) match {
+      case Relation.Less => "cmovl"
+      case Relation.GreaterEqual => "cmovge"
+
+      case Relation.Greater => "cmovg"
+      case Relation.LessEqual => "cmovle"
+
+      case Relation.Equal => "cmove"
+      case Relation.LessGreater => "cmovne"
+
+      case _ => ???
+    }
+    new Instruction(opcode, (src, READ | CONST | MEMORY), (dest, WRITE | MEMORY))
+  }
+
+  def unapply(instr: Instruction) = instr.opcode match {
+    case "cmovl" | "cmovge" | "cmovg" | "cmovle" | "cmove" | "cmovne" => Some((instr.operands(0), instr.operands(1)))
+    case _ => None
+  }
 }
 
 object Jmp {
@@ -202,9 +221,7 @@ object Jmp {
 
 object JmpConditional {
   def apply(dest: BasicBlockOperand, relation: Relation): Instruction = {
-    // we don't care about Unordered
-    def unorderedMasked = Relation.fromValue(relation.value & ~Relation.Unordered.value)
-    val opcode = unorderedMasked match {
+    val opcode = unorderedMasked(relation) match {
       case Relation.Less => "jl"
       case Relation.GreaterEqual => "jge"
 
