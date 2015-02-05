@@ -14,14 +14,14 @@
 System_out_println:
 	movslq	%edi, %rdi                   # sign extension so we can properly print INT_MIN
 	pushq	%rbx
-	movq	%rdi, %r9
 
+	movq	%rdi, %r9
 	shrq	$63, %r9                       # fetch sign bit
 	movzbl	%r9b, %eax
 	movq	%rax, %r8
 	negq	%r8
-	xorq	%r8, %rdi                      # weird binary trick for negation
-	leaq	(%rdi,%rax), %r8
+	xorq	%r8, %rdi                      # a ^ (~(a>>>31)) + (a>>>31)
+	leaq	(%rdi,%rax), %r8               # (Neat trick for predicated negation)
 
 	movl	buf_size(%rip), %eax
 	cmpl	$4083, %eax
