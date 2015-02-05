@@ -41,17 +41,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
   }
 
   def intConstOp(i: Int): Operand = ConstOperand(i, Mode.getIs.getSizeBytes)
-  def regOp(node: Node): RegisterOperand = RegisterOperand(node.idx, node match {
-    case n : nodes.Call =>
-      val methodEntity = n.getPtr.asInstanceOf[nodes.Address].getEntity
-      val methodType = methodEntity.getType.asInstanceOf[MethodType]
-      assert(methodType.getNRess > 0)
-      methodType.getResType(0).getSizeBytes
-    case n : nodes.Load => n.getLoadMode.getSizeBytes
-    case n : firm.nodes.Div => n.getResmode.getSizeBytes
-    case n : firm.nodes.Mod => n.getResmode.getSizeBytes
-    case _ => node.getMode.getSizeBytes
-  })
 
   class MethodCodeGenerator(g: Graph) {
     val basicBlocks = mutable.ListMap[Block, AsmBasicBlock]().
@@ -62,6 +51,18 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     val toVisit = mutable.Queue[Node]()
 
     val inductionVarAdds = g.getInductionVariables.map(_.incrAdd).toSet[Node]
+
+    def regOp(node: Node, nr: Int = 0): RegisterOperand = RegisterOperand(node.idx + nr * (1 + g.getLastIdx), node match {
+      case n : nodes.Call =>
+        val methodEntity = n.getPtr.asInstanceOf[nodes.Address].getEntity
+        val methodType = methodEntity.getType.asInstanceOf[MethodType]
+        assert(methodType.getNRess > 0)
+        methodType.getResType(0).getSizeBytes
+      case n : nodes.Load => n.getLoadMode.getSizeBytes
+      case n : firm.nodes.Div => n.getResmode.getSizeBytes
+      case n : firm.nodes.Mod => n.getResmode.getSizeBytes
+      case _ => node.getMode.getSizeBytes
+    })
 
     def getResult(): AsmFunction = {
       val backEdgesWereEnabled = BackEdges.enabled(g)
