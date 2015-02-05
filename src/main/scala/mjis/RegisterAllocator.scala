@@ -423,13 +423,13 @@ class FunctionRegisterAllocator(function: AsmFunction,
       // Make a copy of `active` first because we are modifying it.
       for (it <- active.toArray if !it.contains(position)) {
         active -= it
-        if (it.end >= position) inactive += it
+        if (it.end > position) inactive += it
       }
 
       // Check for `inactive` intervals that have become `active` or have expired.
-      for (it <- inactive.toArray if it.contains(position) || it.end < position) {
+      for (it <- inactive.toArray if it.end <= position || it.contains(position)) {
         inactive -= it
-        if (it.end >= position) active += it
+        if (it.end > position) active += it
       }
 
       if (current.regOp.regNr < 0 || tryAllocateWithoutSpilling() || allocateWithSpilling())
