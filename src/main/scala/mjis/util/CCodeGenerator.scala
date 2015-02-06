@@ -29,6 +29,17 @@ class CCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Unit,
     case _ => exprStringToWrap
   }
 
+  private def methodDeclaration(method: MethodDecl) = {
+    if (method.isStatic)
+      "int main()"
+    else {
+      val paramsResult = method.parameters.map(p => s"${p.typ.accept(this)} ${p.name}").mkString(", ")
+      val typ = method.returnType.accept(this)
+      val name = methodNames(method)
+      s"$typ $name($paramsResult)"
+    }
+  }
+
   override def preVisit(program: Program): Unit = {
     emit(s"#include <stdio.h>")
     newLine()
@@ -37,38 +48,41 @@ class CCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Unit,
     emit(s"#include <stdlib.h>")
     newLine()
 
-    // Forward declare all classes and fill the method name map
-    program.classes.foreach(cls => {
-      newLine()
+    // Forward declare all classes and methods (except for main) and fill the method name map
+    newLine()
+    for (cls <- program.classes) {
       emit(s"struct ${cls.name};")
       newLine()
+    }
 
-      cls.methods.foreach(m => methodNames += m -> (cls.name + "$" + m.name))
-    })
+    newLine()
+    for (cls <- program.classes; m <- cls.methods) {
+      methodNames += m -> (cls.name + "$" + m.name)
+      if (m != program.mainMethodDecl.get) {
+        emit(methodDeclaration(m) + ";")
+        newLine()
+      }
+    }
+
+    // Declare all classes
+    for (cls <- program.classes) {newLine()
+      emit(s"typedef struct ${cls.name} {")
+      indent()
+      cls.fields.foreach(f => { newLine(); f.accept(this) })
+      dedent()
+      newLine()
+      emit(s"} ${cls.name};")
+      newLine()
+    }
   }
 
   override def visit(cls: ClassDecl) = {
-    newLine()
-    emit(s"typedef struct ${cls.name} {")
-    indent()
-    cls.fields.foreach(f => { newLine(); f.accept(this) })
-    dedent()
-    newLine()
-    emit(s"} ${cls.name};")
     cls.methods.foreach(m => { newLine(); m.accept(this) })
-    postVisit(cls)
   }
 
   override def preVisit(method: MethodDecl): Unit = {
     newLine()
-    if (method.isStatic)
-      emit("int main() ")
-    else {
-      val paramsResult = method.parameters.map(p => s"${p.typ.accept(this)} ${p.name}").mkString(", ")
-      val typ = method.returnType.accept(this)
-      val name = methodNames(method)
-      emit(s"$typ $name($paramsResult) ")
-    }
+    emit(methodDeclaration(method) + " ")
   }
 
   override def postVisit(field: FieldDecl, typResult: String): Unit =
