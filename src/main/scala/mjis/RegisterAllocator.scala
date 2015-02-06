@@ -25,8 +25,10 @@ class RegisterAllocator(input: AsmProgram, val PhysicalRegisters: Seq[Int],
 
   override def getResult(): AsmProgram = {
     val usedRegsPerFunction = mutable.Map[String, Set[Int]](
-      "calloc"             -> CallerSaveRegisters, // but no SSE registers
-      "System_out_println" -> CallerSaveRegisters
+      // The registers marked as unused here must correspond with the registers spilled
+      // during syscalls in these functions.
+      "calloc"             -> (CallerSaveRegisters - (R9, R11)), // and no SSE registers
+      "System_out_println" -> (CallerSaveRegisters - R11)
     )
     val mainFunction = input.functions.find(_.name == "__main").get
     for (f <- input.callGraph.getTopologicalSorting(mainFunction).reverseIterator) {

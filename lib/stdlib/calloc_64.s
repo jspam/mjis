@@ -34,7 +34,11 @@ malloc:
 	movq	%rax, %r10          # syscalls trash rcx
 	movq	$12, %rax
 	movq	%rdx, %rdi
+	pushq   %r9                 # Save caller-save registers
+	pushq   %r11
 	syscall
+	popq    %r11                # Restore caller-save registers
+	popq    %r9
 	addq	%r8, %r10           # rcx = new_mem + rest_bytes
 	movq	%rdx, cur_brk(%rip)
 	movq	%r10, %rax
@@ -57,7 +61,11 @@ malloc:
 .init_brk:
 	movq	$12, %rax
 	movq	%rdx, %rdi
+	pushq   %r9                 # Save caller-save registers
+	pushq   %r11
 	syscall
+	popq    %r11                # Restore caller-save registers
+	popq    %r9
 	movq	%rax, %rdx
 	movq	%rax, cur_brk(%rip)
 	jmp	.brk_initialized
