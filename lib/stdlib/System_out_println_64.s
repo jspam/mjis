@@ -31,7 +31,9 @@ System_out_println:
 	movq $1,	%rax
 	movq $1,	%rdi
 	movq	$buf,	%rsi
+	pushq   %r11                           # Save caller-save register
 	syscall
+	popq    %r11                           # Restore caller-save register
 	movl	$0, buf_size(%rip)
 .dont_flush:
 	leaq	-16(%rsp), %rsi

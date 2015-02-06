@@ -429,6 +429,28 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret""")
   }
 
+  it should "assume certain caller-save registers are not used by external functions" in {
+    val b1 = new AsmBasicBlock(2)
+    b1.instructions ++= Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      Call(LabelOperand("calloc"), Seq()),
+      Mov(RegisterOperand(10, 4), RegisterOperand(RAX, 4))
+    )
+    val b2 = new AsmBasicBlock(3)
+    val main = buildFunction("__main", (b1, b2))
+
+    val prog = new AsmProgram(List(main), new Digraph[AsmFunction](Map(main -> Seq())))
+
+    prog should succeedAllocatingRegistersForProgramWith(Seq(R11), callerSaveRegs = Set(R11), expected =
+      """__main:
+        |.L0:
+        |  movl $0, %r11d
+        |  call calloc
+        |  movl %r11d, %eax
+        |.L3:
+        |  ret""")
+  }
+
   it should "not reload operands that can used from memory if they're only used once" in {
     Seq(
       Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
