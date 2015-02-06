@@ -21,7 +21,7 @@ final case class Value(node: Node) extends ExprResult
 // block has only one outgoing edge
 final case class ControlFlow(falseJmps: List[Node], trueJmps: List[Node]) extends ExprResult
 
-class FirmConstructor(input: Program) extends Phase[Unit] {
+class FirmConstructor(input: Program, config: Config = Config()) extends Phase[Unit] {
   private val firmClassEntity = new mutable.HashMap[ClassDecl, firm.Entity]()
   private val firmFieldEntity = new mutable.HashMap[FieldDecl, firm.Entity]()
   private val firmMethodEntity = new mutable.HashMap[MethodDecl, firm.Entity]()
@@ -34,7 +34,11 @@ class FirmConstructor(input: Program) extends Phase[Unit] {
     case _ => new PrimitiveType(Mode.getP)
   }
 
-  override protected def getResult(): Unit = transformProgram(input)
+  override protected def getResult(): Unit = {
+    transformProgram(input)
+    if (config.firmDump)
+      dumpResult(null)
+  }
 
   override def dumpResult(writer: BufferedWriter): Unit = {
     FirmProgram.getGraphs.foreach(FirmDumpHelper.dumpGraph(_, "FirmConstructor"))

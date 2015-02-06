@@ -28,9 +28,12 @@ object CLIMain extends App {
     opt[Unit]("generate-c") action { (phase, config) =>
       config.copy(stopAfter = "ccodegen")
     } text ("Convert the input to C and output the result")
-    opt[String]("stop-after-phase") action { (phase, config) =>
+    opt[String]('p', "stop-after-phase") action { (phase, config) =>
       config.copy(stopAfter = phase)
     } text ("Run compiler until specified phase")
+    opt[Unit]("firm-dump") abbr "fdump" action { (phase, config) =>
+      config.copy(firmDump = true)
+    } text ("Dump all firm graphs")
     opt[Unit]("timings") action { (phase, config) =>
       config.copy(printTimings = true)
     } text ("Print the running time of each phase to stdout")

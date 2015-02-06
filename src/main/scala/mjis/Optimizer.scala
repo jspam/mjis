@@ -8,7 +8,7 @@ import mjis.opt._
 import mjis.opt.FirmExtensions._
 import scala.collection.JavaConversions._
 
-class Optimizer(input: Unit, config: Config) extends Phase[Unit] {
+class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
 
   override val findings = List[Finding]()
 
@@ -57,6 +57,9 @@ class Optimizer(input: Unit, config: Config) extends Phase[Unit] {
       bindings.binding_irgopt.remove_bads(g.ptr)
       bindings.binding_irgopt.remove_unreachable_code(g.ptr)
     })
+
+    if (config.firmDump)
+      dumpResult(null)
   }
 
 }
