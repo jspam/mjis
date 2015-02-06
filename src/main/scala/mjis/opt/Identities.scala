@@ -69,9 +69,6 @@ object Identities extends NodeBasedOptimization() {
       exchange(n, g.newMinus(n.getBlock, x, n.getMode))
     // x*1 == x
     case n@MulExtr(x, ConstExtr(1)) => exchange(n, x)
-    // x * 2^n == x << n
-    case n@MulExtr(x, ConstExtr(PowerOfTwo(exp))) =>
-      exchange(n, g.newShl(n.getBlock, x, g.newConst(exp, Mode.getIu), n.getMode))
     // (x+c1)*c2 == x*c2+c1*c2
     case n@MulExtr(AddExtr(x, c1: Const), c2: Const) =>
       exchange(n, g.newAdd(n.getBlock, g.newMul(n.getBlock, x, c2, n.getMode), g.newConst(c1.getTarval mul c2.getTarval), n.getMode))

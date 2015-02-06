@@ -2,6 +2,7 @@ package mjis.opt
 
 import firm._
 import firm.nodes._
+import mjis.util.PowerOfTwo
 
 import scala.collection.JavaConversions._
 
@@ -74,17 +75,10 @@ object FirmExtractors {
     }
   }
 
-  object ShlExtr {
-    def unapply(node: Node): Option[(Node, Node)] = node match {
-      case shl: Shl => Some((shl.getLeft, shl.getRight))
-      case _ => None
-    }
-  }
-
-  object GenShlExtr {
-    def unapply(node: Node): Option[(Node, Int)] = node match {
-      case ShlExtr(l, ConstExtr(r)) => Some((l, r))
-      case _ => Some((node, 0))
+  object GenMulExtr {
+    def unapply(node: Node): Option[(Option[Node], Int)] = node match {
+      case MulExtr(n, ConstExtr(c)) => Some((Some(n), c))
+      case _ => Some((Some(node), 1))
     }
   }
 
