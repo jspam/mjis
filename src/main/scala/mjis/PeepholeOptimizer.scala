@@ -69,10 +69,10 @@ class PeepholeOptimizer(input: AsmProgram) extends Phase[AsmProgram] {
       Mov(b2, a2)) if a1 == a2 && b1 == b2 => Seq(Mov(a1, b1))
     case (
       Cmp(ConstOperand(0, _), a: RegisterOperand),
-      jmp@JmpConditional(_)
+      condInstr@(JmpConditional(_) | MovConditional(_, _))
     ) => Seq(
-      new Instruction("test", (a, OperandSpec.NONE), (a, OperandSpec.NONE)),
-      jmp
+      Test(a, a),
+      condInstr
     )
   }
 

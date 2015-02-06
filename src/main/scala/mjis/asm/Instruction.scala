@@ -250,6 +250,12 @@ object JmpConditional {
   }
 }
 
+object Test {
+  def apply(left: Operand, right: Operand): Instruction =
+    new Instruction("test", (right, READ | CONST | MEMORY), (left, READ | MEMORY))
+  def unapply(instr: Instruction) = unapply2("test")(instr)
+}
+
 object Ret {
   def apply() = new Instruction("ret")
   def apply(returnValueSizeBytes: Int) = new Instruction("ret", (RegisterOperand(RAX, returnValueSizeBytes), READ | IMPLICIT))
