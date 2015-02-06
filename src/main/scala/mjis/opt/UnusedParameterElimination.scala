@@ -1,7 +1,7 @@
 package mjis.opt
 
 import firm.{MethodType, BackEdges, Graph}
-import firm.nodes.{Proj, Call}
+import firm.nodes.{Address, Proj, Call}
 import mjis.CallGraph
 import mjis.opt.FirmExtensions._
 
@@ -16,8 +16,13 @@ object UnusedParameterElimination extends Optimization {
   protected def _optimize(g: Graph, callers: Seq[Call]): Boolean = {
     BackEdges.enable(g)
     // TODO: only count p.successors that aren't exclusively used as parameter to a call in the same SCC
-    val usedArgProjs = g.getArgs.successors.filter(p => p.isInstanceOf[Proj] && p.successors.size >= 1).
-      asInstanceOf[Seq[Proj]].sortBy(_.getNum)
+    val usedArgProjs = g.getArgs.successors.collect({
+      case p: Proj if p.successors.count({
+        // Only count successors that aren't used as an argument to a recursive call
+        case c: Call if c.getPtr.asInstanceOf[Address].getEntity == g.getEntity && c.getPred(p.getNum + 2) == p => false
+        case _ => true
+      }) >= 1 => p
+    }).toSeq.sortBy(_.getNum)
     BackEdges.disable(g)
 
     if (usedArgProjs.size < g.methodType.getNParams) {

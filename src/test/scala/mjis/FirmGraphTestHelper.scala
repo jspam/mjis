@@ -235,7 +235,7 @@ object FirmGraphTestHelper {
       return blocksEqualError
 
     if (left.getPredCount != right.getPredCount)
-      return Some(s"Predecessor counts of $left and $right do not match")
+      return Some(s"Predecessor counts of $left (${left.getPredCount}) and $right (${right.getPredCount}) do not match")
 
     visited += ((left, right))
     left.getPreds().zip(right.getPreds()).foreach(lr => 
