@@ -1,7 +1,7 @@
 package mjis.opt
 
 import firm.{Mode, Graph}
-import firm.nodes.{Node, Block}
+import firm.nodes._
 import mjis.opt.FirmExtensions._
 import mjis.util.{SCCLoop, SCCTreeNode}
 import scala.collection.JavaConversions._
@@ -20,9 +20,12 @@ object LoopInvariantCodeMotion extends Optimization(needsBackEdges = true) {
         // remember that SCCTreeNode.nodes are actually Blocks here
         val nodes = loop.nodes.flatMap(_.successors)
         for (node <- nodes if node.getMode != Mode.getX &&
-             // don't move a node twice
-             !hoisted(node) &&
-             node.getPreds.forall(pred => dominators(preHeader)(pred.block))) {
+            // don't move a node twice
+            !hoisted(node) &&
+            // Cond nodes are essentially control flow nodes, but have mode T
+            !node.isInstanceOf[Cond] &&
+            !node.isInstanceOf[Phi] &&
+            node.getPreds.forall(pred => dominators(preHeader)(pred.block))) {
           hoisted += node
           setBlock(node, preHeader)
         }
