@@ -99,6 +99,8 @@ object FirmExtensions {
 
     def nodes: Iterable[Node] = block.successors.filter(_.getBlock == block)
 
+    def predBlock(n: Int = 0): Block = block.getPred(n).block
+
   }
 
 }

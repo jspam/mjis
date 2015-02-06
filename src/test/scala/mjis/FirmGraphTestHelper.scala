@@ -56,11 +56,13 @@ object FirmGraphTestHelper {
 
         val s = "(\\w+)"
         val i = "(-?\\d+)"
+        val c = "(true|false|-?\\d+)" // constant
 
         val addRegex = s"Add $s".r
         val addrRegex = s"Addr $s".r
+        val andRegex = s"And $s".r
         val callRegex = s"Call $s".r
-        val constRegex = s"Const $i $s".r
+        val constRegex = s"Const $c $s".r
         val convRegex = s"Conv $s".r
         val cmpRegex = s"Cmp $s".r
         val divRegex = s"Div $s".r
@@ -86,6 +88,9 @@ object FirmGraphTestHelper {
             val entity = Program.getGlobalType.getMemberByName(name)
             assert(entity != null, s"Entity $name not found: $line")
             curNode = constr.newAddress(entity)
+          case andRegex(mode) =>
+            assert(args.length == 2, s"And needs two arguments: $line")
+            curNode = constr.newAnd(args(0), args(1), modes(mode))
           case callRegex(name) =>
             assert(args.length >= 2, s"Call needs at least two arguments (mem and called function address): $line")
             val entity = Program.getGlobalType.getMemberByName(name)
@@ -186,7 +191,8 @@ object FirmGraphTestHelper {
            ir_opcode.iro_Mul | ir_opcode.iro_Return | ir_opcode.iro_Div | ir_opcode.iro_Mod |
            ir_opcode.iro_Not | ir_opcode.iro_Call | ir_opcode.iro_Conv | ir_opcode.iro_Mux |
            ir_opcode.iro_Minus | ir_opcode.iro_Load | ir_opcode.iro_Block | ir_opcode.iro_Phi |
-           ir_opcode.iro_Jmp | ir_opcode.iro_Cond | ir_opcode.iro_Store | ir_opcode.iro_Sel =>
+           ir_opcode.iro_Jmp | ir_opcode.iro_Cond | ir_opcode.iro_Store | ir_opcode.iro_Sel |
+           ir_opcode.iro_And =>
 
       case ir_opcode.iro_Address =>
         val (leftAsAddr, rightAsAddr) = (new Address(left.ptr), new Address(right.ptr))

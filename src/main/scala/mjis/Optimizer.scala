@@ -30,7 +30,8 @@ class Optimizer(input: Unit, config: Config) extends Phase[Unit] {
 
   var highLevelOptimizations = List(LoopStrengthReduction, RedundantLoadElimination)
   var generalOptimizations = List(
-    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities)
+    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities) ++
+    (if (!config.useFirmBackend) Seq(ConditionalMoves) else Seq())
   // The following optimizations mustn't be iterated with other optimizations
   // because of possible interactions leading to infinite loops
   var volatileOptimizations = if (config.inlining) List(Inlining, LoopUnrolling) else List(LoopUnrolling)

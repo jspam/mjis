@@ -2,7 +2,7 @@ package mjis.opt
 
 import firm._
 import firm.nodes._
-import mjis.util.PowerOfTwo
+import mjis.opt.FirmExtensions._
 
 import scala.collection.JavaConversions._
 
@@ -43,6 +43,13 @@ object FirmExtractors {
   object AddExtr {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case add: Add => Some((add.getLeft, add.getRight))
+      case _ => None
+    }
+  }
+
+  object AndExtr {
+    def unapply(node: Node): Option[(Node, Node)] = node match {
+      case and: And => Some((and.getLeft, and.getRight))
       case _ => None
     }
   }
@@ -168,6 +175,13 @@ object FirmExtractors {
     }
   }
 
+  object MuxExtr {
+    def unapply(node: Node): Option[(Node, Node, Node)] = node match {
+      case mux: Mux => Some((mux.getSel, mux.getFalse, mux.getTrue))
+      case _ => None
+    }
+  }
+
   object TargetValueExtr {
     def unapply(tarval: TargetValue): Option[Long] = {
       if (tarval.isConstant)
@@ -175,5 +189,41 @@ object FirmExtractors {
       else
         None
     }
+  }
+
+  /* Detects simple if-then-else diamond structures in the graph. */
+  object DiamondExtr {
+    // Option[(top, ifFalse, ifTrue, cmp)]
+    def unapply(bottom: Block): Option[(Block, Block, Block, Cmp)] = {
+      if (bottom.getPredCount != 2) return None
+      val predBlock1 = bottom.predBlock(0)
+      if (predBlock1 == null || predBlock1.getPredCount != 1) return None
+      val predBlock2 = bottom.predBlock(1)
+      if (predBlock2 == null || predBlock2.getPredCount != 1) return None
+      val topCand = predBlock1.predBlock()
+      if (topCand != predBlock2.predBlock()) return None
+
+      val (ifFalse, ifTrue) = predBlock1.getPred(0) match {
+        case p: Proj if p.getNum == Cond.pnFalse => (predBlock1, predBlock2)
+        case p: Proj if p.getNum == Cond.pnTrue => (predBlock2, predBlock1)
+        case _ => return None
+      }
+
+      // predBlock <- Proj <- Cond <- Cmp
+      predBlock1.getPred(0).getPred(0).getPred(0) match {
+        case cmp: Cmp => Some((topCand, ifFalse, ifTrue, cmp))
+        case _ => None
+      }
+    }
+  }
+
+  /* Detects Cmp nodes with bad branch prediction characteristics */
+  object HardToPredictExtr {
+    // We'll say that x % y == 0 with y a power of two < 5 and comparisons of Booleans are sufficiently hard to predict
+    def unapply(cmp: Cmp): Boolean = (cmp.getPred(0).getMode == Mode.getBu && cmp.getPred(1).getMode == Mode.getBu) ||
+      ((cmp.getLeft, cmp.getRight) match {
+        case (AndExtr(_, ConstExtr(1 | 2)), ConstExtr(0)) => true
+        case _ => false
+      })
   }
 }

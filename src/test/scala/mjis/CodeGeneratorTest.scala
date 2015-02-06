@@ -373,18 +373,18 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "generate code for Phis" in {
-    fromMembers("public int foo(int argI, boolean argB) { if (argB) argI = 0; return argI; }") should succeedGeneratingCodeWith(template(
+    fromMembers("public int foo(int arg1, int arg2) { if (arg2 == 5) arg1 = 0; return arg1; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
-        |  movl %esi, %REG1{4}  # argI
-        |  movb %dl, %REG0{1}  # argB
+        |  movl %esi, %REG0{4}  # arg1
+        |  movl %edx, %REG1{4}  # arg2
         |.L0:
-        |  cmpb $1, %REG0{1}
+        |  cmpl $5, %REG1{4}
         |  je .L2
         |.L1:
         |  jmp .L3
         |.L2:
         |.L3:
-        |  phi[%REG1{4}, $0] -> %REG2{4}
+        |  phi[%REG0{4}, $0] -> %REG2{4}
         |  movl %REG2{4}, %eax
         |.L4:
         |  ret"""))
@@ -466,6 +466,66 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %edx, %REG1{4}
         |.L0:
         |  leal 3(%REG0{4},%REG1{4},8), %REG2{4}
+        |  movl %REG2{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate conditional move instructions for Mux nodes" in {
+    fromMembers("public int foo(int j) { int x; if (j % 2 == 0) x = 1; else x = 2; return x; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl %REG0{4}, %REG1{4}
+        |  andl $1, %REG1{4}
+        |  movl $1, %REG2{4}
+        |  movl $2, %REG3{4}
+        |  cmpl $0, %REG1{4}
+        |  cmovel %REG2{4}, %REG3{4}
+        |  movl %REG3{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "avoid having to load a constant when generating conditional moves (1)" in {
+    fromMembers("public int foo(int j) { int x; if (j % 2 == 0) x = 0; else x = 1; return x; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl %REG0{4}, %REG1{4}
+        |  andl $1, %REG1{4}
+        |  movl $1, %REG2{4}
+        |  cmpl $0, %REG1{4}
+        |  cmovel %REG1{4}, %REG2{4}
+        |  movl %REG2{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "avoid having to load a constant when generating conditional moves (2)" in {
+    fromMembers("public int foo(int j) { int x; if (j % 2 != 0) x = 1; else x = 0; return x; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl %REG0{4}, %REG1{4}
+        |  andl $1, %REG1{4}
+        |  movl $1, %REG2{4}
+        |  cmpl $0, %REG1{4}
+        |  cmovel %REG1{4}, %REG2{4}
+        |  movl %REG2{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "not attempt to generate size-extending moves" in {
+    fromMembers("public int foo(boolean b) { int ret; if (b) ret = 1; else ret = 0; return ret; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movb %sil, %REG0{1}
+        |.L0:
+        |  movl $1, %REG1{4}
+        |  movl $0, %REG2{4}
+        |  cmpb $1, %REG0{1}
+        |  cmovel %REG1{4}, %REG2{4}   # should not do "cmov %REG0{1}, %REG2{4}" heres
         |  movl %REG2{4}, %eax
         |.L1:
         |  ret"""))
