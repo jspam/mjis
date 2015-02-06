@@ -295,7 +295,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  movl $42, %edi
       |  call System_out_println
       |.L3:
-      |  ret""", mainMethod = false), excludedOptimizations = Set(UnusedParameterElimination))
+      |  ret""", mainMethod = false), excludedOptimizations = Set(UnusedParameterElimination, PureFunctionCallElimination))
   }
 
   it should "properly inline recursive calls" in {
@@ -343,7 +343,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
          |.L10:
          |	movb $1, %al
          |.L11:
-         |  ret""", mainMethod=false), excludedOptimizations = Set(UnusedParameterElimination))
+         |  ret""", mainMethod=false), excludedOptimizations = Set(UnusedParameterElimination, PureFunctionCallElimination))
 
   }
 

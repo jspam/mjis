@@ -41,7 +41,7 @@ abstract class Optimization(needsBackEdges: Boolean = false) {
    * "Deletes" a memory node by redirecting the graph's memory flow
    */
   protected def killMemoryNode(node: Node): Unit = node match {
-    case _: Div | _: Mod | _: Store | _: Load =>
+    case _: Div | _: Mod | _: Store | _: Load | _: Call =>
       for (proj@ProjExtr(_, Div.pnM /* == Mod.pnM == ... */) <- BackEdges.getOuts(node).map(_.node))
         exchange(proj, node.getPred(0))
   }
