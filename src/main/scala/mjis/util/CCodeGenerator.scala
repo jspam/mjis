@@ -180,5 +180,5 @@ class CCodeGenerator(writer: Writer) extends PlainRecursiveVisitor[String, Unit,
   }
 
   override def postVisit(expr: Select, qualifierResult: String): String =
-    s"($qualifierResult)->${expr.name}"
+    s"(${wrapFieldAccess(expr.qualifier, qualifierResult)})->${expr.name}"
 }

@@ -26,7 +26,9 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |    while (field) {
       |      field = !field;
       |    }
-      |    3 + 4;
+      |    if (ptr.field) {
+      |      3 + 4;
+      |    }
       |    this.foo(this.stuff, baz);
       |    return;
       |  }
@@ -71,7 +73,9 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |  while ((this)->field) {
       |    ((this)->field = !((this)->field));
       |  }
-      |  (3 + 4);
+      |  if (((this)->ptr)->field) {
+      |    (3 + 4);
+      |  }
       |  Test$foo(this, (this)->stuff, baz);
       |  return ;
       |}""".replace("  ", "\t").stripMargin
