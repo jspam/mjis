@@ -1,5 +1,7 @@
 package mjis.opt
 
+import java.util.logging.{Level, Logger}
+
 import firm._
 import firm.nodes._
 
@@ -100,7 +102,7 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
     def unrollStatic(unroller: Unroller, start: Int, iterCount: Long, iv: InductionVariable, cmp: Cmp): Unit = {
       val unrollCount = getUnrollCount(unroller.loop)
       if (unrollCount < 2) return
-      println(s"${g.getEntity.getLdName}: static unrolling by $unrollCount")
+      Logger.getGlobal.log(Level.INFO, s"${g.getEntity.getLdName}: static unrolling by $unrollCount")
 
       val exitVal = start + (iterCount / unrollCount * unrollCount).toInt * iv.incrVal
       cmp.setRelation(Relation.LessGreater)
@@ -130,7 +132,7 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
       // high unrollCounts would create long epilogues
       var unrollCount = getUnrollCount(unroller.loop) min 4
       if (unrollCount < 2) return
-      println(s"${g.getEntity.getLdName}: dynamic unrolling by $unrollCount")
+      Logger.getGlobal.log(Level.INFO, s"${g.getEntity.getLdName}: dynamic unrolling by $unrollCount")
 
       // pre-check of form `start < end`
       var needsPreCheck = false

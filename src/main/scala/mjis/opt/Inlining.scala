@@ -1,5 +1,7 @@
 package mjis.opt
 
+import java.util.logging.{Level, Logger}
+
 import firm._
 import firm.nodes._
 import mjis.CallGraph
@@ -39,6 +41,7 @@ object Inlining extends Optimization(needsBackEdges = true) {
     CallGraph.calls(graph).foreach(call =>
       if (shouldInline(call)) {
         changed = true
+        Logger.getGlobal.log(Level.INFO, s"Inlining $call into ${graph.getEntity.getLdName}")
         val (preCallBlock, postCallBlock) = splitBlockAlong(call)
         val callee = call.getCalledGraph.get
         val cloner = new NodeCloner (graph, callee)
