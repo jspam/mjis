@@ -131,7 +131,7 @@ class FirmConstructor(input: Program, config: Config = Config()) extends Phase[U
         val leaveFalseJmp = constr.newJmp()
 
         constr.setCurrentBlock(createAndMatureBlock(trueJmps))
-        val trueNode = constr.newConst(1, Mode.getBu)
+        val trueNode = constr.newConst(-1, Mode.getBu)
         val leaveTrueJmp = constr.newJmp()
 
         constr.setCurrentBlock(createAndMatureBlock(Seq(leaveFalseJmp, leaveTrueJmp)))
@@ -145,7 +145,10 @@ class FirmConstructor(input: Program, config: Config = Config()) extends Phase[U
 
     def exprResultToControlFlow(res: ExprResult): ControlFlow = res match {
       case cf: ControlFlow => cf
-      case Value(node) => bToControlFlow(constr.newCmp(node, constr.newConst(1, Mode.getBu), Relation.Equal))
+      case Value(not: Not) =>
+        val cf = exprResultToControlFlow(Value(not.getOp))
+        ControlFlow(cf.trueJmps, cf.falseJmps)
+      case Value(node) => bToControlFlow(constr.newCmp(node, constr.newConst(0, Mode.getBu), Relation.UnorderedLessGreater))
     }
 
     override def preVisit(method: MethodDecl) = {
@@ -238,7 +241,7 @@ class FirmConstructor(input: Program, config: Config = Config()) extends Phase[U
 
     override def postVisit(expr: BooleanLiteral): ExprResult = {
       Value(constr.newConst(expr match {
-        case TrueLiteral()  => 1
+        case TrueLiteral()  => -1
         case FalseLiteral() => 0
       }, Mode.getBu))
     }
@@ -255,8 +258,10 @@ class FirmConstructor(input: Program, config: Config = Config()) extends Phase[U
         // short-circuiting operators
 
         case Builtins.BooleanNotDecl =>
-          val lhs = exprResultToControlFlow(expr.arguments(0).accept(this))
-          ControlFlow(lhs.trueJmps, lhs.falseJmps)
+          expr.arguments(0).accept(this) match {
+            case Value(v) => Value(constr.newNot(v, v.getMode))
+            case ControlFlow(falseJmps, trueJmps) => ControlFlow(trueJmps, falseJmps)
+          }
         case Builtins.BooleanAndDecl =>
           val lhs = exprResultToControlFlow(expr.arguments(0).accept(this))
 

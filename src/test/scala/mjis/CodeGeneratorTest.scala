@@ -1,13 +1,10 @@
 package mjis
 
-import java.nio.file.{Paths, Files}
-
 import firm.{Firm, Backend, Mode}
 import mjis.CompilerTestHelper._
 import mjis.CompilerTestMatchers._
 import mjis.opt._
 import org.scalatest._
-import scala.collection.JavaConversions._
 
 class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
 
@@ -328,8 +325,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
          |	call _4Test_foo
          |	movb %al, %REG3{1}
          |.L4:
-         |	cmpb $1, %REG3{1}
-         |	je .L6
+         |	cmpb $0, %REG3{1}
+         |	jne .L6
          |.L5:
          |	jmp .L7
          |.L6:
@@ -341,7 +338,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
          |	movl $42, %edi
          |	call System_out_println
          |.L10:
-         |	movb $1, %al
+         |	movb $255, %al
          |.L11:
          |  ret""", mainMethod=false), excludedOptimizations = Set(UnusedParameterElimination, PureFunctionCallElimination))
 
@@ -423,8 +420,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  movq %REG0{8}, %rdi
       |  call _4Test_foo
       |  movb %al, %REG1{1}
-      |  cmpb $1, %REG1{1}
-      |  je .L1
+      |  cmpb $0, %REG1{1}
+      |  jne .L1
       |.L3:
       |  jmp .L5
       |.L4:
@@ -432,10 +429,10 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  movq %REG0{8}, %rdi
       |  call _4Test_foo
       |  movb %al, %REG2{1}
-      |  cmpb $1, %REG2{1}
-      |  jne .L4
+      |  cmpb $0, %REG2{1}
+      |  je .L4
       |.L6:
-      |  movb $1, %al
+      |  movb $255, %al
       |.L7:
       |  ret"""),
       excludedOptimizations = Set(Inlining))
@@ -448,15 +445,6 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |.L1:
       |.L2:
       |  jmp .L1"""))
-  }
-
-  for (divisor <- 2.to(16).flatMap(i => Seq(i, -i)) ++ Seq(1 << 16, 1 << 31, (1 << 31) - 1)) {
-    it should s"generate code for division by $divisor" in {
-      Files.write(Paths.get("divByConst-test.check"), Array[Byte]())
-      Files.write(Paths.get("divByConst-test.mj"),
-        Files.readAllLines(Paths.get("assets/divByConst-test.mj")).map(_.replaceAll("\\$\\$", divisor.toString)))
-      "divByConst-test.mj" should passIntegrationTest(Seq("--no-inline"))
-    }
   }
 
   it should "generate correct lea instructions" in {
@@ -524,8 +512,8 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |.L0:
         |  movl $1, %REG1{4}
         |  movl $0, %REG2{4}
-        |  cmpb $1, %REG0{1}
-        |  cmovel %REG1{4}, %REG2{4}   # should not do "cmov %REG0{1}, %REG2{4}" heres
+        |  cmpb $0, %REG0{1}
+        |  cmovnel %REG1{4}, %REG2{4}   # should not do "cmov %REG0{1}, %REG2{4}" heres
         |  movl %REG2{4}, %eax
         |.L1:
         |  ret"""))
