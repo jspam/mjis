@@ -177,14 +177,12 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       assert(left.getMode == Mode.getIs)
       assert(right.getMode == Mode.getIs)
       val rightOp = getOperand(right)
+      assert(!rightOp.isInstanceOf[ConstOperand])
       Seq(
         Mov(getOperand(left), RegisterOperand(RAX, 4)),
-        Cdq(4) /* sign-extend eax into edx:eax */) ++
-      // IDiv cannot handle a constant as right operand
-      (if (rightOp.isInstanceOf[ConstOperand])
-        Seq(Mov(rightOp, regOp(n)), IDiv(regOp(n)))
-      else
-        Seq(IDiv(rightOp)))
+        Cdq(4) /* sign-extend eax into edx:eax */,
+        IDiv(rightOp)
+      )
     }
 
     private def createValue(node: Node): Seq[Instruction] = {
@@ -249,6 +247,11 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         val eax = RegisterOperand(AMD64Registers.RAX, 4)
         val edx = RegisterOperand(AMD64Registers.RDX, 4)
         val (instrs: Seq[Instruction], resultReg) = Math.abs(divisor.toLong) match {
+          case 0 => (Seq(
+            Mov(getOperand(dividend), eax),
+            Mov(ConstOperand(0, 4), r),
+            IDiv(r)
+          ), eax)
           case 1 => ??? // handled by Identities
           case 2 => (Seq(
             Mov(getOperand(dividend), r),
@@ -374,7 +377,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
                 Mov(tempRegister, regOp(n)))
 
-            case DivExtr(dividend, ConstExtr(divisor)) if divisor != 0 => divByConstant(dividend, divisor)
+            case DivExtr(dividend, ConstExtr(divisor)) => divByConstant(dividend, divisor)
             case n : firm.nodes.Div => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RAX, 4), regOp(n)))
             case n : firm.nodes.Mod => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RDX, 4), regOp(n)))
 

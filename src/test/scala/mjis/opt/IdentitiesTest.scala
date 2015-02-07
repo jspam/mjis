@@ -84,4 +84,14 @@ class IdentitiesTest extends FlatSpec with Matchers with BeforeAndAfter {
 
     "" should optimizeTo(Identities)("") // see constructed graphs
   }
+
+  it should "not optimize divisions by zero" in {
+    "public int before(int i) { return i / 0; }" should optimizeTo(Identities)(
+      "public int after(int i) { return i / 0; }")
+  }
+
+  it should "replace '% 0' by '/ 0'" in {
+    "public int before(int i) { return i % 0; }" should optimizeTo(Identities)(
+      "public int after(int i) { return i / 0; }")
+  }
 }

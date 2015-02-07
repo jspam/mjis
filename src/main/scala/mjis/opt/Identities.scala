@@ -80,6 +80,10 @@ object Identities extends NodeBasedOptimization() {
     case n@ProjExtr(div@DivExtr(x, ConstExtr(-1)), Div.pnRes) =>
       killMemoryNode(div)
       exchange(n, g.newMinus(n.block, x, x.getMode))
+    // x % 0 == x / 0 (allows us to handle only division by zero in the code generator)
+    case n@ProjExtr(mod@ModExtr(x, y@ConstExtr(0)), Mod.pnRes) =>
+      val div = g.newDiv(n.block, mod.asInstanceOf[Mod].getMem, x, y, n.getMode, op_pin_state.op_pin_state_pinned)
+      exchange(n, g.newProj(div, n.getMode, Div.pnRes))
     // x % y == x - x / y * y (which is only useful if 'x / y' can be computed by fast division
     case n@ProjExtr(mod@ModExtr(x, y@ConstExtr(_)), Mod.pnRes) =>
       val div = g.newDiv(n.block, mod.asInstanceOf[Mod].getMem, x, y, n.getMode, op_pin_state.op_pin_state_pinned)
