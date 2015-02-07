@@ -459,6 +459,74 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  ret"""))
   }
 
+  it should "generate code for division of a positive constant != MIN_INT by an unknown value" in {
+    fromMembers("public int foo(int divisor) { return 1 / divisor; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl $1, %eax
+        |  movl $0, %edx
+        |  idivl %REG0{4}
+        |  movl %eax, %REG1{4}
+        |  movl %REG1{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for division of a negative constant != MIN_INT by an unknown value" in {
+    fromMembers("public int foo(int divisor) { return -1 / divisor; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl $-1, %eax
+        |  movl $-1, %edx
+        |  idivl %REG0{4}
+        |  movl %eax, %REG1{4}
+        |  movl %REG1{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for division of MIN_INT by an unknown value" in {
+    fromMembers("public int foo(int divisor) { return -2147483648 / divisor; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl $-2147483648, %eax
+        |  movl $0, %edx
+        |  cmpl $-1, %REG0{4}
+        |  je .T0
+        |  movl $-1, %edx
+        |  idivl %REG0{4}
+        |.T0:
+        |  movl %eax, %REG1{4}
+        |  movl %REG1{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
+  it should "generate code for division of two unknown values" in {
+    fromMembers("public int foo(int dividend, int divisor) { return dividend / divisor; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |  movl %edx, %REG1{4}
+        |.L0:
+        |  movl %REG0{4}, %eax
+        |  cmpl $-2147483648, %eax
+        |  jne .T0
+        |  movl $0, %edx
+        |  cmpl $-1, %REG1{4}
+        |  je .T1
+        |.T0:
+        |  cdq
+        |  idivl %REG1{4}
+        |.T1:
+        |  movl %eax, %REG2{4}
+        |  movl %REG2{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
   it should "generate correct lea instructions" in {
     fromMembers("public int foo(int x, int y) { return x+3+8*y; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:

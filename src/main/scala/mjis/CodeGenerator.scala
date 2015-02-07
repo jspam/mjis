@@ -10,9 +10,10 @@ import mjis.opt.FirmExtensions._
 import mjis.util.MapExtensions._
 import mjis.asm.AMD64Registers._
 import mjis.util.{Digraph, PowerOfTwo}
+import mjis.CodeGenerator._
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.collection.JavaConversions._
 
 object CodeGenerator {
@@ -25,12 +26,42 @@ object CodeGenerator {
     LabelOperand(s".T$labelNr")
   }
 
+  val MIN_INT = -2147483648
+
   def getDivModCode(dividend: Operand, divisor: Operand): Seq[Instruction] = {
-    Seq(
-      Mov(dividend, RegisterOperand(RAX, 4)),
-      Cdq(4),
-      IDiv(divisor)
-    )
+    val normalCaseLabel = newTempLabelOp()
+    val exitLabel = newTempLabelOp()
+
+    val result = ArrayBuffer[Instruction](Mov(dividend, RegisterOperand(RAX, 4)))
+
+    // Special case MIN_INT / -1 = MIN_INT, remainder zero, see
+    // http://hg.openjdk.java.net/jdk7/modules/hotspot/file/9646293b9637/src/cpu/x86/vm/assembler_x86.cpp#l5847
+    dividend match {
+      case ConstOperand(c, _) =>
+        if (c != MIN_INT) result ++= Seq(
+          // Result of cdq is statically known
+          Mov(ConstOperand(if (c >= 0) 0 else 0xFFFFFFFF, 4), RegisterOperand(RDX, 4)),
+          IDiv(divisor))
+        else result ++= Seq(
+          Mov(ConstOperand(0, 4), RegisterOperand(RDX, 4)),
+          Cmp(divisor, ConstOperand(-1, 4)),
+          JmpConditional(exitLabel, Relation.Equal),
+          Mov(ConstOperand(0xFFFFFFFF, 4), RegisterOperand(RDX, 4)),
+          IDiv(divisor),
+          Label(exitLabel))
+      case _ => result ++= Seq(
+        Cmp(RegisterOperand(RAX, 4), ConstOperand(MIN_INT, 4)),
+        JmpConditional(normalCaseLabel, Relation.UnorderedLessGreater),
+        Mov(ConstOperand(0, 4), RegisterOperand(RDX, 4)),
+        Cmp(divisor, ConstOperand(-1, 4)),
+        JmpConditional(exitLabel, Relation.Equal),
+        Label(normalCaseLabel),
+        Cdq(4),
+        IDiv(divisor),
+        Label(exitLabel))
+    }
+
+    result
   }
 }
 
