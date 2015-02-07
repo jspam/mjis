@@ -138,10 +138,10 @@ trait CompilerTestMatchers {
     }
   }
 
-  class OptimizerMatcher(under: Optimization, after: Seq[Optimization], before: Seq[Optimization], to: String) extends Matcher[String] {
+  class OptimizerMatcher(under: Optimization, after: Seq[Optimization], before: Seq[Optimization], to: Option[String]) extends Matcher[String] {
     override def apply(from: String): MatchResult = {
       assertExec[FirmConstructor](fromMembers(from))
-      assertExec[FirmConstructor](fromMembers(to))
+      assertExec[FirmConstructor](fromMembers(to.getOrElse(from.replace("before", "after"))))
 
       val beforeGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_before")
       assert(beforeGraph.isDefined)
@@ -297,7 +297,8 @@ trait CompilerTestMatchers {
   def passIntegrationTest(options: Seq[String]) = new IntegrationTestMatcher(options)
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)
-  def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, before, to)
+  def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, before, Some(to))
+  def notOptimize(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty) = new OptimizerMatcher(under, after, before, None)
 }
 
 object CompilerTestMatchers extends CompilerTestMatchers
