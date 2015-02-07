@@ -8,12 +8,18 @@ object TrivialPhiElimination extends NodeBasedOptimization() {
 
   override def _optimize(g: Graph, node: Node): Unit = node match {
     // skip memory phis
-    case _: Phi if node.getMode != Mode.getM =>
+    case _: Phi =>
 
       val dependencies = node.getPreds.filter(!_.isInstanceOf[Bad]).toSet - node
 
       if (dependencies.size == 1)
-        exchange(node, dependencies.head)
+        if (node.getMode == Mode.getM)
+          for (e <- BackEdges.getOuts(node)) e.node match {
+            case _: End | _: Return | _: Anchor =>
+            case n => if (n != node) n.setPred(e.pos, dependencies.head)
+          }
+        else
+          exchange(node, dependencies.head)
     case _ =>
   }
 
