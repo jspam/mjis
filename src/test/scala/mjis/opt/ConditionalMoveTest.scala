@@ -57,8 +57,8 @@ class ConditionalMoveTest extends FlatSpec with Matchers with BeforeAndAfter {
         |arg_b = Proj Bu Arg 1, args
         |const0 = Const 0 Is
         |const1 = Const 1 Is
-        |const1b = Const 1 Bu
-        |cmp = Cmp Equal, const1b, arg_b
+        |const0b = Const 0 Bu
+        |cmp = Cmp UnorderedLessGreater, const0b, arg_b
         |# Mux, ifFalse, ifTrue
         |retval = Mux Is, cmp, const0, const1
         |return = Return, mem, retval

@@ -72,6 +72,7 @@ object ConstantFolding extends DeferredOptimization(needsBackEdges = true) {
             case x => x
           }
         case _: Minus => liftUnary(_.neg, values(0))
+        case _: Not => liftUnary(_.not, values(0))
         case cmp: Cmp => liftBin((x, y) => fromBool(x.compare(y).contains(cmp.getRelation)))
         case ConvExtr(ConstExtr(c)) => new TargetValue(c, node.getMode)
         case _ => conflicting

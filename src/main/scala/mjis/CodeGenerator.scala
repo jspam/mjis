@@ -356,6 +356,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             case n: nodes.And => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.And(getOperand(n.getRight), regOp(n)))
             case n: nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
             case n: nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
+            case n: nodes.Not => Seq(Mov(getOperand(n.getOp), regOp(n)), Not(regOp(n)))
 
             case n@MulExtr(x, c@ConstExtr(PowerOfTwo(shift))) =>
               Seq(Mov(getOperand(x), regOp(n)),

@@ -121,6 +121,12 @@ object Neg {
   def unapply(instr: Instruction) = unapply1("neg")(instr)
 }
 
+object Not {
+  def apply(valueAndResult: Operand): Instruction =
+    new Instruction("not", (valueAndResult, READ | WRITE | MEMORY))
+  def unapply(instr: Instruction) = unapply1("not")(instr)
+}
+
 object Lea {
   def apply(value: AddressOperand, result: RegisterOperand): Instruction =
     new Instruction("lea", (value, MEMORY), (result, WRITE))
