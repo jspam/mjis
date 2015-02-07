@@ -129,6 +129,13 @@ object FirmExtractors {
     def unapply(address: Address): Option[Entity] = Some(address.getEntity)
   }
 
+  object MemberExtr {
+    def unapply(node: Node): Option[(Node, Entity)] = node match {
+      case m: Member => Some((m.getPtr, m.getEntity))
+      case _ => None
+    }
+  }
+
   object PhiExtr {
     def unapplySeq(node: Node): Option[Seq[Node]] = node match {
       case phi: Phi => Some(phi.getPreds.toList)

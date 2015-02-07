@@ -15,7 +15,7 @@ object TrivialPhiElimination extends NodeBasedOptimization() {
       if (dependencies.size == 1)
         if (node.getMode == Mode.getM)
           for (e <- BackEdges.getOuts(node)) e.node match {
-            case _: End | _: Return | _: Anchor =>
+            case _: End | _: Anchor =>
             case n => if (n != node) n.setPred(e.pos, dependencies.head)
           }
         else

@@ -3,31 +3,28 @@ package mjis.opt
 import firm.{Mode, Graph}
 import firm.nodes._
 import mjis.opt.FirmExtensions._
-import mjis.util.{SCCLoop, SCCTreeNode}
+import mjis.util.{SCCLeaf, SCCLoop, SCCTreeNode}
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 
-object LoopInvariantCodeMotion extends Optimization(needsBackEdges = true) {
+object LoopInvariantCodeMotion extends DeferredOptimization(needsBackEdges = true) {
 
-  def _optimize(g: Graph): Unit = {
+  def __optimize(g: Graph): Unit = {
     val dominators = g.getDominators
     val blockGraph = g.getBlockGraph
-    val hoisted = mutable.Set[Node]()
 
     def rec(s: SCCTreeNode[Block]): Unit = s match {
       case loop: SCCLoop[Block] =>
         val preHeader = blockGraph.edges(loop.dominator).find(!loop.nodes.contains(_)).get
-        // remember that SCCTreeNode.nodes are actually Blocks here
-        val nodes = loop.nodes.flatMap(_.successors)
-        for (node <- nodes if node.getMode != Mode.getX &&
-            // don't move a node twice
-            !hoisted(node) &&
-            // Cond nodes are essentially control flow nodes, but have mode T
-            !node.isInstanceOf[Cond] &&
-            !node.isInstanceOf[Phi] &&
-            node.getPreds.forall(pred => dominators(preHeader)(pred.block))) {
-          hoisted += node
-          setBlock(node, preHeader)
+        // don't look at nodes in nested loops
+        val nodes = loop.tree.collect({ case SCCLeaf(n) => n}).flatMap(_.nodes)
+        for (node <- nodes if node.getMode != Mode.getX && node.getMode != Mode.getb) node match {
+          case _: Phi =>
+          // don't hoist potential FPEs
+          case _: Div =>
+          case _ =>
+            if (node.getPreds.forall(pred => dominators(preHeader)(pred.block))) {
+              setBlock(node, preHeader)
+            }
         }
         loop.tree.foreach(rec)
       case _ =>

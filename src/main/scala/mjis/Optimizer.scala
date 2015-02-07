@@ -34,11 +34,8 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
   var generalOptimizations = List(
     ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities) ++
     (if (!config.useFirmBackend) Seq(ConditionalMoves) else Seq())
-  // The following optimizations mustn't be iterated with other optimizations
-  // because of possible interactions leading to infinite loops
-  var volatileOptimizations = if (config.inlining) List(Inlining, LoopUnrolling) else List(LoopUnrolling)
 
-  def exec(optimizations: List[Optimization]): Unit = {
+  def exec(optimizations: Seq[Optimization]): Unit = {
     // always run all optimizations
     while (optimizations.map(_.optimize()).exists(b => b)) {}
   }
@@ -49,7 +46,10 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
       bindings.binding_irgopt.remove_bads(g.ptr)
       bindings.binding_irgopt.remove_unreachable_code(g.ptr)
     })
-    volatileOptimizations.foreach(_.optimize())
+    if (config.inlining)
+      Inlining.optimize()
+    exec(generalOptimizations ++ highLevelOptimizations)
+    LoopUnrolling.optimize()
     exec(highLevelOptimizations)
     Util.lowerSels()
     exec(generalOptimizations)
