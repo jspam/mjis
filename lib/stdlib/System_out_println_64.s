@@ -25,7 +25,7 @@ System_out_println:
 
 	movl	buf_size(%rip), %eax
 	cmpl	$4083, %eax
-	jle	.dont_flush
+	jle	.L_dont_flush
 
 	movslq	%eax, %rdx
 	movq $1,	%rax
@@ -35,19 +35,19 @@ System_out_println:
 	syscall
 	popq    %r11                           # Restore caller-save register
 	movl	$0, buf_size(%rip)
-.dont_flush:
+.L_dont_flush:
 	leaq	-16(%rsp), %rsi
 	movq	$0, -16(%rsp)
 	movl	$0, -8(%rsp)
 	movb	$10, -16(%rsp)                 # place '\n' to end of buffer
 	movabsq	$7378697629483820647, %r10   # modular inverse of 10, for fast div
 	leaq	1(%rsi), %rdi
-	jmp	.digit_loop
+	jmp	.L_digit_loop
 	.p2align 4,,15
 	.p2align 3
-.digit_loop_repeat:
+.L_digit_loop_repeat:
 	movq	%rcx, %rdi                     # we could do this via a cmovne, but we'll jump here anyways
-.digit_loop:
+.L_digit_loop:
 	movq	%r8, %rax
 	leaq	1(%rdi), %rcx
 	imulq	%r10
@@ -62,35 +62,35 @@ System_out_println:
 	testq	%rdx, %rdx
 	movb	%r8b, -1(%rcx)
 	movq	%rdx, %r8
-	jne	.digit_loop_repeat
+	jne	.L_digit_loop_repeat
 
 	testb	%r9b, %r9b
-	je	.n_positive
+	je	.L_n_positive
 	leaq	2(%rdi), %rcx
 	movb	$45, 1(%rdi)                   # 45 == '-'
-.n_positive:
+.L_n_positive:
 
 	leaq	-1(%rcx), %rax
 	cmpq	%rsi, %rax
-	jb	.copy_done
+	jb	.L_copy_done
 	movl	buf_size(%rip), %r10d
 	leaq	-17(%rsp), %r9
 	movl	%r10d, %edx
 
 	.p2align 4,,15
 	.p2align 3
-.copy_loop:
+.L_copy_loop:
 	subq	$1, %rax
 	movzbl	1(%rax), %r8d
 	movslq	%edx, %rdi
 	addl	$1, %edx
 	cmpq	%r9, %rax
 	movb	%r8b, buf(%rdi)
-	jne	.copy_loop
+	jne	.L_copy_loop
 	subl	%esi, %r10d
 	leal	(%r10,%rcx), %eax
 	movl	%eax, buf_size(%rip)
-.copy_done:
+.L_copy_done:
 	popq	%rbx
 	ret
 
