@@ -73,20 +73,17 @@ class LivenessInterval(val regOp: RegisterOperand) extends Ordered[LivenessInter
   def nextUsagePos(fromPos: Int) = Option(usages.ceilingKey(fromPos)).getOrElse(Int.MaxValue)
 
   def addRange(from: Int, to: Int) = {
-    val newRange = LivenessRange(from, to)
-    // adjacent ranges are merged into one
+    // adjacent ranges are merged into the new range
     val intersectingRanges =
       Option(ranges.floorEntry(from)).filter(_.getValue.containsIncl(from)).map(_.getValue) ++
         ranges.subMap(from, true, to, true).values()
-    if (intersectingRanges.isEmpty) {
-      ranges.put(from, newRange)
-    } else {
-      intersectingRanges.foreach(r => ranges.remove(r.start))
-      ranges.put(from, LivenessRange(
-        from min intersectingRanges.head.start,
-        to max intersectingRanges.last.end
-      ))
-    }
+    val newRange =
+      if (intersectingRanges.isEmpty) LivenessRange(from, to)
+      else {
+        intersectingRanges.foreach(r => ranges.remove(r.start))
+        LivenessRange(from min intersectingRanges.head.start, to max intersectingRanges.last.end)
+      }
+    ranges.put(newRange.start, newRange)
   }
 
   def setFrom(from: Int) = {

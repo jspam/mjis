@@ -46,18 +46,33 @@ class LivenessIntervalTest extends FlatSpec with Matchers {
     val l1 = new LivenessInterval(DummyRegOp)
     l1.addRange(3, 5)
     l1.addRange(2, 4)
+    l1.ranges.keys should contain only 2
     l1.ranges.values should contain only LivenessRange(2, 5)
 
     val l2 = new LivenessInterval(DummyRegOp)
     l2.addRange(3, 5)
     l2.addRange(5, 7)
+    l2.ranges.keys should contain only 3
     l2.ranges.values should contain only LivenessRange(3, 7)
 
     val l3 = new LivenessInterval(DummyRegOp)
     l3.addRange(2, 3)
     l3.addRange(5, 7)
     l3.addRange(1, 8)
+    l3.ranges.keys should contain only 1
     l3.ranges.values should contain only LivenessRange(1, 8)
+
+    val l4 = new LivenessInterval(DummyRegOp)
+    l4.addRange(1, 8)
+    l4.addRange(5, 6)
+    l4.ranges.keys should contain only 1
+    l4.ranges.values should contain only LivenessRange(1, 8)
+
+    val l5 = new LivenessInterval(DummyRegOp)
+    l5.addRange(1, 8)
+    l5.addRange(8, 8)
+    l5.ranges.keys should contain only 1
+    l5.ranges.values should contain only LivenessRange(1, 8)
   }
 
   it should "contain its start position if it's a one-point interval" in {
