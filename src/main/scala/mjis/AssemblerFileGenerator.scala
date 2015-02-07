@@ -92,6 +92,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     input.functions.foreach(function => {
       emit("")
       emit(".p2align 4,,15")
+      emit(s".globl ${function.name}")
       emit(s"${function.name}:", indent = false)
 
       for (block <- function.basicBlocks) {

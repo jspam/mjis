@@ -33,10 +33,10 @@ object AsmTestHelper {
   private def stripComments: String => String = "\\s*#.*".r.replaceAllIn(_, "")
 
   private def normalize(code: String): String = {
-    val withoutAligns = "\r?\n?\t.p2align 4,,15".r.replaceAllIn(code, "")
+    val withoutDirectives = "\r?\n?\t(.p2align 4,,15|.globl [a-zA-Z0-9_]+)".r.replaceAllIn(code, "")
 
     val labelMappings = createLabelMappings(code)
-    val normalizedLabels = ".L(\\d+)".r.replaceAllIn(withoutAligns, match_ => ".L" + labelMappings(match_.group(1)))
+    val normalizedLabels = ".L(\\d+)".r.replaceAllIn(withoutDirectives, match_ => ".L" + labelMappings(match_.group(1)))
 
     val registerMappings = createRegisterMappings(code)
     "%REG(\\d+)".r.replaceAllIn(normalizedLabels, match_ => "%REG" + registerMappings(match_.group(1)))
