@@ -25,7 +25,7 @@ object MJIS extends Build {
         mainClass in assembly := Some("mjis.CLIMain"),
         test in assembly := {},
         assemblyOption in assembly ~= { _.copy(prependShellScript = Some(shellScript)) },
-        scalaVersion := "2.11.4",
+        scalaVersion := "2.11.5",
         scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-Xlint", "-Xfuture"),
         libraryDependencies += "com.github.scopt" % "scopt_2.11" % "3.2.0",
         libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.1" % "test",

@@ -34,8 +34,8 @@ object Builtins {
 
   val SystemOutPrintlnDecl = MethodDecl("System.out.println", List(Parameter("", IntType)), VoidType, null, isStatic = true)
 
-  val NullType = TypeBasic("null")
-  val NullDecl = ClassDecl("null", List.empty, List.empty)
+  val NullType = TypeBasic("\"null\"")
+  val NullDecl = ClassDecl("\"null\"", List.empty, List.empty)
 
   val PublicTypeDecls = ValueTypeDecls ++ List(VoidDecl, NullDecl)
 

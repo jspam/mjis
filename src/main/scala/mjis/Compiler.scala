@@ -4,6 +4,8 @@ import java.lang.reflect.Constructor
 import java.io._
 import java.nio.file.Files
 import java.util.logging.{Level, Logger}
+import mjis.eval.Interpreter
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.reflect._
@@ -14,11 +16,13 @@ import mjis.util.CCodeGenerator
 
 object Compiler {
   type Pipeline = List[Class[_ <: Phase[_]]]
-  private val defaultPipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
+  val defaultPipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
     classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[CodeGenerator], classOf[RegisterAllocator],
     classOf[BlockOrdering], classOf[PeepholeOptimizer],
     classOf[MjisAssemblerFileGenerator], classOf[GccRunner])
-  private val firmCompilePipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
+  val evalPipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
+    classOf[Typer], classOf[Interpreter])
+  val firmCompilePipeline: Pipeline = List(classOf[Lexer], classOf[Parser], classOf[Namer],
     classOf[Typer], classOf[FirmConstructor], classOf[Optimizer], classOf[FirmAssemblerFileGenerator],
     classOf[GccRunner])
 
@@ -26,6 +30,7 @@ object Compiler {
     "lexer" -> classOf[Lexer],
     "parser" -> classOf[Parser],
     "semantics" -> classOf[Typer],
+    "eval" -> classOf[Interpreter],
     "ccodegen" -> classOf[Typer],
     "firm" -> classOf[FirmConstructor],
     "optimizer" -> classOf[Optimizer],
@@ -87,17 +92,26 @@ object Compiler {
   def compile(config: Config): Boolean = {
     Logger.getGlobal.setLevel(if (config.verbose) Level.ALL else Level.OFF)
 
-    val pipeline = if (config.useFirmBackend) firmCompilePipeline else defaultPipeline
-    Firm.init()
+    val pipeline =
+      if (config.eval) evalPipeline
+      else {
+        Firm.init()
+        // tell FIRM we want to output amd64 code
+        val modeP = Mode.createReferenceMode(
+          "P64", Mode.Arithmetic.TwosComplement, 64, 64)
+        Mode.setDefaultModeP(modeP)
+        Backend.option("isa=amd64")
+
+        if (config.useFirmBackend)
+          firmCompilePipeline
+        else
+          defaultPipeline
+      }
 
     val fileOrStdIn = config.file.map(f => new FileInputStream(f.toFile)).getOrElse(System.in)
     val input = new InputStreamReader(new BufferedInputStream(fileOrStdIn), "ASCII")
     val target = if (config.stopAfter != "") stopAfterTargets(config.stopAfter) else pipeline.last
-    // tell FIRM we want to output amd64 code
-    val modeP = Mode.createReferenceMode(
-      "P64", Mode.Arithmetic.TwosComplement, 64, 64)
-    Mode.setDefaultModeP(modeP)
-    Backend.option("isa=amd64")
+
 
     def printFindings(findings: Seq[Finding], printErrorText: Boolean) = {
       val inputLines = config.file match {
