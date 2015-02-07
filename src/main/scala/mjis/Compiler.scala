@@ -3,6 +3,7 @@ package mjis
 import java.lang.reflect.Constructor
 import java.io._
 import java.nio.file.Files
+import java.util.logging.{Level, Logger}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.reflect._
@@ -84,6 +85,8 @@ object Compiler {
     exec(input, classTag[P].runtimeClass.asInstanceOf[Class[_ <: Phase[_]]]).asInstanceOf[Either[P, List[Finding]]]
 
   def compile(config: Config): Boolean = {
+    Logger.getGlobal.setLevel(if (config.verbose) Level.ALL else Level.OFF)
+
     val pipeline = if (config.useFirmBackend) firmCompilePipeline else defaultPipeline
     Firm.init()
 

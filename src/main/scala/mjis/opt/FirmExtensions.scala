@@ -13,7 +13,9 @@ import scala.collection.mutable.ArrayBuffer
  * ...
  * incrAdd = Add(value, incr)
  */
-case class InductionVariable(value: Phi, start: Node, incr: Const, incrAdd: Add)
+case class InductionVariable(value: Phi, start: Node, incr: Const, incrAdd: Add) {
+  def incrVal = incr.getTarval.asInt
+}
 
 object FirmExtensions {
 

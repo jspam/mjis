@@ -1,10 +1,12 @@
 package mjis.opt
 
+import java.util.logging.{Level, Logger}
+
 import firm._
 import firm.nodes._
 
 import mjis.opt.FirmExtensions._
-import mjis.opt.FirmExtractors.{ConstExtr, CmpExtr}
+import mjis.opt.FirmExtractors.ConstExtr
 import mjis.util.MapExtensions._
 import mjis.util._
 
@@ -12,6 +14,8 @@ import scala.collection.mutable
 import scala.collection.JavaConversions._
 
 object LoopUnrolling extends Optimization(needsBackEdges = true) {
+
+  val maxUnrolledLoopNodeNum = 200
 
   /** We only want to unroll the innermost loops.
     * Those are those IVs which dominate no other SCC */
@@ -23,12 +27,16 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
       case loop: SCCLoop[Block] => innermostLoops(loop.tree, IVBlocks)
     }).flatten
 
+  def shouldUnroll(loop: SCCLoop[Block], cfGraph: Digraph[Block]): Boolean = {
+    // TODO: To handle inter-dependent phis in the loop header, we'd have to raise the phi permutation
+    // to the power of `maxUnrollCount`
+    loop.dominator.nodes.foreach({
+      case phi: Phi if phi.getPred(1).block == loop.dominator && phi.getMode != Mode.getM => return false
+      case _ =>
+    })
 
-  val maxLoopNodeNum = 30
-  var maxUnrollCount = 16
-
-  def shouldUnroll(loop: SCCLoop[Block]): Boolean = {
-    loop.nodes.map(BackEdges.getNOuts(_)).sum < maxLoopNodeNum
+    // loop may have at most one exit (through the header)
+    loop.nodes.tail.forall(cfGraph.edges(_).forall(succ => loop.nodes.contains(succ)))
   }
 
   private def evalRel(rel: Relation, x: Int, y: Int) = new TargetValue(x, Mode.getIs).compare(new TargetValue(y, Mode.getIs)).contains(rel)
@@ -52,34 +60,138 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
     // nothing to do. Should be true for most graphs
     if (inductionVars.isEmpty) return
 
+    val dominators = g.getDominators
     val ivByVal = inductionVars.map(iv => iv.value -> iv).toMap[Node, InductionVariable]
     val cfGraph = g.getBlockGraph.transposed
     val sccTree = cfGraph.getSCCTree(g.getStartBlock)
 
     // look for inner loops with comparisons of an IV and a constant
-    for (loop <- innermostLoops(sccTree, inductionVars.map(_.value.block).toSet) if shouldUnroll(loop)) {
+    for (loop <- innermostLoops(sccTree, inductionVars.map(_.value.block).toSet) if shouldUnroll(loop, cfGraph)) {
       loop.dominator.nodes.foreach {
-        case cmp@CmpExtr(rel, value, ConstExtr(end)) => ivByVal.get(value) match {
-          case Some(InductionVariable(_, ConstExtr(start), ConstExtr(step), _)) =>
-            val iterCount = getIterationCount(rel, start, step, end)
-            // Since the range is statically known, we can predict the exact exit value of the unrolled loop
-            unroll(loop, iterCount, start + (iterCount / maxUnrollCount * maxUnrollCount).toInt * step, cmp.asInstanceOf[Cmp])
-          case _ =>
+        case cmp: Cmp => {
+          if (ivByVal.contains(cmp.getRight))
+            exchange(cmp, g.newCmp(cmp.block, cmp.getRight, cmp.getLeft, cmp.getRelation.inversed))
+
+          (ivByVal.get(cmp.getLeft), cmp.getRight) match {
+            case (Some(iv@InductionVariable(_, ConstExtr(start), _, _)), ConstExtr(end)) =>
+              val iterCount = getIterationCount(cmp.getRelation, start, iv.incrVal, end)
+              // Since the range is statically known, we can predict the exact exit value of the unrolled loop
+              unrollStatic(new Unroller(loop), start, iterCount, iv, cmp.asInstanceOf[Cmp])
+            case (Some(iv), end) =>
+              // `end` has to strictly dominate the loop
+              if (dominators(loop.dominator).contains(end.block) && loop.dominator != end.block) {
+                val rel = if (iv.incrVal > 0) cmp.getRelation else cmp.getRelation.inversed()
+                // `rel` should 'point' in the opposite direction of `iv.incr`
+                if (rel == Relation.Less || rel == Relation.LessEqual)
+                  unrollDynamic(new Unroller(loop), iv, cmp.asInstanceOf[Cmp])
+              }
+            case _ =>
+          }
         }
         case _ =>
       }
     }
 
-    def unroll(loop: SCCLoop[Block], iterCount: Long, exitVal: Int, cmp: Cmp): Unit = {
+    def getUnrollCount(loop: SCCLoop[Block]): Int = {
+      var cnt = 1
+      val blockAndNodeCount = loop.nodes.tail.size + loop.nodes.tail.map(_.nodes.size).sum
+      while (cnt * blockAndNodeCount * 2 <= maxUnrolledLoopNodeNum) cnt *= 2
+      cnt
+    }
+
+    def unrollStatic(unroller: Unroller, start: Int, iterCount: Long, iv: InductionVariable, cmp: Cmp): Unit = {
+      val unrollCount = getUnrollCount(unroller.loop)
+      if (unrollCount < 2) return
+      Logger.getGlobal.log(Level.INFO, s"${g.getEntity.getLdName}: static unrolling by $unrollCount")
+
+      val exitVal = start + (iterCount / unrollCount * unrollCount).toInt * iv.incrVal
+      cmp.setRelation(Relation.LessGreater)
+      // Make cmp always-false if there's not enough iterations
+      cmp.setRight(if (iterCount < unrollCount) cmp.getLeft else g.newConst(exitVal, Mode.getIs))
+
+      if (iterCount >= unrollCount)
+        unroller.unrollInLoop(unrollCount)
+
+      val epilogueLength = iterCount % unrollCount
+      if (epilogueLength != 0)
+        unroller.unrollOutside(epilogueLength.toInt)
+      unroller.finish()
+    }
+
+    def overflows(x: Long): Boolean = x < Int.MinValue || x > Int.MaxValue
+
+    /**
+     * Unrolls
+     *   while (i < end) $body
+     * to something like
+     *   while (i < end - 3) 4*$body
+     *   if (i < end - 1) 2*$body
+     *   if (i < end) $body
+     */
+    def unrollDynamic(unroller: Unroller, iv: InductionVariable, cmp: Cmp): Unit = {
+      // high unrollCounts would create long epilogues
+      var unrollCount = getUnrollCount(unroller.loop) min 4
+      if (unrollCount < 2) return
+      Logger.getGlobal.log(Level.INFO, s"${g.getEntity.getLdName}: dynamic unrolling by $unrollCount")
+
+      // pre-check of form `start < end`
+      var needsPreCheck = false
+      val dominator = unroller.loop.dominator
+
+      val end = cmp.getRight
+
+      def delta = -iv.incrVal * (unrollCount-1)
+      def getCurrentEnd(block: Node) = g.newAdd(block,
+        end,
+        g.newConst(delta, end.getMode),
+        end.getMode)
+
+      // statically check for possibility of overflows in `getCurrentEnd`
+      end match {
+        case ConstExtr(endVal) if !overflows(endVal.toLong + delta) =>
+        case _ =>
+          iv.start match {
+            case ConstExtr(start) if !overflows(start + delta) =>
+              needsPreCheck = true
+            // now we can be sure that `rel(start, end)`, so `end + delta` shouldn't overflow, either
+            case _ => return
+          }
+      }
+      cmp.setRight(getCurrentEnd(cmp.block))
+
+      unroller.unrollInLoop(unrollCount)
+
+      // epilogue
+      while (unrollCount > 1) {
+        unrollCount /= 2
+        val preBlock = g.newBlock(unroller.succ.getPreds.toArray)
+        val cond = g.newCond(preBlock,
+          g.newCmp(preBlock,
+            unroller.outerLookup(iv.value),
+            getCurrentEnd(preBlock),
+            cmp.getRelation))
+
+        unroller.succ.setPred(0, g.newProj(cond, Mode.getX, Cond.pnTrue))
+        // save the lookup before the true branch and use it in the merging phi creation
+        val lookup = unroller.outerLookup
+        unroller.unrollOutside(unrollCount)
+        unroller.mkPhis(g.newProj(cond, Mode.getX, Cond.pnFalse), lookup)
+      }
+
+      if (needsPreCheck) {
+        // pre-check context is the values before loop entry, i.e. the first pred
+        val block = g.newBlock(Array(dominator.getPred(0)))
+        val cond = g.newCond(block, g.newCmp(block, iv.start, end, cmp.getRelation))
+        dominator.setPred(0, g.newProj(cond, Mode.getX, Cond.pnTrue))
+        unroller.mkPhis(g.newProj(cond, Mode.getX, Cond.pnFalse), _.getPred(0))
+      }
+
+      unroller.finish()
+    }
+
+    class Unroller(val loop: SCCLoop[Block]) {
       val body = loop.nodes.tail
       val backJmp = loop.dominator.getPred(1) // in-loop jump back to the header
-
-      // TODO: To handle inter-dependent phis in the loop header, we'd have to raise the phi permutation
-      // to the power of `maxUnrollCount`
-      loop.dominator.nodes.foreach({
-        case phi: Phi if phi.getPred(1).block == loop.dominator && phi.getMode != Mode.getM => return
-        case _ =>
-      })
 
       // when copyBlocks looks up a phi in the loop header, return its value in the original body instead
       val innerLookup = loop.dominator.nodes.collect({
@@ -88,37 +200,44 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
       }).toMap[Node, Node]
       // save users of loop header phis, which we'll have to redirect in the end
       val phiUsers = innerLookup.keys.map(phi => phi -> BackEdges.getOuts(phi).filter(e => !loop.nodes.contains(e.node.getBlock)).toList)
-
-      /* duplicate the loop body inside the loop `maxUnrollCount - 1` times */
-
-      cmp.setRelation(Relation.LessGreater)
-      // Make cmp always-false if there's not enough iterations
-      cmp.setRight(if (iterCount < maxUnrollCount) cmp.getLeft else g.newConst(exitVal, Mode.getIs))
-
       var innerCopies = Map[Node, Node]().withDefault(identity)
-      for (_ <- 1.until(maxUnrollCount))
-      // use the previous copy as a reference frame via mapping through innerCopies
-        innerCopies = copyBlocks(g, body, innerLookup.mapValues(innerCopies), innerCopies(backJmp))
 
-      loop.dominator.setPred(1, innerCopies(backJmp))
-      for (phi <- innerLookup.keys) phi.setPred(1, innerCopies(phi.getPred(1)))
+      // for the first copy, the reference frame is the loop header itself
+      var outerLookup = innerLookup.keys.map(phi => phi -> phi).toMap[Node, Node]
+      var outerCopies = Map[Node, Node]()
 
-      val epilogueLength = iterCount % maxUnrollCount
-      if (epilogueLength != 0) {
-        /* append an epilogue of further `epilogueLength` copies */
+      // the loop's original successor node
+      val succ = cfGraph.edges(loop.dominator).find(!loop.nodes.contains(_)).get
 
-        // for the first copy, the reference frame is the loop header itself
-        var outerLookup = innerLookup.keys.map(phi => phi -> phi).toMap[Node, Node]
-        val succ = cfGraph.edges(loop.dominator).find(!loop.nodes.contains(_)).get
+      def unrollInLoop(count: Int): Unit = {
+        for (_ <- 1 until count) // minus the original body
+        // use the previous copy as a reference frame via mapping through innerCopies
+          innerCopies = copyBlocks(g, body, innerLookup.mapValues(innerCopies), innerCopies(backJmp))
 
-        var copies = Map[Node, Node]()
-        for (_ <- 1.to(epilogueLength.toInt)) {
-          copies = copyBlocks(g, body, outerLookup, succ.getPred(0))
-          outerLookup = outerLookup.keys.map(phi => phi -> copies(innerLookup(phi))).toMap
-          succ.setPred(0, copies(backJmp))
+        loop.dominator.setPred(1, innerCopies(backJmp))
+        for (phi <- innerLookup.keys) phi.setPred(1, innerCopies(phi.getPred(1)))
+      }
+
+      /** Inserts further unrollings between the loop and succ */
+      def unrollOutside(count: Int): Unit = {
+        for (_ <- 1 to count) {
+          outerCopies = copyBlocks(g, body, outerLookup, succ.getPred(0))
+          outerLookup = outerLookup.keys.map(phi => phi -> outerCopies(innerLookup(phi))).toMap
+          succ.setPred(0, outerCopies(backJmp))
         }
+      }
 
-        // update phi users to the last unrolled value
+      /** Merges control flow of `firstPred` and the current epilogue */
+      def mkPhis(firstPred: Node, phiArgsFirstPred: Node => Node): Unit = {
+        val postBlock = g.newBlock(Array(firstPred, succ.getPred(0)))
+        outerLookup = outerLookup.map {
+          case (phi, target) => phi -> g.newPhi(postBlock, Array(phiArgsFirstPred(phi), target), phi.getMode)
+        }
+        succ.setPred(0, g.newJmp(postBlock))
+      }
+
+      /** Updates phi users to the last unrolled value */
+      def finish(): Unit = {
         for ((phi, edges) <- phiUsers; e <- edges)
           e.node.setPred(e.pos, outerLookup(phi))
       }

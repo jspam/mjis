@@ -17,7 +17,7 @@ object Identities extends NodeBasedOptimization() {
       else
         exchange(n, x)
     // (((x+1)+1)+1)... == x+(1+1+1...)
-    case n@AddExtr(AddExtr(x, y: Const), z: Const) =>
+    case n@AddExtr(n2@AddExtr(x, y: Const), z: Const) if n2.successors.size == 1 =>
       exchange(n, g.newAdd(n.getBlock, x, g.newConst(y.getTarval add z.getTarval), n.getMode))
     // x-x == 0
     case n@SubExtr(x, y) if x == y =>
