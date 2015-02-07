@@ -32,6 +32,7 @@ object FirmGraphTestHelper {
     val modeNrs: scala.collection.immutable.Map[String, Int] = Map(
       "M" -> firm.nodes.Start.pnM,
       "T_args" -> firm.nodes.Start.pnTArgs,
+      "T_result" -> firm.nodes.Call.pnTResult,
       "Res" -> firm.nodes.Load.pnRes,
       "ResDiv" -> firm.nodes.Div.pnRes,
       "ResMod" -> firm.nodes.Mod.pnRes
@@ -234,7 +235,7 @@ object FirmGraphTestHelper {
       return blocksEqualError
 
     if (left.getPredCount != right.getPredCount)
-      return Some(s"Predecessor counts of $left and $right do not match")
+      return Some(s"Predecessor counts of $left (${left.getPredCount}) and $right (${right.getPredCount}) do not match")
 
     visited += ((left, right))
     left.getPreds().zip(right.getPreds()).foreach(lr => 

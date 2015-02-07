@@ -295,19 +295,19 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  movl $42, %edi
       |  call System_out_println
       |.L3:
-      |  ret""", mainMethod = false))
+      |  ret""", mainMethod = false), excludedOptimizations = Set(UnusedParameterElimination, PureFunctionCallElimination))
   }
 
   it should "properly inline recursive calls" in {
     fromMembers(
-      ("""
+      """
         |public static void main(String[] args) { new Test().foo(); }
         |public boolean foo() {
         |  if (foo()) { System.out.println(42);
         |  }
         |  return true;
         |}
-      """).stripMargin, mainMethod=false) should succeedGeneratingCodeWith(template(
+      """.stripMargin, mainMethod=false) should succeedGeneratingCodeWith(template(
       """__main:
          |.L0:
          |	movl $1, %edi
@@ -343,7 +343,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
          |.L10:
          |	movb $1, %al
          |.L11:
-         |  ret""", mainMethod=false))
+         |  ret""", mainMethod=false), excludedOptimizations = Set(UnusedParameterElimination, PureFunctionCallElimination))
 
   }
 

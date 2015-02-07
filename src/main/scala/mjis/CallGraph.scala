@@ -10,7 +10,7 @@ import mjis.util.Digraph
 
 import scala.collection.mutable
 import scala.collection.JavaConversions._
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 object CallGraph {
   private def main = Program.getGraphs.find(_.getEntity.getLdName == "__main").get
@@ -41,5 +41,16 @@ object CallGraph {
       stack.pushAll(getCalledGraphs(stack.pop()).filter(!visited.contains(_)))
     }
     visited.reverseIterator
+  }
+
+  def callerMap(): scala.collection.Map[Graph, Seq[Call]] = {
+    val result = mutable.Map[Graph, ArrayBuffer[Call]]().withPersistentDefault(_ => ArrayBuffer())
+    Program.getGraphs.foreach(_.walk(new Default {
+      override def visit(call: Call) = call.getCalledGraph match {
+        case Some(calledGraph) => result(calledGraph) += call
+        case None =>
+      }
+    }))
+    result
   }
 }
