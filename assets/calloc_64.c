@@ -2,6 +2,9 @@
 #include <stddef.h>
 
 #define SLABSIZE 1024
+// We've had enough memory alignment bugs already.
+// Just align everything to 16 bytes.
+#define ALIGN 16
 
 void *brk(char *ptr) {
   void *retval;
@@ -56,7 +59,11 @@ void *calloc(uint64_t nmemb, uint64_t size) {
 
   uint64_t nbytes = nmemb * size;
   uint64_t predicted_pointer = ((uint64_t) cur_brk - rest_bytes);
-  uint64_t padding = size - (predicted_pointer % size);
+  int padding = 0;
+
+  if (predicted_pointer % ALIGN != 0)
+    padding = ALIGN - (predicted_pointer % ALIGN);
+
   void *pointer = malloc(nbytes + padding);
   pointer = (void *) ((uint64_t) pointer + padding);
   return (void *) pointer;

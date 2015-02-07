@@ -15,14 +15,14 @@
 malloc:
 	testq	%rdi, %rdi
 	movq	%rdi, %rsi
-	je	.zero_bytes_alloc
+	je	.L_zero_bytes_malloc
 	movq	cur_brk(%rip), %rdx
 	testq	%rdx, %rdx
-	je	.init_brk
-.brk_initialized:
+	je	.L_init_brk
+.L_brk_initialized:
 	movq	rest_bytes(%rip), %r8
 	cmpq	%r8, %rsi
-	jbe	.return_slab_piece
+	jbe	.L_return_slab_piece
 	movq	%rsi, %rax          # rsi = cnt
 	shrq	$10, %rax
 	testl	$1023, %esi
@@ -34,11 +34,11 @@ malloc:
 	movq	%rax, %r10          # syscalls trash rcx
 	movq	$12, %rax
 	movq	%rdx, %rdi
-	pushq   %r9                 # Save caller-save registers
-	pushq   %r11
+	pushq	%r9                 # Save caller-save registers
+	pushq	%r11
 	syscall
-	popq    %r11                # Restore caller-save registers
-	popq    %r9
+	popq	%r11                # Restore caller-save registers
+	popq	%r9
 	addq	%r8, %r10           # rcx = new_mem + rest_bytes
 	movq	%rdx, cur_brk(%rip)
 	movq	%r10, %rax
@@ -49,7 +49,7 @@ malloc:
 	ret
 	.p2align 4,,10
 	.p2align 3
-.return_slab_piece:
+.L_return_slab_piece:
 	movq	%r8, %rax
 	subq	%rsi, %rax
 	movq	%rax, rest_bytes(%rip)
@@ -58,20 +58,20 @@ malloc:
 	ret
 	.p2align 4,,10
 	.p2align 3
-.init_brk:
+.L_init_brk:
 	movq	$12, %rax
 	movq	%rdx, %rdi
-	pushq   %r9                 # Save caller-save registers
-	pushq   %r11
+	pushq	%r9                 # Save caller-save registers
+	pushq	%r11
 	syscall
-	popq    %r11                # Restore caller-save registers
-	popq    %r9
+	popq	%r11                # Restore caller-save registers
+	popq	%r9
 	movq	%rax, %rdx
 	movq	%rax, cur_brk(%rip)
-	jmp	.brk_initialized
+	jmp	.L_brk_initialized
 	.p2align 4,,10
 	.p2align 3
-.zero_bytes_alloc:
+.L_zero_bytes_malloc:
 	xorl	%eax, %eax
 	ret
 	.size	malloc, .-malloc
@@ -82,28 +82,34 @@ malloc:
 	 * Doesn't handle overflow of 64-bit multiplication.
 	 * Resulting pointer is aligned to `size` bytes.
 	 */
+	.p2align 4,,15
+	.globl	calloc
+	.type	calloc, @function
 calloc:
 	testq	%rsi, %rsi
-	jne	.not_zero_byte_allocation
-	movq	last_unique_pointer(%rip), %rax
-	subq	$1, %rax
-	movq	%rax, last_unique_pointer(%rip)
-	ret
-	.p2align 4,,10
-	.p2align 3
-.not_zero_byte_allocation:
-	movq	cur_brk(%rip), %rax
-	subq	rest_bytes(%rip), %rax  # rax = predicted_pointer
-	xorl	%edx, %edx
-	imulq	%rsi, %rdi
+	je	.L_zero_bytes_calloc
 	pushq	%rbx
-	movq	%rsi, %rbx
-	divq	%rsi
-	subq	%rdx, %rbx              # rbx holds the amount of padding needed
-	addq	%rbx, %rdi
+	movq	cur_brk(%rip), %rbx
+	subq	rest_bytes(%rip), %rbx   # prediction of pointer returned by malloc
+	imulq	%rsi, %rdi               # nmemb * size == minimum needed alloc
+	andl	$15, %ebx                # is predicted pointer aligned?
+	je	.L_no_padding_needed
+	movl	$16, %eax
+	movl	%eax, %edx
+	subl	%ebx, %edx
+	movq	%rdx, %rbx
+.L_no_padding_needed:
+	addq	%rbx, %rdi               # add padding
 	call	malloc
 	addq	%rbx, %rax
 	popq	%rbx
+	ret
+	.p2align 4,,10
+	.p2align 3
+.L_zero_bytes_calloc:
+	movq	last_unique_pointer(%rip), %rax
+	subq	$1, %rax
+	movq	%rax, last_unique_pointer(%rip)
 	ret
 	.size	calloc, .-calloc
 
