@@ -447,6 +447,20 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  jmp .L1"""))
   }
 
+  it should "generate code for division by zero" in {
+    fromMembers("public int foo(int dividend) { return dividend / 0; }") should succeedGeneratingCodeWith(template(
+      """_4Test_foo:
+        |  movl %esi, %REG0{4}
+        |.L0:
+        |  movl %REG0{4}, %eax
+        |  movl $0, %REG1{4}
+        |  idivl %REG1{4}
+        |  movl %eax, %REG1{4}
+        |  movl %REG1{4}, %eax
+        |.L1:
+        |  ret"""))
+  }
+
   it should "generate correct lea instructions" in {
     fromMembers("public int foo(int x, int y) { return x+3+8*y; }") should succeedGeneratingCodeWith(template(
       """_4Test_foo:
