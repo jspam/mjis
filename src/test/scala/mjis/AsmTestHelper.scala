@@ -10,7 +10,7 @@ object AsmTestHelper {
   private def createLabelMappings(code: String): Map[String, Int] = {
     val result = mutable.Map[String, Int]()
     var lastLabelIdx = 0
-    "(?m)^.L(\\d+)".r.findAllMatchIn(code).foreach { match_ =>
+    "(?m)^.([LT]\\d+)".r.findAllMatchIn(code).foreach { match_ =>
       assert(!result.contains(match_.group(1)))
       result(match_.group(1)) = lastLabelIdx
       lastLabelIdx += 1
@@ -36,7 +36,7 @@ object AsmTestHelper {
     val withoutDirectives = "\r?\n?\t(.p2align 4,,15|.globl [a-zA-Z0-9_]+)".r.replaceAllIn(code, "")
 
     val labelMappings = createLabelMappings(code)
-    val normalizedLabels = ".L(\\d+)".r.replaceAllIn(withoutDirectives, match_ => ".L" + labelMappings(match_.group(1)))
+    val normalizedLabels = ".(([LT])\\d+)".r.replaceAllIn(withoutDirectives, match_ => s".${match_.group(2)}${labelMappings(match_.group(1))}")
 
     val registerMappings = createRegisterMappings(code)
     "%REG(\\d+)".r.replaceAllIn(normalizedLabels, match_ => "%REG" + registerMappings(match_.group(1)))

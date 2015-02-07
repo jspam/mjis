@@ -21,7 +21,7 @@ class PeepholeOptimizerTest extends FlatSpec with Matchers with BeforeAndAfter {
   val addC10 = Add(c1, reg0)
   val cmp0 = Cmp(reg0, c0)
   val test0 = Test(reg0, reg0)
-  val jmpcond = JmpConditional(BasicBlockOperand(new AsmBasicBlock()), firm.Relation.Equal)
+  val jmpcond = JmpConditional(LabelOperand(".Lfoo"), firm.Relation.Equal)
   val cmov10 = MovConditional(reg1, reg0, firm.Relation.Equal)
 
   "Peephole Optimization" should "remove mov $x $x" in {

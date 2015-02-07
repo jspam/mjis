@@ -17,6 +17,13 @@ import scala.collection.JavaConversions._
 
 object CodeGenerator {
   def align(x: Int, alignment: Int = 8) = if (x % alignment == 0) x else x + (alignment - x % alignment)
+
+  var uniqueLabelNr = 0
+  def newTempLabelOp() = {
+    val labelNr = uniqueLabelNr
+    uniqueLabelNr += 1
+    LabelOperand(s".T$labelNr")
+  }
 }
 
 class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
@@ -137,7 +144,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
     private def createControlFlow(node: Node, nextBlock: Option[AsmBasicBlock]): Seq[Instruction] = {
       def successorBlock(node: Node) = BackEdges.getOuts(node).iterator().next().node.asInstanceOf[Block]
-      def successorBlockOperand(node: Node) = new BasicBlockOperand(basicBlocks(successorBlock(node)))
 
       node match {
         case _: nodes.Jmp =>
@@ -152,8 +158,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           }
 
         case CondExtr(cmp: nodes.Cmp) =>
-          val result = mutable.ListBuffer[Instruction]()
-
           val successors = BackEdges.getOuts(node).map(_.node.asInstanceOf[nodes.Proj]).toList
           val projTrue = successors.find(_.getNum == nodes.Cond.pnTrue)
           val projFalse = successors.find(_.getNum == nodes.Cond.pnFalse)

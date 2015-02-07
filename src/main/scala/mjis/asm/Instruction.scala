@@ -30,8 +30,9 @@ case class SSERegisterOperand(regNr: Int, override val sizeBytes: Int) extends O
 // base + index * scale + offset
 case class AddressOperand(base: Option[RegisterOperand] = None, indexAndScale: Option[(RegisterOperand, Int)] = None, offset: Int = 0, override val sizeBytes: Int) extends Operand(sizeBytes)
 case class ConstOperand(value: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
-case class LabelOperand(name: String) extends Operand(0)
-case class BasicBlockOperand(basicBlock: AsmBasicBlock) extends Operand(0)
+case class LabelOperand(name: String) extends Operand(0) {
+  def this(nr: Int) = this(s".L$nr")
+}
 /** equivalent to RegisterOffsetOperand(RBP, offset, sizeBytes), but we use RBP as a general purpose
   * register and instead convert these operands to RSP relative operands once the AR size is known. */
 case class ActivationRecordOperand(offset: Int, override val sizeBytes: Int) extends Operand(sizeBytes)
@@ -192,6 +193,15 @@ object Call {
   def unapply(instr: Instruction) = if (instr.opcode != "call") None else Some(instr.operands(0).asInstanceOf[LabelOperand])
 }
 
+/* Instruction for creating an intra-block jump destination. */
+object Label {
+  def apply(label: LabelOperand): Instruction = {
+    assert(label.name.startsWith(".T"))
+    new Instruction(label.name + ":")
+  }
+  def unapply(instr: Instruction) = instr.opcode.startsWith(".T")
+}
+
 object Mov {
   def apply(src: Operand, dest: Operand) : Instruction =
     new Instruction("mov", (src, READ | CONST | MEMORY), (dest, WRITE | MEMORY))
@@ -230,12 +240,12 @@ object MovSSE {
 }
 
 object Jmp {
-  def apply(dest: BasicBlockOperand) : Instruction = new Instruction("jmp", (dest, READ))
+  def apply(dest: LabelOperand) : Instruction = new Instruction("jmp", (dest, READ))
   def unapply(instr: Instruction) = unapply1("jmp")(instr)
 }
 
 object JmpConditional {
-  def apply(dest: BasicBlockOperand, relation: Relation): Instruction = {
+  def apply(dest: LabelOperand, relation: Relation): Instruction = {
     val opcode = unorderedMasked(relation) match {
       case Relation.Less => "jl"
       case Relation.GreaterEqual => "jge"
