@@ -51,13 +51,12 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
         })
       val offset = if (r.offset != 0) r.offset.toString else ""
       s"$offset(${params.mkString(",")})"
-    case b: BasicBlockOperand => s".L${b.basicBlock.nr}"
     case l: LabelOperand => l.name
     case c: ConstOperand => s"$$${c.value}"
     case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
   }
 
-  private def instrToString(instr: Instruction): String = {
+  private def instrToString(instr: Instruction): (String, /* indent */ Boolean) = {
     val operandsToPrint = instr.operands.zip(instr.operandSpecs).
       filter { case (_, spec) => !spec.contains(OperandSpec.IMPLICIT) }.
       map(_._1)
@@ -67,11 +66,17 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     val comment = instr.comment +
       (if (instr.stackPointerOffset != 0) s" - stackPointerOffset = ${instr.stackPointerOffset}" else "")
 
-    if (comment.nonEmpty)
-      // Align comments
+    // Align comments
+    (if (comment.nonEmpty)
       instrAndOperands + Seq.fill((30 - instrAndOperands.length) max 0)(" ").mkString("") + " # " + comment
     else
-      instrAndOperands
+      instrAndOperands,
+
+    // Indent
+    instr match {
+      case Label() => false
+      case _ => true
+    })
   }
 
   private def phiToString(phi: Phi): String =
@@ -107,7 +112,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
           + ", successors: " + block.successors.map(_.nr).mkString(", "), indent = false)
         if (block.comment.nonEmpty) emit("# " + block.comment)
         block.phis.foreach(phi => emit(phiToString(phi)))
-        block.instructions.foreach(instr => emit(instrToString(instr)))
+        for ((instr, indent) <- block.instructions.map(instrToString)) emit(instr, indent)
       }
     })
 

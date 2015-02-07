@@ -37,15 +37,15 @@ class BlockOrdering(program: AsmProgram) extends Phase[AsmProgram] {
       for (Seq(block, next) <- (function.basicBlocks ++ Seq(null)).sliding(2)) {
         def jmp(dest: AsmBasicBlock) = dest match {
           case `next` => Seq()
-          case _ => Seq(asm.Jmp(BasicBlockOperand(dest)))
+          case _ => Seq(asm.Jmp(new LabelOperand(dest.nr)))
         }
         block.instructions ++= (block.successors.size match {
           case 2 =>
             // Prefer fallthrough
             if (block.successors(0) == next)
-              Seq(JmpConditional(BasicBlockOperand(block.successors(1)), block.relation.negated))
+              Seq(JmpConditional(new LabelOperand(block.successors(1).nr), block.relation.negated))
             else {
-              Seq(JmpConditional(BasicBlockOperand(block.successors(0)), block.relation)) ++ jmp(block.successors(1))
+              Seq(JmpConditional(new LabelOperand(block.successors(0).nr), block.relation)) ++ jmp(block.successors(1))
             }
           case 1 => jmp(block.successors(0))
           case 0 => Seq()
