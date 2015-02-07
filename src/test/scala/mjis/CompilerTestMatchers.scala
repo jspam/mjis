@@ -5,12 +5,14 @@ import mjis.asm._
 import mjis.util.{Digraph, CCodeGenerator}
 
 import org.scalatest.Assertions
-import org.scalatest.matchers.{ MatchResult, Matcher }
+import org.scalatest.matchers.{BeMatcher, MatchResult, Matcher}
 import mjis.ast._
 import mjis.opt.Optimization
 import mjis.CompilerTestHelper._
 import System.{ lineSeparator => n }
 import java.io._
+import org.scalatest.words.MatcherWords._
+
 import scala.collection.JavaConversions._
 import scala.io.Source
 import scala.sys.process._
@@ -72,13 +74,12 @@ trait CompilerTestMatchers {
     }
   }
 
-  class CCodeGeneratorSuccessMatcher(expectedString: String) extends AnalysisPhaseSuccessMatcher[Typer]() {
-    override def mkFailureMessage(typer: Typer) = {
+  class CCodeGeneratorSuccessMatcher(expectedString: String) extends Matcher[String]() {
+    def apply(input: String) = {
+      val typer = assertExec[Typer](input)
       val out = new StringWriter()
       new CCodeGenerator(out).visit(typer.result)
-      if (out.toString != expectedString)
-        Some(s"Expected:$n'$expectedString'${n}Computed:$n'${out.toString}'${n}Diff:$n'${expectedString diff out.toString}'")
-      else None
+      BeMatcher(be(expectedString)).apply(out.toString)
     }
   }
 

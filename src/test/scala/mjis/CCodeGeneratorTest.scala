@@ -26,10 +26,16 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |    while (field) {
       |      field = !field;
       |    }
-      |    3 + 4;
+      |    if (ptr.field) {
+      |      3 + 4;
+      |    }
       |    this.foo(this.stuff, baz);
       |    return;
       |  }
+      |}
+      |
+      |class Test2 {
+      |  public int field;
       |}
     """.stripMargin
 
@@ -38,6 +44,9 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |#include <stdlib.h>
       |
       |struct Test;
+      |struct Test2;
+      |
+      |void Test$foo(struct Test* this, int32_t bar, int32_t** baz);
       |
       |typedef struct Test {
       |  uint8_t field;
@@ -46,6 +55,11 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |  struct Test** ptrArr;
       |  int32_t** arr;
       |} Test;
+      |
+      |typedef struct Test2 {
+      |  int32_t field;
+      |} Test2;
+      |
       |
       |int main() {
       |  Test$foo(((struct Test*)calloc(1, sizeof(struct Test))), 42, ((int32_t**)calloc(42, sizeof(int32_t*))));
@@ -59,7 +73,9 @@ class CCodeGeneratorTest extends FlatSpec with Matchers {
       |  while ((this)->field) {
       |    ((this)->field = !((this)->field));
       |  }
-      |  (3 + 4);
+      |  if (((this)->ptr)->field) {
+      |    (3 + 4);
+      |  }
       |  Test$foo(this, (this)->stuff, baz);
       |  return ;
       |}""".replace("  ", "\t").stripMargin
