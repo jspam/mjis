@@ -49,6 +49,10 @@ abstract class Optimization(needsBackEdges: Boolean = false) {
       for (proj@ProjExtr(_, Div.pnM /* == Mod.pnM == ... */) <- BackEdges.getOuts(node).map(_.node))
         exchange(proj, node.getPred(0))
   }
+
+  protected def replaceUses(node: Node, replacement: Node, cond: Node => Boolean) = {
+    for (e <- BackEdges.getOuts(node) if cond(e.node)) setPred(e.node, e.pos, replacement)
+  }
 }
 
 abstract class DeferredOptimization(needsBackEdges: Boolean = false) extends Optimization(needsBackEdges) {

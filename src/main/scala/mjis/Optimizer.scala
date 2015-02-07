@@ -32,7 +32,7 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
     LoopStrengthReduction, RedundantLoadElimination, UnusedParameterElimination,
     PureFunctionCallElimination, LoopInvariantCodeMotion)
   var generalOptimizations = List(
-    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities) ++
+    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities, ConditionalConstants) ++
     (if (!config.useFirmBackend) Seq(ConditionalMoves) else Seq())
 
   def exec(optimizations: Seq[Optimization]): Unit = {
