@@ -49,6 +49,7 @@ object OperandSpec {
   final val NONE = OperandSpec(1 << 0)
   final val READ = OperandSpec(1 << 1)
   final val WRITE = OperandSpec(1 << 2)
+  final val WRITE_BEFORE = OperandSpec(1 << 6) // make the liveness interval begin before, not at the instruction
 
   final val MEMORY = OperandSpec(1 << 3) // operand can be a memory location
   final val CONST = OperandSpec(1 << 4) // operand can be a constant
