@@ -105,7 +105,7 @@ object LoopUnrolling extends Optimization(needsBackEdges = true) {
       Logger.getGlobal.log(Level.INFO, s"${g.getEntity.getLdName}: static unrolling by $unrollCount")
 
       val exitVal = start + (iterCount / unrollCount * unrollCount).toInt * iv.incrVal
-      cmp.setRelation(Relation.LessGreater)
+      cmp.setRelation(Relation.UnorderedLessGreater)
       // Make cmp always-false if there's not enough iterations
       cmp.setRight(if (iterCount < unrollCount) cmp.getLeft else g.newConst(exitVal, Mode.getIs))
 
