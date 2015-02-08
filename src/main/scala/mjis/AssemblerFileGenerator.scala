@@ -56,7 +56,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     case a: ActivationRecordOperand => s"${a.offset}(%rbp){${a.sizeBytes}}"
   }
 
-  private def instrToString(instr: Instruction): (String, /* indent */ Boolean) = {
+  private def instrToString(instr: Instruction): String = {
     val operandsToPrint = instr.operands.zip(instr.operandSpecs).
       filter { case (_, spec) => !spec.contains(OperandSpec.IMPLICIT) }.
       map(_._1)
@@ -66,17 +66,11 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
     val comment = instr.comment +
       (if (instr.stackPointerOffset != 0) s" - stackPointerOffset = ${instr.stackPointerOffset}" else "")
 
-    // Align comments
-    (if (comment.nonEmpty)
+    if (comment.nonEmpty)
+      // Align comments
       instrAndOperands + Seq.fill((30 - instrAndOperands.length) max 0)(" ").mkString("") + " # " + comment
     else
-      instrAndOperands,
-
-    // Indent
-    instr match {
-      case Label() => false
-      case _ => true
-    })
+      instrAndOperands
   }
 
   private def phiToString(phi: Phi): String =
@@ -91,6 +85,11 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
   def generateCode(): String = {
     val result = new StringBuilder
     def emit(s: String, indent: Boolean = true) = result.append(if (indent && s.nonEmpty) s"\t$s$n" else s"$s$n")
+    def emitInstrs(instrs: Seq[Instruction]): Unit = instrs.foreach {
+      case Label(labelOp) => emit(s"${labelOp.name}:", indent = false)
+      case DivMod(dividend, divisor) => emitInstrs(CodeGenerator.getDivModCode(dividend, divisor))
+      case instr => emit(instrToString(instr))
+    }
 
     emit(".text")
 
@@ -112,7 +111,7 @@ class MjisAssemblerFileGenerator(input: AsmProgram, config: Config) extends Asse
           + ", successors: " + block.successors.map(_.nr).mkString(", "), indent = false)
         if (block.comment.nonEmpty) emit("# " + block.comment)
         block.phis.foreach(phi => emit(phiToString(phi)))
-        for ((instr, indent) <- block.instructions.map(instrToString)) emit(instr, indent)
+        emitInstrs(block.instructions)
       }
     })
 

@@ -24,6 +24,14 @@ object CodeGenerator {
     uniqueLabelNr += 1
     LabelOperand(s".T$labelNr")
   }
+
+  def getDivModCode(dividend: Operand, divisor: Operand): Seq[Instruction] = {
+    Seq(
+      Mov(dividend, RegisterOperand(RAX, 4)),
+      Cdq(4),
+      IDiv(divisor)
+    )
+  }
 }
 
 class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
@@ -171,18 +179,6 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
 
         case _ => Seq()
       }
-    }
-
-    private def getDivModCode(n: Node, left: Node, right: Node): Seq[Instruction] = {
-      assert(left.getMode == Mode.getIs)
-      assert(right.getMode == Mode.getIs)
-      val rightOp = getOperand(right)
-      assert(!rightOp.isInstanceOf[ConstOperand])
-      Seq(
-        Mov(getOperand(left), RegisterOperand(RAX, 4)),
-        Cdq(4) /* sign-extend eax into edx:eax */,
-        IDiv(rightOp)
-      )
     }
 
     private def createValue(node: Node): Seq[Instruction] = {
@@ -378,8 +374,8 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
                 Mov(tempRegister, regOp(n)))
 
             case DivExtr(dividend, ConstExtr(divisor)) => divByConstant(dividend, divisor)
-            case n : firm.nodes.Div => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RAX, 4), regOp(n)))
-            case n : firm.nodes.Mod => getDivModCode(n, n.getLeft, n.getRight) ++ Seq(Mov(RegisterOperand(RDX, 4), regOp(n)))
+            case n : firm.nodes.Div => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RAX, 4), regOp(n)))
+            case n : firm.nodes.Mod => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RDX, 4), regOp(n)))
 
             case n@CallExtr(address, params) =>
               val resultInstrs = ListBuffer[Instruction]()

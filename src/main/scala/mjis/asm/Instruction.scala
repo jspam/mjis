@@ -149,10 +149,18 @@ object IMul {
 }
 
 object IDiv {
-  def apply(left: Operand): Instruction =
-    new Instruction("idiv", (left, READ | MEMORY),
-      (RegisterOperand(RDX, left.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RAX, left.sizeBytes), READ | WRITE | IMPLICIT))
+  def apply(divisor: Operand): Instruction =
+    new Instruction("idiv", (divisor, READ | MEMORY),
+      (RegisterOperand(RDX, divisor.sizeBytes), READ | WRITE | IMPLICIT), (RegisterOperand(RAX, divisor.sizeBytes), READ | WRITE | IMPLICIT))
   def unapply(instr: Instruction) = unapply1("idiv")(instr)
+}
+
+object DivMod {
+  def apply(dividend: Operand, divisor: Operand): Instruction =
+    new Instruction("DivMod", (dividend, READ | MEMORY), (divisor, READ | MEMORY),
+      (RegisterOperand(RDX, divisor.sizeBytes), WRITE_BEFORE | WRITE | IMPLICIT),
+      (RegisterOperand(RAX, dividend.sizeBytes), READ | WRITE | IMPLICIT))
+  def unapply(instr: Instruction) = unapply2("DivMod")(instr)
 }
 
 object Cdq {
@@ -198,9 +206,9 @@ object Call {
 object Label {
   def apply(label: LabelOperand): Instruction = {
     assert(label.name.startsWith(".T"))
-    new Instruction(label.name + ":")
+    new Instruction(label.name + ":", (label, NONE))
   }
-  def unapply(instr: Instruction) = instr.opcode.startsWith(".T")
+  def unapply(instr: Instruction) = if (instr.opcode.startsWith(".T")) Some(instr.operands(0).asInstanceOf[LabelOperand]) else None
 }
 
 object Mov {
