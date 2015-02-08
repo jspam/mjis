@@ -305,8 +305,8 @@ class FunctionRegisterAllocator(function: AsmFunction,
         } else spilledInterval // no need to split
 
         // Spill to SSE if an SSE register is available
-        val availableSSERegs = SSERegisters.toSeq.filter(regNr => !sseIntervals(regNr).intersects(spilledInterval)).sortBy(-_)
-        if (availableSSERegs.nonEmpty) {
+        lazy val availableSSERegs = SSERegisters.toSeq.filter(regNr => !sseIntervals(regNr).intersects(spilledInterval)).sortBy(-_)
+        if (spilledInterval.regOp.sizeBytes >= 4 && availableSSERegs.nonEmpty) {
           // Prefer an SSE register whose liveness does not end exactly here
           // (to avoid potentially costly cyclic permutations involving SSE registers)
           val regNr = availableSSERegs.find(regNr => !sseIntervals(regNr).containsIncl(position)).getOrElse(availableSSERegs.head)

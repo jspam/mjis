@@ -110,6 +110,33 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl $43, (%rax)""")
   }
 
+  it should "not spill 8-bit registers into a SSE register" in {
+    val b1 = new AsmBasicBlock(0)
+    b1.instructions ++= Seq(
+      Mov(ConstOperand(0, 1), RegisterOperand(10, 1)),
+      Call(LabelOperand("System_out_println"), Seq()),
+      Mov(RegisterOperand(10, 1), RegisterOperand(RAX, 1)),
+      Mov(RegisterOperand(10, 1), RegisterOperand(RDX, 1))
+    )
+    val b2 = new AsmBasicBlock(1)
+    val main = buildFunction("__main", (b1, b2))
+    val prog = new AsmProgram(List(main), new Digraph[AsmFunction](Map(main -> Seq())))
+
+    prog should succeedAllocatingRegistersForProgramWith(Seq(RAX, RDX), callerSaveRegs = Set(RAX, RDX), sseRegs = Set(XMM0), expected =
+      """__main:
+        |  subq $8, %rsp
+        |.L0:
+        |  movb $0, %al
+        |  movb %al, 7(%rsp)
+        |  call System_out_println
+        |  movb 7(%rsp), %dl
+        |  movb %dl, %al
+        |  movb %dl, %dl
+        |.L1:
+        |  addq $8, %rsp
+        |  ret""")
+  }
+
   it should "respect liveness intervals ending at the following instruction when reloading" in {
     Seq(
       Mov(ConstOperand(0, 8), RegisterOperand(10, 8)), // gets assigned EDX
