@@ -40,10 +40,11 @@ object CodeGenerator {
       case ConstOperand(c, _) =>
         if (c != MIN_INT) result ++= Seq(
           // Result of cdq is statically known
-          Mov(ConstOperand(if (c >= 0) 0 else 0xFFFFFFFF, 4), RegisterOperand(RDX, 4)),
+          (if (c < 0) Mov(ConstOperand(0xFFFFFFFF, 4), RegisterOperand(RDX, 4))
+            else Xor(RegisterOperand(RDX, 4), RegisterOperand(RDX, 4))),
           IDiv(divisor))
         else result ++= Seq(
-          Mov(ConstOperand(0, 4), RegisterOperand(RDX, 4)),
+          Xor(RegisterOperand(RDX, 4), RegisterOperand(RDX, 4)),
           Cmp(divisor, ConstOperand(-1, 4)),
           JmpConditional(exitLabel, Relation.Equal),
           Mov(ConstOperand(0xFFFFFFFF, 4), RegisterOperand(RDX, 4)),
@@ -52,7 +53,7 @@ object CodeGenerator {
       case _ => result ++= Seq(
         Cmp(RegisterOperand(RAX, 4), ConstOperand(MIN_INT, 4)),
         JmpConditional(normalCaseLabel, Relation.UnorderedLessGreater),
-        Mov(ConstOperand(0, 4), RegisterOperand(RDX, 4)),
+        Xor(RegisterOperand(RDX, 4), RegisterOperand(RDX, 4)),
         Cmp(divisor, ConstOperand(-1, 4)),
         JmpConditional(exitLabel, Relation.Equal),
         Label(normalCaseLabel),

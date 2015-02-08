@@ -465,7 +465,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %esi, %REG0{4}
         |.L0:
         |  movl $1, %eax
-        |  movl $0, %edx
+        |  xorl %edx, %edx
         |  idivl %REG0{4}
         |  movl %eax, %REG1{4}
         |  movl %REG1{4}, %eax
@@ -493,7 +493,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %esi, %REG0{4}
         |.L0:
         |  movl $-2147483648, %eax
-        |  movl $0, %edx
+        |  xorl %edx, %edx
         |  cmpl $-1, %REG0{4}
         |  je .T0
         |  movl $-1, %edx
@@ -514,7 +514,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %REG0{4}, %eax
         |  cmpl $-2147483648, %eax
         |  jne .T0
-        |  movl $0, %edx
+        |  xorl %edx, %edx
         |  cmpl $-1, %REG1{4}
         |  je .T1
         |.T0:
