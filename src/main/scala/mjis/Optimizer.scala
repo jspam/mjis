@@ -28,32 +28,38 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
     }
   }
 
-  var highLevelOptimizations = List(
-    LoopStrengthReduction, RedundantLoadElimination, UnusedParameterElimination,
-    PureFunctionCallElimination, LoopInvariantCodeMotion)
   var generalOptimizations = List(
-    ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination, Identities, ConditionalConstants) ++
+    Identities, ConstantFolding, Normalization, CommonSubexpressionElimination, TrivialPhiElimination,
+    LoopStrengthReduction, RedundantLoadElimination,
+    PureFunctionCallElimination, LoopInvariantCodeMotion) ++
     (if (!config.useFirmBackend) Seq(ConditionalMoves) else Seq())
 
   def exec(optimizations: Seq[Optimization]): Unit = {
-    // always run all optimizations
-    while (optimizations.map(_.optimize()).exists(b => b)) {}
+    for (g <- CallGraph.graphsInTopologicalOrder())
+      while (optimizations.map(opt => {
+        val time = System.nanoTime()
+        val changed = opt.optimize(g)
+        if (config.printTimings)
+          println(s"\t${opt.getClass.getSimpleName}:\t${(System.nanoTime() - time) / 1000000} ms\t" + (if (changed) "changed!" else ""))
+        changed
+      }).exists(identity)) {}
   }
 
   override protected def getResult(): Unit = {
-    exec(generalOptimizations ++ highLevelOptimizations)
+    exec(generalOptimizations)
     Program.getGraphs.foreach(g => {
       bindings.binding_irgopt.remove_bads(g.ptr)
       bindings.binding_irgopt.remove_unreachable_code(g.ptr)
     })
+    UnusedParameterElimination.optimize()
     if (config.inlining)
       Inlining.optimize()
-    exec(generalOptimizations ++ highLevelOptimizations)
+    exec(generalOptimizations)
     LoopUnrolling.optimize()
-    exec(generalOptimizations ++ highLevelOptimizations)
+    exec(generalOptimizations :+ ConditionalConstants)
 
-    Program.getGraphs.foreach(removeCriticalEdges)
-    Program.getGraphs.foreach(g => {
+    CallGraph.graphsInTopologicalOrder().foreach(g => {
+      removeCriticalEdges(g)
       bindings.binding_irgopt.remove_bads(g.ptr)
       bindings.binding_irgopt.remove_unreachable_code(g.ptr)
     })
