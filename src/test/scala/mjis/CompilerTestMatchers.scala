@@ -143,7 +143,7 @@ trait CompilerTestMatchers {
       assertExec[FirmConstructor](fromMembers(from))
       assertExec[FirmConstructor](fromMembers(to.getOrElse(from.replace("before", "after"))))
 
-      val opt = new Optimizer((), Config())
+      val opt = new Optimizer((), Config(optimizeUnreachableGraphs = true))
 
       val beforeGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_before")
       assert(beforeGraph.isDefined)
