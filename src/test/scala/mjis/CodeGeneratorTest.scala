@@ -312,21 +312,18 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
          |	movl $0, %esi
          |	call calloc
          |	movq %rax, %REG0{8}
-         |	movq %REG0{8}, %rdi
          |	call _4Test_foo
          |	movb %al, %REG1{1}
          |.L1:
          |	ret
          |
          |_4Test_foo:
-         |	movq %rdi, %REG2{8}
          |.L2:
          |.L3:
-         |	movq %REG2{8}, %rdi
          |	call _4Test_foo
-         |	movb %al, %REG3{1}
+         |	movb %al, %REG2{1}
          |.L4:
-         |	cmpb $0, %REG3{1}
+         |	cmpb $0, %REG2{1}
          |	jne .L6
          |.L5:
          |	jmp .L7
@@ -341,7 +338,7 @@ class CodeGeneratorTest extends FlatSpec with Matchers with BeforeAndAfter {
          |.L10:
          |	movb $255, %al
          |.L11:
-         |  ret""", mainMethod=false), excludedOptimizations = Set(UnusedParameterElimination, PureFunctionCallElimination))
+         |  ret""", mainMethod=false), excludedOptimizations = Set(PureFunctionCallElimination))
 
   }
 
