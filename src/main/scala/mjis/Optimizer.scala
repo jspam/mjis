@@ -35,7 +35,9 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
     (if (!config.useFirmBackend) Seq(ConditionalMoves) else Seq())
 
   def exec(optimizations: Seq[Optimization]): Unit = {
-    for (g <- CallGraph.graphsInTopologicalOrder())
+    val graphs: Iterator[Graph] = if (config.optimizeUnreachableGraphs) Program.getGraphs.iterator()
+      else CallGraph.graphsInTopologicalOrder()
+    for (g <- graphs)
       while (optimizations.map(opt => {
         val time = System.nanoTime()
         val changed = opt.optimize(g)

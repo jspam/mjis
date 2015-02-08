@@ -167,7 +167,7 @@ trait CompilerTestMatchers {
     override def apply(code: String): MatchResult = {
       assertExec[FirmConstructor](code)
 
-      val opt = new Optimizer((), Config())
+      val opt = new Optimizer((), Config(optimizeUnreachableGraphs = true))
       opt.generalOptimizations = opt.generalOptimizations.filter(!excludedOptimizations.contains(_))
 
       opt.result
