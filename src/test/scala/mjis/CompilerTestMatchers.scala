@@ -143,19 +143,21 @@ trait CompilerTestMatchers {
       assertExec[FirmConstructor](fromMembers(from))
       assertExec[FirmConstructor](fromMembers(to.getOrElse(from.replace("before", "after"))))
 
+      val opt = new Optimizer((), Config())
+
       val beforeGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_before")
       assert(beforeGraph.isDefined)
       val afterGraph = firm.Program.getGraphs.find(_.getEntity.getName == "_4Test_after")
       assert(afterGraph.isDefined)
 
-      after.foreach(_.optimize())
+      opt.exec(after)
       new FirmConstructor(null).dumpResult(null)
 
-      under.optimize(beforeGraph.get)
+      while (under.optimize(beforeGraph.get)) {}
 
-      before.foreach(_.optimize())
+      opt.exec(before)
 
-      new Optimizer((), Config()).dumpResult(null)
+      opt.dumpResult(null)
 
       (new FirmGraphIsomorphismMatcher(afterGraph.get))(beforeGraph.get)
     }
@@ -168,7 +170,6 @@ trait CompilerTestMatchers {
       val opt = new Optimizer((), Config())
       opt.generalOptimizations = opt.generalOptimizations.filter(!excludedOptimizations.contains(_))
       opt.highLevelOptimizations = opt.highLevelOptimizations.filter(!excludedOptimizations.contains(_))
-      opt.volatileOptimizations = opt.volatileOptimizations.filter(!excludedOptimizations.contains(_))
 
       opt.result
 

@@ -93,6 +93,8 @@ object FirmExtensions {
       BackEdges.getOuts(node).map(_.node)
     }
 
+    def succProj(projNr: Int): Option[Node] = successors.collectFirst({ case proj@ProjExtr(_, `projNr`) => proj })
+
     def idx: Int = bindings.binding_irnode.get_irn_idx(node.ptr)
 
   }

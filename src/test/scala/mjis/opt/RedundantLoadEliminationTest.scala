@@ -45,7 +45,7 @@ class RedundantLoadEliminationTest extends FlatSpec with Matchers with BeforeAnd
       """.stripMargin)
   }
 
-  "Redundant Load elimination" should "eliminate redundant loads-after-loads" in {
+  it should "eliminate redundant loads-after-loads" in {
     """
       |public int i;
       |public int before(Test t) {
@@ -109,5 +109,75 @@ class RedundantLoadEliminationTest extends FlatSpec with Matchers with BeforeAnd
         |  return xs[0] + t.i;
         |}
       """.stripMargin)
+  }
+
+  it should "analyze through phis" in {
+    """
+      |public int i;
+      |public int j;
+      |public int before(Test t) {
+      |  t.i = 1;
+      |  while (1 != t.j) t.j = t.i + 1;
+      |  return t.i;
+      |}
+    """.stripMargin should optimizeTo(RedundantLoadElimination, after = Seq(CommonSubexpressionElimination))(
+        """
+          |public int i;
+          |public int j;
+          |public int after(Test t) {
+          |  t.i = 1;
+          |  while (1 != t.j) t.j = 1 + 1;
+          |  return 1;
+          |}
+        """.stripMargin)
+
+    """
+      |public int i;
+      |public int j;
+      |public int before(Test t) {
+      |  t.i = 1;
+      |  while (1 != t.j) t.i = t.j;
+      |  return t.i;
+      |}
+    """.stripMargin should notOptimize(RedundantLoadElimination, after = Seq(CommonSubexpressionElimination))
+
+    """
+      |public int i;
+      |public int j;
+      |public int before(Test t) {
+      |  t.i = 1;
+      |  if (t.i != 1) t.j = 2; else t.j = 3;
+      |  return t.i;
+      |}
+    """.stripMargin should optimizeTo(RedundantLoadElimination, after = Seq(CommonSubexpressionElimination))(
+      """
+        |public int i;
+        |public int j;
+        |public int after(Test t) {
+        |  t.i = 1;
+        |  if (t.i != 1) t.j = 2; else t.j = 3;
+        |  return 1;
+        |}
+      """.stripMargin)
+
+    """
+      |public int i;
+      |public int j;
+      |public int before(Test t) {
+      |  t.i = 1;
+      |  if (t.i != 1) t.i = 2; else t.j = 3;
+      |  return t.i;
+      |}
+    """.stripMargin should notOptimize(RedundantLoadElimination, after = Seq(CommonSubexpressionElimination))
+
+    """
+      |public int i;
+      |public int j;
+      |public int before(Test t) {
+      |  t.i = 1;
+      |  if (t.i != 1) t.j = 2; else t.i = 3;
+      |  return t.i;
+      |}
+    """.stripMargin should notOptimize(RedundantLoadElimination, after = Seq(CommonSubexpressionElimination))
   }
 }

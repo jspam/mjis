@@ -35,7 +35,7 @@ class LoopInvariantCodeMotionTest extends FlatSpec with Matchers with BeforeAndA
       """.stripMargin)
   }
 
-  "Loop Invariant Code Motion" should "move through multiple loops" in {
+  it should "move through multiple loops" in {
     """
       |public boolean foo() { return true; }
       |public void bar(int i) {}
@@ -61,7 +61,7 @@ class LoopInvariantCodeMotionTest extends FlatSpec with Matchers with BeforeAndA
       """.stripMargin)
   }
 
-  "Loop Invariant Code Motion" should "not move ininvariant code" in {
+  it should "not move ininvariant code" in {
     """
       |public boolean foo() { return true; }
       |public void bar(int i) {}
