@@ -3,7 +3,7 @@ package mjis
 import java.io._
 
 import firm._
-import firm.nodes.{Bad, Node, Block}
+import firm.nodes.{Bad, Block, Node}
 import mjis.asm._
 import mjis.opt.FirmExtractors._
 import mjis.opt.FirmExtensions._
@@ -71,8 +71,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       case n : nodes.Call =>
         val methodEntity = n.getPtr.asInstanceOf[nodes.Address].getEntity
         val methodType = methodEntity.getType.asInstanceOf[MethodType]
-        assert(methodType.getNRess > 0)
-        methodType.getResType(0).getSizeBytes
+        if (methodType.getNRess > 0) methodType.getResType(0).getSizeBytes else -1
       case n : nodes.Load => n.getLoadMode.getSizeBytes
       case n : firm.nodes.Div => n.getResmode.getSizeBytes
       case n : firm.nodes.Mod => n.getResmode.getSizeBytes
@@ -86,10 +85,11 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       val instructions = mutable.Map[Node, Seq[Instruction]]()
 
       g.walkTopologicalWith { n =>
-        val isBlockRoot = BackEdges.getOuts(n).exists(e => e.node.block != null && e.node.block != n.block)
+        val isBlockRoot = !n.isInstanceOf[nodes.Const] && BackEdges.getOuts(n).exists(e => e.node.block != null && e.node.block != n.block)
         if (isBlockRoot)
           instructions(n) = createValue(n)
       }
+
       while (toVisit.nonEmpty) {
         val n = toVisit.dequeue()
         if (!instructions.contains(n))
@@ -182,49 +182,38 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
     }
 
     private def createValue(node: Node): Seq[Instruction] = {
-      def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = node match {
-        case AddExtr(base, ConstExtr(offset)) =>
-          toVisit += base
-          AddressOperand(
-            base = Some(getOperand(base).asInstanceOf[RegisterOperand]),
+      def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = {
+        def mk(base: Option[Node] = None, indexAndScale: Option[(Node, Int)] = None, offset: Int = 0) =
+          AddressOperand(base = base.map(getRegisterOperand),
+            indexAndScale = for ((i, s) <- indexAndScale) yield (getRegisterOperand(i), s),
             offset = offset,
-            sizeBytes = sizeBytes)
-        case AddExtr(
+            sizeBytes = sizeBytes
+          )
+        node match {
+          case n: nodes.Member => mk(base = Some(n.getPtr), offset = n.getEntity.getOffset)
+          case n@SelExtr(base, index) =>
+            val elemSize = n.asInstanceOf[nodes.Sel].getType.asInstanceOf[firm.ArrayType].getElementType.getSizeBytes
+            index match {
+              case ConstExtr(c) =>
+                try {
+                  return mk(base = Some(base), offset = Math.multiplyExact(c, elemSize))
+                } catch {
+                  case _: ArithmeticException => // offset calculation overflows, we can't encode that as an offset
+                }
+              case _ =>
+            }
+            mk(base = Some(base), indexAndScale = Some((index, elemSize)))
+          case AddExtr(base, ConstExtr(offset)) => mk(base = Some(base), offset = offset)
+          case AddExtr(
           GenAddExtr(base, offset),
           GenMulExtr(
-            Some(GenConvExtr(index)),
-            scale@(1 | 2 | 4 | 8)
+          Some(index),
+          scale@(1 | 2 | 4 | 8)
           )
-        ) =>
-          toVisit ++= Seq(base, Some(index)).flatten
-          AddressOperand(
-            base = base.map(getOperand(_).asInstanceOf[RegisterOperand]),
-            indexAndScale = Some((
-              getOperand(index).asInstanceOf[RegisterOperand],
-              scale)),
-            offset = offset,
-            sizeBytes = sizeBytes)
-        case AddExtr(base, index) =>
-          toVisit ++= Seq(base, index)
-          AddressOperand(
-            base = Some(getOperand(base).asInstanceOf[RegisterOperand]),
-            indexAndScale = Some((getOperand(index).asInstanceOf[RegisterOperand], 1)),
-            sizeBytes = sizeBytes)
-        case GenConvExtr(MulExtr(
-          GenConvExtr(index),
-          ConstExtr(scale@(1 | 2 | 4 | 8))
-        )) =>
-          toVisit += index
-          AddressOperand(
-            indexAndScale = Some((
-              getOperand(index).asInstanceOf[RegisterOperand],
-              scale)),
-            sizeBytes = sizeBytes)
-        case GenConvExtr(other) =>
-          toVisit += other
-          AddressOperand(
-            base = Some(getOperand(other).asInstanceOf[RegisterOperand]),
-            sizeBytes = sizeBytes)
+          ) => mk(base = base, indexAndScale = Some((index, scale)), offset = offset)
+          case AddExtr(base, index) => mk(base = Some(base), indexAndScale = Some((index, 1)))
+          case other => mk(base = Some(other))
+        }
       }
 
       def divByConstant(dividend: Node, divisor: Int): Seq[Instruction] = {
@@ -293,35 +282,23 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
 
       node match {
-        // special tree patterns that don't necessarily visit all predecessors
+        case n: nodes.Const => Seq(Mov(ConstOperand(n.getTarval.asInt, n.getMode.getSizeBytes), regOp(n)))
+        case n: nodes.Unknown => Seq(Mov(ConstOperand(0, n.getMode.getSizeBytes), regOp(n)))
 
         case n: nodes.Add => Seq(Lea(getAddressOperand(n, n.getMode.getSizeBytes), regOp(n)))
 
+        case n: nodes.Sel =>
+          // This only happens in the case of Loop Strength Reduction, which inserts Pointer Phis.
+          Seq(Lea(getAddressOperand(n, n.getMode.getSizeBytes), regOp(n)))
+
         case n: nodes.Load =>
-          toVisit ++= Seq(n.getMem)
-          n.getPtr match {
-            case _: nodes.Const | _: nodes.Unknown =>
-              // null or undefined access
-              Seq(
-                Mov(getOperand(n.getPtr), regOp(n.getPtr)),
-                Mov(AddressOperand(base = Some(regOp(n.getPtr)), sizeBytes = n.getLoadMode.getSizeBytes), regOp(n))
-              )
-            case _ => Seq(Mov(getAddressOperand(n.getPtr, n.getLoadMode.getSizeBytes), regOp(n)))
-          }
+          toVisit += n.getMem
+          Seq(Mov(getAddressOperand(n.getPtr, n.getLoadMode.getSizeBytes), regOp(n)))
         case n: nodes.Store =>
-          toVisit ++= Seq(n.getMem, n.getValue)
-          n.getPtr match {
-            case _: nodes.Const | _: nodes.Unknown =>
-              // null or undefined access
-              Seq(
-                Mov(getOperand(n.getPtr), regOp(n.getPtr)),
-                Mov(getOperand(n.getValue), AddressOperand(base = Some(regOp(n.getPtr)), sizeBytes = n.getType.getSizeBytes))
-              )
-            case _ => Seq(Mov(getOperand(n.getValue), getAddressOperand(n.getPtr, n.getType.getSizeBytes)))
-          }
+          toVisit += n.getMem
+          Seq(Mov(getOperand(n.getValue), getAddressOperand(n.getPtr, n.getType.getSizeBytes)))
 
         case n: nodes.Mux =>
-          toVisit ++= Seq(n.getFalse, n.getTrue) ++ n.getSel.getPreds // don't visit the Cmp node itself
           val cmp = n.getSel.asInstanceOf[nodes.Cmp]
           val cmpLeft = getOperand(cmp.getLeft)
           val cmpRight = getOperand(cmp.getRight)
@@ -352,99 +329,106 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
             )
           }
 
-        case _ =>
-          // non-special patterns
-          toVisit ++= node.getPreds
-          node match {
-            case n: nodes.And => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.And(getOperand(n.getRight), regOp(n)))
-            case n: nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
-            case n: nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
-            case n: nodes.Not => Seq(Mov(getOperand(n.getOp), regOp(n)), Not(regOp(n)))
+        case n: nodes.And => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.And(getOperand(n.getRight), regOp(n)))
+        case n: nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
+        case n: nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
+        case n: nodes.Not => Seq(Mov(getOperand(n.getOp), regOp(n)), Not(regOp(n)))
 
-            case n@MulExtr(x, c@ConstExtr(PowerOfTwo(shift))) =>
-              Seq(Mov(getOperand(x), regOp(n)),
-              Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
+        case n@MulExtr(x, c@ConstExtr(PowerOfTwo(shift))) =>
+          Seq(Mov(getOperand(x), regOp(n)),
+            Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
 
-            case n : nodes.Mul =>
-              val tempRegister = RegisterOperand(RAX, n.getMode.getSizeBytes)
-              // Normalization moves constants to the right of a Mul node,
-              // but the Mul instruction cannot take a constant as operand.
-              // Avoid having to allocate an extra register by swapping left and right.
-              Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
-                Mov(tempRegister, regOp(n)))
+        case n: nodes.Mul =>
+          val tempRegister = RegisterOperand(RAX, n.getMode.getSizeBytes)
+          // Normalization moves constants to the right of a Mul node,
+          // but the Mul instruction cannot take a constant as operand.
+          // Avoid having to allocate an extra register by swapping left and right.
+          Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
+            Mov(tempRegister, regOp(n)))
 
-            case DivExtr(dividend, ConstExtr(divisor)) => divByConstant(dividend, divisor)
-            case n : firm.nodes.Div => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RAX, 4), regOp(n)))
-            case n : firm.nodes.Mod => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RDX, 4), regOp(n)))
+        case DivExtr(dividend, ConstExtr(divisor)) => divByConstant(dividend, divisor)
+        case n : firm.nodes.Div => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RAX, 4), regOp(n)))
+        case n : firm.nodes.Mod => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RDX, 4), regOp(n)))
 
-            case n@CallExtr(address, params) =>
-              val resultInstrs = ListBuffer[Instruction]()
+        case n@CallExtr(address, params) =>
+          toVisit += n.asInstanceOf[nodes.Call].getMem
+          val resultInstrs = ListBuffer[Instruction]()
 
-              val (regParams, stackParams) = params.splitAt(ParamRegisters.length)
-              val regSrcOperands = regParams.map(getOperand)
-              val paramRegisters = regSrcOperands.zip(ParamRegisters).map {
-                case (srcOp, reg) => RegisterOperand(reg, srcOp.sizeBytes)
-              }
-
-              for ((srcOp, destOp) <- regSrcOperands zip paramRegisters) {
-                resultInstrs += Mov(srcOp, destOp).withComment(s"Load register argument")
-              }
-
-              val stackPointerOffset = 8 * stackParams.length
-              if (stackParams.nonEmpty) {
-                resultInstrs += Sub(intConstOp(stackPointerOffset), RegisterOperand(RSP, 8)).withComment(s"Move stack pointer for parameters")
-                // Push rest of parameters onto the stack in reverse order
-                for ((param, i) <- stackParams.zipWithIndex.reverse) {
-                  val srcOp = getOperand(param)
-                  val tempOp = RegisterOperand(n.idx, srcOp.sizeBytes) // needed if srcOp is a memory operand
-                  resultInstrs += Mov(srcOp, tempOp).
-                    withComment(s"Reload stack argument").
-                    withStackPointerOffset(stackPointerOffset)
-                  resultInstrs += Mov(tempOp, AddressOperand(
-                    base = Some(RegisterOperand(RSP, 8)),
-                    offset = 8 * i,
-                    sizeBytes = srcOp.sizeBytes)).
-                    withComment(s"Push stack argument").
-                    withStackPointerOffset(stackPointerOffset)
-                }
-              }
-
-              val methodName = address.getEntity.getLdName
-              val methodType = address.getEntity.getType.asInstanceOf[MethodType]
-              val returnsValue = methodType.getNRess > 0
-
-              resultInstrs +=
-                (if (returnsValue) mjis.asm.Call(LabelOperand(methodName), methodType.getResType(0).getSizeBytes, paramRegisters)
-                else mjis.asm.Call(LabelOperand(methodName), paramRegisters))
-
-              if (stackParams.nonEmpty)
-                resultInstrs += Add(intConstOp(stackPointerOffset), RegisterOperand(RSP, 8)).withComment(s"Restore stack pointer")
-
-              if (returnsValue) {
-                resultInstrs += Mov(RegisterOperand(RAX, methodType.getResType(0).getSizeBytes), regOp(n))
-              }
-
-              resultInstrs
-
-            case n: nodes.Phi =>
-              if (n.getMode != Mode.getM && n.getMode != Mode.getX)
-                basicBlocks(n.block).phis += Phi(n.getPreds.map(getOperand).toSeq, regOp(n))
-              Seq()
-
-            case _: nodes.Block | _: nodes.Start | _: nodes.End | _: nodes.Proj |
-                 _: nodes.Address | _: nodes.Const | _: nodes.Return | _: nodes.Jmp |
-                 _: nodes.Cmp | _: nodes.Cond | _: nodes.Bad | _: nodes.Unknown => Seq()
+          val (regParams, stackParams) = params.splitAt(ParamRegisters.length)
+          val regSrcOperands = regParams.map(getOperand)
+          val paramRegisters = regSrcOperands.zip(ParamRegisters).map {
+            case (srcOp, reg) => RegisterOperand(reg, srcOp.sizeBytes)
           }
+
+          for ((srcOp, destOp) <- regSrcOperands zip paramRegisters) {
+            resultInstrs += Mov(srcOp, destOp).withComment(s"Load register argument")
+          }
+
+          val stackPointerOffset = 8 * stackParams.length
+          if (stackParams.nonEmpty) {
+            resultInstrs += Sub(intConstOp(stackPointerOffset), RegisterOperand(RSP, 8)).withComment(s"Move stack pointer for parameters")
+            // Push rest of parameters onto the stack in reverse order
+            for ((param, i) <- stackParams.zipWithIndex.reverse) {
+              val srcOp = getOperand(param)
+              val tempOp = RegisterOperand(n.idx, srcOp.sizeBytes) // needed if srcOp is a memory operand
+              resultInstrs += Mov(srcOp, tempOp).
+                withComment(s"Reload stack argument").
+                withStackPointerOffset(stackPointerOffset)
+              resultInstrs += Mov(tempOp, AddressOperand(
+                base = Some(RegisterOperand(RSP, 8)),
+                offset = 8 * i,
+                sizeBytes = srcOp.sizeBytes)).
+                withComment(s"Push stack argument").
+                withStackPointerOffset(stackPointerOffset)
+            }
+          }
+
+          val methodName = address.getEntity.getLdName
+          val methodType = address.getEntity.getType.asInstanceOf[MethodType]
+          val returnsValue = methodType.getNRess > 0
+
+          resultInstrs +=
+            (if (returnsValue) mjis.asm.Call(LabelOperand(methodName), methodType.getResType(0).getSizeBytes, paramRegisters)
+            else mjis.asm.Call(LabelOperand(methodName), paramRegisters))
+
+          if (stackParams.nonEmpty)
+            resultInstrs += Add(intConstOp(stackPointerOffset), RegisterOperand(RSP, 8)).withComment(s"Restore stack pointer")
+
+          if (returnsValue) {
+            resultInstrs += Mov(RegisterOperand(RAX, methodType.getResType(0).getSizeBytes), regOp(n))
+          }
+
+          resultInstrs
+
+        case n: nodes.Phi =>
+          // always evaluate all preds
+          val preds = n.getPreds.map(getOperand).toList
+          if (n.getMode != Mode.getM && n.getMode != Mode.getX)
+            basicBlocks(n.block).phis += Phi(preds, regOp(n))
+          Seq()
+
+        case _: nodes.Block | _: nodes.Start | _: nodes.End | _: nodes.Proj |
+             _: nodes.Address | _: nodes.Return | _: nodes.Jmp |
+             _: nodes.Cmp | _: nodes.Cond | _: nodes.Bad |
+             _: nodes.Member =>
+          // evaluate all preds
+          node.getPreds.foreach(getOperand)
+          Seq()
       }
     }
 
     private def getOperand(node: Node): Operand = getCanonicalNode(node) match {
       case n : nodes.Const => ConstOperand(n.getTarval.asInt(), n.getMode.getSizeBytes)
+      case _ => getRegisterOperand(node)
+    }
+
+    private def getRegisterOperand(node: Node): RegisterOperand = getCanonicalNode(node) match {
       case n @ ProjExtr(ProjExtr(_, nodes.Start.pnTArgs), argNum) =>
         usedParams(argNum) = n
         regOp(n)
-      case n : nodes.Unknown => ConstOperand(0, n.getMode.getSizeBytes)
-      case n => regOp(n)
+      case n =>
+        toVisit += n
+        regOp(n)
     }
 
     private def getCanonicalNode(node: Node): Node = node match {

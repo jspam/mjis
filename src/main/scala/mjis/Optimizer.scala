@@ -50,9 +50,7 @@ class Optimizer(input: Unit, config: Config = Config()) extends Phase[Unit] {
       Inlining.optimize()
     exec(generalOptimizations ++ highLevelOptimizations)
     LoopUnrolling.optimize()
-    exec(highLevelOptimizations)
-    Util.lowerSels()
-    exec(generalOptimizations)
+    exec(generalOptimizations ++ highLevelOptimizations)
 
     Program.getGraphs.foreach(removeCriticalEdges)
     Program.getGraphs.foreach(g => {
