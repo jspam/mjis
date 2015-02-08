@@ -172,6 +172,7 @@ trait CompilerTestMatchers {
       opt.highLevelOptimizations = opt.highLevelOptimizations.filter(!excludedOptimizations.contains(_))
 
       opt.result
+      opt.dumpResult(null)
 
       val codeGenerator = new CodeGenerator(())
       codeGenerator.onlyReachableFromMain = false
