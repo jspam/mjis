@@ -3,6 +3,7 @@ package mjis
 import firm.Firm
 import mjis.asm._
 import mjis.asm.AMD64Registers._
+import mjis.asm.OperandSpec._
 import mjis.util.Digraph
 import org.scalatest._
 import mjis.CompilerTestMatchers._
@@ -506,6 +507,15 @@ class RegisterAllocatorTest extends FlatSpec with Matchers with BeforeAndAfter {
         |  movl %eax, 4(%rsp)
         |  call _foobar
         |  movl 4(%rsp), %edx""")
+  }
+
+  it should "treat the WRITE_BEFORE operand specification correctly" in {
+    Seq(
+      Mov(ConstOperand(0, 4), RegisterOperand(10, 4)),
+      new Instruction("dummy", (RegisterOperand(10, 4), READ), (RegisterOperand(RAX, 4), WRITE_BEFORE | IMPLICIT))
+    ) should succeedAllocatingRegistersInstrSeqWith(Seq(RAX, RDX), expected =
+      """  movl $0, %edx
+        |  dummyl %edx""")
   }
 
 }

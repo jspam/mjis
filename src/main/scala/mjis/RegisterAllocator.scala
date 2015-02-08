@@ -221,9 +221,9 @@ class FunctionRegisterAllocator(function: AsmFunction,
           // Physical registers need no usage information since they cannot be spilled
           if (op.regNr >= 0) interval(op).addUsage(instrPos, spec)
 
-          if (spec.contains(WRITE)) {
+          if (spec.contains(WRITE) | spec.contains(WRITE_BEFORE)) {
             // definition -- shorten live range
-            interval(op).setFrom(instrPos)
+            interval(op).setFrom(if (spec.contains(WRITE_BEFORE)) instrPos - 1 else instrPos)
             live -= op
           }
           if (spec.contains(READ)) {
