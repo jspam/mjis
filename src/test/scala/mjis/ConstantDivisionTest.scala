@@ -7,8 +7,8 @@ import scala.collection.JavaConversions._
 
 class ConstantDivisionTest extends FlatSpec with Matchers {
 
-  for (divisor <- 2.to(16).flatMap(i => Seq(i, -i)) ++ Seq(1 << 16, 1 << 31, (1 << 31) - 1)) {
-    "The code generator" should s"generate code for division by $divisor" in {
+  for (divisor <- (1 to 16).flatMap(i => Seq(i, -i)) ++ Seq(1 << 16, 1 << 31, (1 << 31) - 1)) {
+    it should s"generate code for division by $divisor" in {
       Files.write(Paths.get("divByConst-test.check"), Array[Byte]())
       Files.write(Paths.get("divByConst-test.mj"),
         Files.readAllLines(Paths.get("assets/divByConst-test.mj")).map(_.replaceAll("\\$\\$", divisor.toString)))
