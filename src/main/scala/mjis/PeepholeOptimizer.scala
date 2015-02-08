@@ -56,7 +56,7 @@ class PeepholeOptimizer(input: AsmProgram) extends Phase[AsmProgram] {
 
   private def tryPatternsOfLength1: PartialFunction[Instruction, Seq[Instruction]] = {
     case Mov(a1, a2) if a1 == a2 => Seq()
-    case Mov(ConstOperand(0, _), a: RegisterOperand) => Seq(new Instruction("xor", (a, OperandSpec.NONE), (a, OperandSpec.NONE)))
+    case Mov(ConstOperand(0, _), a: RegisterOperand) => Seq(Xor(a, a))
     case Shl(ConstOperand(1, _), a: RegisterOperand) => Seq(Add(a, a))
     case Lea(AddressOperand(Some(a1), Some((b, 1)), 0, _), a2) if a1 == a2 => Seq(Add(b, a1))
     case Lea(AddressOperand(Some(a1), None, c, _), a2) if a1 == a2 => Seq(Add(ConstOperand(c, a1.sizeBytes), a1))

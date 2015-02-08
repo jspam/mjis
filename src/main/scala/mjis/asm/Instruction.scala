@@ -287,5 +287,11 @@ object Ret {
   def unapply(instr: Instruction) = unapply0("ret")(instr)
 }
 
+object Xor {
+  def apply(left: Operand, rightAndResult: Operand): Instruction =
+    new Instruction("xor", (left, READ | CONST | MEMORY), (rightAndResult, READ | WRITE))
+  def unapply(instr: Instruction) = unapply2("xor")(instr)
+}
+
 case class Phi(srcs: Seq[Operand], dest: RegisterOperand)
 
