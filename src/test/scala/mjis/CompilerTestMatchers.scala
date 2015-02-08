@@ -169,7 +169,6 @@ trait CompilerTestMatchers {
 
       val opt = new Optimizer((), Config())
       opt.generalOptimizations = opt.generalOptimizations.filter(!excludedOptimizations.contains(_))
-      opt.highLevelOptimizations = opt.highLevelOptimizations.filter(!excludedOptimizations.contains(_))
 
       opt.result
       opt.dumpResult(null)
