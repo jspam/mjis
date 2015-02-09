@@ -26,7 +26,7 @@ object FirmExtractors {
     }
   }
 
-  object AddExtr {
+  object + {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case add: Add => Some((add.getLeft, add.getRight))
       case _ => None
@@ -54,7 +54,7 @@ object FirmExtractors {
     }
   }
 
-  object SubExtr {
+  object - {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case sub: Sub => Some((sub.getLeft, sub.getRight))
       case _ => None
@@ -64,19 +64,19 @@ object FirmExtractors {
   object GenAddExtr {
     def unapply(node: Node): Option[(Option[Node], Int)] = node match {
       case ConstExtr(c) => Some((None, c))
-      case AddExtr(n, ConstExtr(c)) => Some((Some(n), c))
+      case +(n, ConstExtr(c)) => Some((Some(n), c))
       case _ => Some((Some(node), 0))
     }
   }
 
   object GenMulExtr {
     def unapply(node: Node): Option[(Option[Node], Int)] = node match {
-      case MulExtr(n, ConstExtr(c)) => Some((Some(n), c))
+      case *(n, ConstExtr(c)) => Some((Some(n), c))
       case _ => Some((Some(node), 1))
     }
   }
 
-  object MulExtr {
+  object * {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case mul: Mul => Some((mul.getLeft, mul.getRight))
       case _ => None
@@ -90,14 +90,14 @@ object FirmExtractors {
     }
   }
 
-  object DivExtr {
+  object / {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case div: Div => Some((div.getLeft, div.getRight))
       case _ => None
     }
   }
 
-  object ModExtr {
+  object % {
     def unapply(node: Node): Option[(Node, Node)] = node match {
       case mod: Mod => Some((mod.getLeft, mod.getRight))
       case _ => None
