@@ -77,7 +77,7 @@ class ConditionalMoveTest extends FlatSpec with Matchers with BeforeAndAfter {
   }
 
   it should "not convert if more than one value depends on the condition" in {
-    def method(name: String) = s"""public int $name(int j) {
+    """public int before(int j) {
       |  int x; int y;
       |  if (j % 2 == 0) {
       |    x = 1;
@@ -88,13 +88,11 @@ class ConditionalMoveTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  }
       |  return x + y;
       |}
-    """.stripMargin
-
-    method("before") should optimizeTo(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))(method("after"))
+    """.stripMargin should notOptimize(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))
   }
 
   it should "not convert if the comparison is likely easy to predict" in {
-    def method(name: String) = s"""public int $name(int j) {
+    """public int before(int j) {
       |  int x;
       |  if (j == 0) {
       |    x = 1;
@@ -103,13 +101,11 @@ class ConditionalMoveTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  }
       |  return x;
       |}
-    """.stripMargin
-
-    method("before") should optimizeTo(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))(method("after"))
+    """.stripMargin should notOptimize(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))
   }
 
   it should "not convert if the operands are expensive to calculate" in {
-    def method(name: String) = s"""public int $name(int j, int k, int l) {
+    """public int before(int j, int k, int l) {
       |  int x;
       |  if (j % 2 == 0) {
       |    x = 1 + k + l;
@@ -118,14 +114,12 @@ class ConditionalMoveTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  }
       |  return x;
       |}
-    """.stripMargin
-
-    method("before") should optimizeTo(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))(method("after"))
+    """.stripMargin should notOptimize(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))
   }
 
   it should "not convert if the Phi's mode is a Boolean" in {
     // cmov does not work on 1-byte registers. Maybe we can do that later with setcc instruction.
-    def method(name: String) = s"""public boolean $name(int j) {
+    """public boolean before(int j) {
       |  boolean result;
       |  if (j % 2 == 0) {
       |    result = true;
@@ -134,9 +128,7 @@ class ConditionalMoveTest extends FlatSpec with Matchers with BeforeAndAfter {
       |  }
       |  return result;
       |}
-    """.stripMargin
-
-    method("before") should optimizeTo(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))(method("after"))
+    """.stripMargin should notOptimize(ConditionalMoves, after = Seq(Identities), before = Seq(Identities))
   }
 
 }
