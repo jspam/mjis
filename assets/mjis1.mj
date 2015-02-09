@@ -1,0 +1,166 @@
+class GameOfLife {
+  /* we draw to back buffer, front is the last thing we showed.
+   * Just like mandelbrot, this prints out ASCII art in numeric codes.
+   */
+
+  public boolean[][] fb_back;
+  public boolean[][] fb_front;
+  public int xres;
+  public int yres;
+
+  public boolean[][] allocate_framebuffer() {
+    int x = 0;
+    boolean[][] fb = new boolean[xres][];
+    while (x < xres) {
+      fb[x] = new boolean[yres];
+      x = x+1;
+    }
+    return fb;
+  }
+
+  public static void main(String[] args) {
+    GameOfLife g = new GameOfLife();
+    g.xres = 100;
+    g.yres = 100;
+    g.fb_back = g.allocate_framebuffer();
+    g.fb_front = g.allocate_framebuffer();
+
+    g.init_acorn();
+    int iteration_cnt = 5300;
+    int i = 0;
+    while (i < iteration_cnt) {
+      g.compute_gen();
+      i = i + 1;
+      g.output();
+      System.out.println(10);
+    }
+
+    g.init_bunnies9();
+    iteration_cnt = 17500;
+    i = 0;
+    while (i < iteration_cnt) {
+      g.compute_gen();
+      i = i+1;
+      g.output();
+      System.out.println(10);
+    }
+  }
+
+  public void output() {
+    int y = 0;
+    int x = 0;
+    int ch = 95;
+    while (y < yres) {
+      x = 0;
+      while (x < xres) {
+        if (fb_front[x][y])
+          ch = 35;
+        else
+          ch = 95;
+        System.out.println(ch);
+        x = x+1;
+      }
+      System.out.println(10);
+      y = y+1;
+    }
+    System.out.println(10);
+    System.out.println(10);
+  }
+
+  public void init_acorn() {
+    /* the acorn pattern runs for 5206 generations before stabilizing */
+    int cx = xres / 2;
+    int cy = yres / 2;
+    fb_front[cx+1][cy] = true;
+    fb_front[cx+3][cy+1] = true;
+    fb_front[cx][cy+2] = true;
+    fb_front[cx+1][cy+2] = true;
+    fb_front[cx+4][cy+2] = true;
+    fb_front[cx+5][cy+2] = true;
+    fb_front[cx+6][cy+2] = true;
+  }
+
+  public void init_bunnies9() {
+    /* "bunnies9" runs for 17410 generations before stabilizing */
+    int cx = xres / 2;
+    int cy = yres / 2;
+    fb_front[cx+1][cy] = true;
+    fb_front[cx][cy+1] = true;
+    fb_front[cx+1][cy+1] = true;
+    fb_front[cx+7][cy+1] = true;
+    fb_front[cx+6][cy+2] = true;
+    fb_front[cx+6][cy+3] = true;
+    fb_front[cx+5][cy+4] = true;
+    fb_front[cx+4][cy+5] = true;
+    fb_front[cx+4][cy+6] = true;
+  }
+
+  public void compute_gen() {
+    int x;
+    int y = 0;
+    while (y < yres) {
+      x = 0;
+      while (x < xres) {
+        int cnt = neighbour_count(x, y);
+        if (cnt == 3)
+          fb_back[x][y] = true;
+        else if (fb_front[x][y] && cnt == 2)
+          fb_back[x][y] = true;
+        x = x+1;
+      }
+      y = y+1;
+    }
+    boolean[][] fb_tmp = fb_front;
+    fb_front = fb_back;
+    fb_back = fb_tmp;
+    clear_back();
+  }
+
+  public void clear_back() {
+    int y = 0;
+    int x;
+    while (y < yres) {
+      x = 0;
+        while (x < xres) {
+        fb_back[x][y] = false;
+        x = x+1;
+      }
+      y=y+1;
+    }
+  }
+
+  public boolean get_cell(int x, int y) {
+    int x2 = x;
+    int y2 = y;
+    if (x < 0)
+      x2 = x + xres;
+    if (y < 0)
+      y2 = y + yres;
+    if (x >= xres)
+      x2 = x2 - xres;
+    if (y >= yres)
+      y2 = y2 - yres;
+    return fb_front[x2][y2];
+  }
+
+  public int neighbour_count(int x, int y) {
+    int acc = 0;
+    if (get_cell(x+1, y))
+      acc = acc+1;
+    if (get_cell(x+1, y-1))
+      acc = acc+1;
+    if (get_cell(x, y-1))
+      acc = acc+1;
+    if (get_cell(x-1, y-1))
+      acc = acc+1;
+    if (get_cell(x-1, y))
+      acc = acc+1;
+    if (get_cell(x-1, y+1))
+      acc = acc+1;
+    if (get_cell(x, y+1))
+      acc = acc+1;
+    if (get_cell(x+1, y+1))
+      acc = acc+1;
+    return acc;
+  }
+}

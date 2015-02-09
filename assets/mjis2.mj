@@ -1,0 +1,41 @@
+class RandomDivisions {
+  public static void main(String[] args) {
+    new RandomDivisions().startDiv();
+    new RandomDivisions().startMod();
+  }
+  public void startDiv() {
+    seed = -1259082086;
+
+    int sum = 0;
+    int i = 0;
+    int rounds = 1500000000;
+    while (i < rounds) {
+      int y = rand();
+      int x = rand();
+      if (y != 0)
+        sum = sum + x / y;
+      i = i + 1;
+    }
+    System.out.println(sum);
+  }
+  public void startMod() {
+    seed = -1259082086;
+
+    int sum = 0;
+    int i = 0;
+    int rounds = 1500000000;
+    while (i < rounds) {
+      int y = rand();
+      int x = rand();
+      if (y != 0)
+        sum = sum + x % y;
+      i = i + 1;
+    }
+    System.out.println(sum);
+  }
+
+  public int seed;
+  public int rand() {
+    return seed = seed * 1103515245 - 1043968403;
+  }
+}
