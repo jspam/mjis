@@ -59,10 +59,7 @@ class FirmExtensionsTest extends FlatSpec with Matchers with BeforeAndAfter {
         ReturnExtr(Some(
           phi@PhiExtr(
             start: Const,
-            incrAdd@AddExtr(
-              _,
-              incr: Const
-            )
+            incrAdd@(_ + (incr: Const))
           )
         ))
       ) =>

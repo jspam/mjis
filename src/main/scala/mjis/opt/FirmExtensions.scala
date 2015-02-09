@@ -38,7 +38,7 @@ object FirmExtensions {
     def getInductionVariables: Seq[InductionVariable] = {
       val result = ArrayBuffer[InductionVariable]()
       g.walkWith { node => node match {
-        case PhiExtr(start, incrAdd@AddExtr(`node`, incr: Const)) =>
+        case PhiExtr(start, incrAdd@(`node` + (incr: Const))) =>
           result += InductionVariable(node.asInstanceOf[Phi], start, incr, incrAdd.asInstanceOf[Add])
         case _ =>
       }}

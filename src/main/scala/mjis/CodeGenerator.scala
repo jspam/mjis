@@ -213,7 +213,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
       }
     }
 
-    private def createValue(node: Node): Seq[Instruction] = {
+    private def createValue(n: Node): Seq[Instruction] = {
       def getAddressOperand(node: Node, sizeBytes: Int): AddressOperand = {
         def mk(base: Option[Node] = None, indexAndScale: Option[(Node, Int)] = None, offset: Int = 0) =
           AddressOperand(base = base.map(getRegisterOperand),
@@ -235,15 +235,14 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
               case _ =>
             }
             mk(base = Some(base), indexAndScale = Some((index, elemSize)))
-          case AddExtr(base, ConstExtr(offset)) => mk(base = Some(base), offset = offset)
-          case AddExtr(
-          GenAddExtr(base, offset),
-          GenMulExtr(
-          Some(index),
-          scale@(1 | 2 | 4 | 8)
-          )
-          ) => mk(base = base, indexAndScale = Some((index, scale)), offset = offset)
-          case AddExtr(base, index) => mk(base = Some(base), indexAndScale = Some((index, 1)))
+          case base + ConstExtr(offset) => mk(base = Some(base), offset = offset)
+          case
+            GenAddExtr(base, offset) +
+            GenMulExtr(
+              Some(index),
+              scale@(1 | 2 | 4 | 8)
+            ) => mk(base = base, indexAndScale = Some((index, scale)), offset = offset)
+          case base + index => mk(base = Some(base), indexAndScale = Some((index, 1)))
           case other => mk(base = Some(other))
         }
       }
@@ -260,7 +259,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         }
 
         assert(dividend.getMode == Mode.getIs)
-        val r = regOp(node)
+        val r = regOp(n)
         val eax = RegisterOperand(AMD64Registers.RAX, 4)
         val edx = RegisterOperand(AMD64Registers.RDX, 4)
         val (instrs: Seq[Instruction], resultReg) = Math.abs(divisor.toLong) match {
@@ -313,7 +312,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
         instrs ++ (if (divisor < 0) Seq(Neg(resultReg)) else Seq()) :+ Mov(resultReg, r)
       }
 
-      node match {
+      n match {
         case n: nodes.Const => Seq(Mov(ConstOperand(n.getTarval.asInt, n.getMode.getSizeBytes), regOp(n)))
         case n: nodes.Unknown => Seq(Mov(ConstOperand(0, n.getMode.getSizeBytes), regOp(n)))
 
@@ -362,25 +361,25 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
           }
 
         case n: nodes.And => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.And(getOperand(n.getRight), regOp(n)))
-        case n: nodes.Sub => Seq(Mov(getOperand(n.getLeft), regOp(n)), asm.Sub(getOperand(n.getRight), regOp(n)))
+        case l - r => Seq(Mov(getOperand(l), regOp(n)), asm.Sub(getOperand(r), regOp(n)))
         case n: nodes.Minus => Seq(Mov(getOperand(n.getOp), regOp(n)), Neg(regOp(n)))
         case n: nodes.Not => Seq(Mov(getOperand(n.getOp), regOp(n)), Not(regOp(n)))
 
-        case n@MulExtr(x, c@ConstExtr(PowerOfTwo(shift))) =>
+        case x * (c@ConstExtr(PowerOfTwo(shift))) =>
           Seq(Mov(getOperand(x), regOp(n)),
             Shl(ConstOperand(shift, c.getMode.getSizeBytes), regOp(n)))
 
-        case n: nodes.Mul =>
+        case l * r =>
           val tempRegister = RegisterOperand(RAX, n.getMode.getSizeBytes)
           // Normalization moves constants to the right of a Mul node,
           // but the Mul instruction cannot take a constant as operand.
           // Avoid having to allocate an extra register by swapping left and right.
-          Seq(Mov(getOperand(n.getRight), tempRegister), asm.Mul(getOperand(n.getLeft)),
+          Seq(Mov(getOperand(r), tempRegister), asm.Mul(getOperand(l)),
             Mov(tempRegister, regOp(n)))
 
-        case DivExtr(dividend, ConstExtr(divisor)) => divByConstant(dividend, divisor)
-        case n : firm.nodes.Div => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RAX, 4), regOp(n)))
-        case n : firm.nodes.Mod => Seq(DivMod(getOperand(n.getLeft), getOperand(n.getRight)), Mov(RegisterOperand(RDX, 4), regOp(n)))
+        case dividend / ConstExtr(divisor) => divByConstant(dividend, divisor)
+        case dividend / divisor => Seq(DivMod(getOperand(dividend), getOperand(divisor)), Mov(RegisterOperand(RAX, 4), regOp(n)))
+        case dividend % divisor => Seq(DivMod(getOperand(dividend), getOperand(divisor)), Mov(RegisterOperand(RDX, 4), regOp(n)))
 
         case n@CallExtr(address, params) =>
           toVisit += n.asInstanceOf[nodes.Call].getMem
@@ -444,7 +443,7 @@ class CodeGenerator(a: Unit) extends Phase[AsmProgram] {
              _: nodes.Cmp | _: nodes.Cond | _: nodes.Bad |
              _: nodes.Member =>
           // evaluate all preds
-          node.getPreds.foreach(getOperand)
+          n.getPreds.foreach(getOperand)
           Seq()
       }
     }
