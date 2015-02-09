@@ -1,0 +1,140 @@
+class Test {
+
+        public static void main(String[] args) {
+                Test t = new Test();
+                int n = 200000000;
+                int res = 0;
+                while (n > 0) {
+                    res = res + t.binaryAddOne(n);
+                    n = n - 1;
+                }
+                System.out.println(res);
+        }
+
+        public int binaryAddOne(int n) {
+                /* convert n to binary */
+
+                int x1; if (n % 2 == 0) { x1 = 0; } else { x1 = 1; }
+                n = n / 2;
+                int x2; if (n % 2 == 0) { x2 = 0; } else { x2 = 1; }
+                n = n / 2;
+                int x3; if (n % 2 == 0) { x3 = 0; } else { x3 = 1; }
+                n = n / 2;
+                int x4; if (n % 2 == 0) { x4 = 0; } else { x4 = 1; }
+                n = n / 2;
+                int x5; if (n % 2 == 0) { x5 = 0; } else { x5 = 1; }
+                n = n / 2;
+                int x6; if (n % 2 == 0) { x6 = 0; } else { x6 = 1; }
+                n = n / 2;
+                int x7; if (n % 2 == 0) { x7 = 0; } else { x7 = 1; }
+                n = n / 2;
+                int x8; if (n % 2 == 0) { x8 = 0; } else { x8 = 1; }
+                n = n / 2;
+                int x9; if (n % 2 == 0) { x9 = 0; } else { x9 = 1; }
+                n = n / 2;
+                int x10; if (n % 2 == 0) { x10 = 0; } else { x10 = 1; }
+                n = n / 2;
+                int x11; if (n % 2 == 0) { x11 = 0; } else { x11 = 1; }
+                n = n / 2;
+                int x12; if (n % 2 == 0) { x12 = 0; } else { x12 = 1; }
+
+                /* Add one */
+                int y1 = 0; int y2 = 0; int y3 = 0; int y4 = 0; int y5 = 0; int y6 = 0; int y7 = 0; int y8 = 0; int y9 = 0; int y10 = 0; int y11 = 0; int y12 = 0;
+
+                if (x1 == 0) { y1 = 1; }
+                else {
+                  /* carry */
+                  y1 = 0;
+
+                  if (x2 == 0) { y2 = 1; }
+                  else {
+                    y2 = 0;
+
+                    if (x3 == 0) { y3 = 1; }
+                    else {
+                      y3 = 0;
+
+                      if (x4 == 0) { y4 = 1; }
+                      else {
+                        y4 = 0;
+
+                        if (x5 == 0) { y5 = 1; }
+                        else {
+                          y5 = 0;
+
+                          if (x6 == 0) { y6 = 1; }
+                          else {
+                            y6 = 0;
+
+                            if (x7 == 0) { y7 = 1; }
+                            else {
+                              y7 = 0;
+
+                              if (x8 == 0) { y8 = 1; }
+                              else {
+                                y8 = 0;
+
+                                if (x9 == 0) { y9 = 1; }
+                                else {
+                                  y9 = 0;
+
+                                  if (x10 == 0) { y10 = 1; }
+                                  else {
+                                    y10 = 0;
+
+                                    if (x11 == 0) { y11 = 1; }
+                                    else {
+                                      y11 = 0;
+
+                                      if (x12 == 0) { y12 = 1; }
+                                      else {
+                                        y12 = 0;
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+
+                /* Check result (convert back to binary) */
+                int res = y1 +
+                    y2 * 2 +
+                    y3 * 2 * 2 +
+                    y4 * 2 * 2 * 2 +
+                    y5 * 2 * 2 * 2 * 2 +
+                    y6 * 2 * 2 * 2 * 2 * 2 +
+                    y7 * 2 * 2 * 2 * 2 * 2 * 2 +
+                    y8 * 2 * 2 * 2 * 2 * 2 * 2 * 2 +
+                    y9 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 +
+                    y10 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 +
+                    y11 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 +
+                    y12 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2;
+
+                /* If the result was correct, print it. */
+                if (res == n + 1) { System.out.println(res); }
+
+                /* Compute number of flipped bits */
+                int flippedBits = 0;
+                if (x1 != y1) flippedBits = flippedBits + 1;
+                if (x2 != y2) flippedBits = flippedBits + 1;
+                if (x3 != y3) flippedBits = flippedBits + 1;
+                if (x4 != y4) flippedBits = flippedBits + 1;
+                if (x5 != y5) flippedBits = flippedBits + 1;
+                if (x6 != y6) flippedBits = flippedBits + 1;
+                if (x7 != y7) flippedBits = flippedBits + 1;
+                if (x8 != y8) flippedBits = flippedBits + 1;
+                if (x9 != y9) flippedBits = flippedBits + 1;
+                if (x10 != y10) flippedBits = flippedBits + 1;
+                if (x11 != y11) flippedBits = flippedBits + 1;
+                if (x12 != y12) flippedBits = flippedBits + 1;
+
+                return flippedBits;
+        }
+
+}
