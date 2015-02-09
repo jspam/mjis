@@ -158,8 +158,8 @@ object IDiv {
 object DivMod {
   def apply(dividend: Operand, divisor: Operand): Instruction =
     new Instruction("DivMod", (dividend, READ | MEMORY), (divisor, READ | MEMORY),
-      (RegisterOperand(RDX, divisor.sizeBytes), WRITE_BEFORE | WRITE | IMPLICIT),
-      (RegisterOperand(RAX, dividend.sizeBytes), READ | WRITE | IMPLICIT))
+      (RegisterOperand(RDX, divisor.sizeBytes), WRITE_BEFORE | IMPLICIT),
+      (RegisterOperand(RAX, dividend.sizeBytes), WRITE_BEFORE | IMPLICIT))
   def unapply(instr: Instruction) = unapply2("DivMod")(instr)
 }
 
