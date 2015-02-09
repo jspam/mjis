@@ -22,6 +22,9 @@ object CLIMain extends App {
     opt[Unit]("check") action { (phase, config) =>
       config.copy(stopAfter = "semantics")
     } text ("Run all semantics checks and exit")
+    opt[Unit]('e', "eval") action { (phase, config) =>
+      config.copy(eval = true)
+    } text ("Run program with interpreter and exit")
     opt[Unit]("compile-firm") action { (phase, config) =>
       config.copy(useFirmBackend = true)
     } text ("Compile the given file using the libFirm backend")

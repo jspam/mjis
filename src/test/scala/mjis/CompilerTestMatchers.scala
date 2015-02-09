@@ -1,7 +1,10 @@
 package mjis
 
+import java.nio.file.{Files, Paths}
+
 import firm.{Util, Graph}
 import mjis.asm._
+import mjis.eval.Interpreter
 import mjis.util.{Digraph, CCodeGenerator}
 
 import org.scalatest.Assertions
@@ -15,9 +18,8 @@ import org.scalatest.words.MatcherWords._
 
 import scala.collection.JavaConversions._
 import scala.io.Source
-import scala.sys.process._
-
 import scala.reflect.ClassTag
+import scala.sys.process._
 
 trait CompilerTestMatchers {
 
@@ -277,6 +279,27 @@ trait CompilerTestMatchers {
     }
   }
 
+  class InterpreterTestMatcher extends Matcher[String] {
+    override def apply(path: String): MatchResult = {
+      val check = Source.fromFile(path.stripSuffix("mj") + "check").mkString
+      val reader = Files.newBufferedReader(Paths.get(path))
+
+      val out = (Compiler.exec(reader, classOf[Interpreter], Compiler.evalPipeline) match {
+        case Left(phase) => phase
+        case Right(findings) => Assertions.fail(s"Compilation failed. Findings:$n${findings.mkString(n)}")
+      }).asInstanceOf[Interpreter].result.split('\n').iterator.filterNot(_.startsWith("<<<DEBUG>>>")).mkString("\n")
+
+      MatchResult(check.stripLineEnd == out,
+        s"""Expected output is not equal to actual output
+           |test file: $path
+            |expected:
+            |${check.take(10000)}
+            |actual:
+            |$out""".stripMargin,
+        "Expected output is equal to actual output\n")
+    }
+  }
+
   def succeedLexing() = new AnalysisPhaseSuccessMatcher[Lexer]()
   def succeedParsing() = new AnalysisPhaseSuccessMatcher[Parser]()
   def succeedParsingWith(expectedAST: Program) = new AnalysisPhaseSuccessWithMatcher[Program, Parser](expectedAST)
@@ -296,6 +319,7 @@ trait CompilerTestMatchers {
   def succeedAllocatingRegistersWith(regs: Seq[Int], callerSaveRegs: Set[Int] = Set(), sseRegs: Set[Int] = Set(), expected: String = "") =
     new RegisterAllocatorMatcher(regs, callerSaveRegs, sseRegs, expected)
   def passIntegrationTest(options: Seq[String]) = new IntegrationTestMatcher(options)
+  def passInterpreterTest = new InterpreterTestMatcher
   def beIsomorphicTo(expectedGraph: Graph) = new FirmGraphIsomorphismMatcher(expectedGraph)
   def beIsomorphicAsmTo(expected: String) = new AsmIsomorphismMatcher(expected)
   def optimizeTo(under: Optimization, after: Seq[Optimization] = List.empty, before: Seq[Optimization] = List.empty)(to: String) = new OptimizerMatcher(under, after, before, Some(to))
