@@ -43,7 +43,7 @@ object CallGraph {
     visited.reverseIterator
   }
 
-  def callerMap(): scala.collection.Map[Graph, Seq[Call]] = {
+  def callerMap(): scala.collection.Map[Graph, ArrayBuffer[Call]] = {
     val result = mutable.Map[Graph, ArrayBuffer[Call]]().withPersistentDefault(_ => ArrayBuffer())
     Program.getGraphs.foreach(_.walk(new Default {
       override def visit(call: Call) = call.getCalledGraph match {

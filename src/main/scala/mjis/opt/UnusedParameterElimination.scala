@@ -5,6 +5,8 @@ import firm.nodes.{Address, Proj, Call}
 import mjis.CallGraph
 import mjis.opt.FirmExtensions._
 
+import scala.collection.mutable.ArrayBuffer
+
 object UnusedParameterElimination extends Optimization {
   override def optimize(): Boolean = {
     val callers = CallGraph.callerMap()
@@ -13,7 +15,7 @@ object UnusedParameterElimination extends Optimization {
     ).toList.contains(true)
   }
 
-  protected def _optimize(g: Graph, callers: Seq[Call]): Boolean = {
+  protected def _optimize(g: Graph, callers: ArrayBuffer[Call]): Boolean = {
     BackEdges.enable(g)
     // TODO: only count p.successors that aren't exclusively used as parameter to a call in the same SCC
     val usedArgProjs = g.getArgs.successors.collect({
@@ -38,9 +40,11 @@ object UnusedParameterElimination extends Optimization {
         proj.setNum(idx)
       }
 
-      for (call <- callers) {
-        exchange(call, g.newCall(call.getBlock, call.getMem, call.getPtr,
-          usedArgNums.map(n => call.getPred(n + 2)).toArray, newMethodType))
+      for ((call, idx) <- callers.zipWithIndex) {
+        val newCall = g.newCall(call.getBlock, call.getMem, call.getPtr,
+          usedArgNums.map(n => call.getPred(n + 2)).toArray, newMethodType).asInstanceOf[Call]
+        exchange(call, newCall)
+        callers(idx) = newCall
       }
       true
     } else false
